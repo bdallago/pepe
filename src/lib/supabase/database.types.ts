@@ -25,6 +25,109 @@ export type Database = {
   }
   public: {
     Tables: {
+      artifacts: {
+        Row: {
+          archivado_en: string | null
+          created_at: string
+          estado: Database["public"]["Enums"]["estado_artefacto"]
+          fecha_completado: string | null
+          id: string
+          nombre: string
+          orden: number
+          slug: string
+          track_id: string
+          updated_at: string
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          archivado_en?: string | null
+          created_at?: string
+          estado?: Database["public"]["Enums"]["estado_artefacto"]
+          fecha_completado?: string | null
+          id?: string
+          nombre: string
+          orden?: number
+          slug: string
+          track_id: string
+          updated_at?: string
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          archivado_en?: string | null
+          created_at?: string
+          estado?: Database["public"]["Enums"]["estado_artefacto"]
+          fecha_completado?: string | null
+          id?: string
+          nombre?: string
+          orden?: number
+          slug?: string
+          track_id?: string
+          updated_at?: string
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifacts_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blocks: {
+        Row: {
+          archivado_en: string | null
+          created_at: string
+          fuentes: Json
+          id: string
+          orden: number
+          slug: string
+          subtitulo: string | null
+          titulo: string
+          track_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archivado_en?: string | null
+          created_at?: string
+          fuentes?: Json
+          id?: string
+          orden?: number
+          slug: string
+          subtitulo?: string | null
+          titulo: string
+          track_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archivado_en?: string | null
+          created_at?: string
+          fuentes?: Json
+          id?: string
+          orden?: number
+          slug?: string
+          subtitulo?: string | null
+          titulo?: string
+          track_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blocks_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           archivada: boolean
@@ -52,6 +155,60 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_log: {
+        Row: {
+          archivado_en: string | null
+          contenido: string
+          created_at: string
+          fecha: string
+          id: string
+          project_id: string
+          slug: string | null
+          track_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archivado_en?: string | null
+          contenido: string
+          created_at?: string
+          fecha: string
+          id?: string
+          project_id: string
+          slug?: string | null
+          track_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archivado_en?: string | null
+          contenido?: string
+          created_at?: string
+          fecha?: string
+          id?: string
+          project_id?: string
+          slug?: string | null
+          track_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_log_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fx_rates: {
         Row: {
           compra: number
@@ -75,6 +232,114 @@ export type Database = {
           venta?: number
         }
         Relationships: []
+      }
+      inbox: {
+        Row: {
+          clave_dedupe: string | null
+          creado_en: string
+          entidad_id: string | null
+          entidad_tabla: string | null
+          error_detalle: string | null
+          estado: Database["public"]["Enums"]["estado_bandeja"]
+          id: string
+          payload: Json
+          posponer_hasta: string | null
+          resuelto_en: string | null
+          tipo: Database["public"]["Enums"]["tipo_bandeja"]
+          user_id: string
+        }
+        Insert: {
+          clave_dedupe?: string | null
+          creado_en?: string
+          entidad_id?: string | null
+          entidad_tabla?: string | null
+          error_detalle?: string | null
+          estado?: Database["public"]["Enums"]["estado_bandeja"]
+          id?: string
+          payload: Json
+          posponer_hasta?: string | null
+          resuelto_en?: string | null
+          tipo: Database["public"]["Enums"]["tipo_bandeja"]
+          user_id: string
+        }
+        Update: {
+          clave_dedupe?: string | null
+          creado_en?: string
+          entidad_id?: string | null
+          entidad_tabla?: string | null
+          error_detalle?: string | null
+          estado?: Database["public"]["Enums"]["estado_bandeja"]
+          id?: string
+          payload?: Json
+          posponer_hasta?: string | null
+          resuelto_en?: string | null
+          tipo?: Database["public"]["Enums"]["tipo_bandeja"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      lessons: {
+        Row: {
+          archivado_en: string | null
+          categoria: Database["public"]["Enums"]["categoria_leccion"]
+          contenido: string
+          created_at: string
+          embedding: string | null
+          fecha: string
+          id: string
+          movement_id: string | null
+          origen: Database["public"]["Enums"]["origen_leccion"]
+          project_id: string
+          titulo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archivado_en?: string | null
+          categoria: Database["public"]["Enums"]["categoria_leccion"]
+          contenido: string
+          created_at?: string
+          embedding?: string | null
+          fecha?: string
+          id?: string
+          movement_id?: string | null
+          origen?: Database["public"]["Enums"]["origen_leccion"]
+          project_id: string
+          titulo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archivado_en?: string | null
+          categoria?: Database["public"]["Enums"]["categoria_leccion"]
+          contenido?: string
+          created_at?: string
+          embedding?: string | null
+          fecha?: string
+          id?: string
+          movement_id?: string | null
+          origen?: Database["public"]["Enums"]["origen_leccion"]
+          project_id?: string
+          titulo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       movements: {
         Row: {
@@ -164,6 +429,7 @@ export type Database = {
       projects: {
         Row: {
           activo: boolean
+          archivado_en: string | null
           color: string
           created_at: string
           id: string
@@ -174,6 +440,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          archivado_en?: string | null
           color?: string
           created_at?: string
           id?: string
@@ -184,6 +451,7 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          archivado_en?: string | null
           color?: string
           created_at?: string
           id?: string
@@ -263,11 +531,152 @@ export type Database = {
           },
         ]
       }
+      sessions: {
+        Row: {
+          aplicacion_fecha: string | null
+          aplicacion_hecha: boolean
+          archivado_en: string | null
+          block_id: string | null
+          consigna: string | null
+          created_at: string
+          id: string
+          orden: number
+          slug: string
+          teoria_fecha: string | null
+          teoria_hecha: boolean
+          teoria_link: string | null
+          teoria_texto: string | null
+          titulo: string
+          track_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aplicacion_fecha?: string | null
+          aplicacion_hecha?: boolean
+          archivado_en?: string | null
+          block_id?: string | null
+          consigna?: string | null
+          created_at?: string
+          id?: string
+          orden?: number
+          slug: string
+          teoria_fecha?: string | null
+          teoria_hecha?: boolean
+          teoria_link?: string | null
+          teoria_texto?: string | null
+          titulo: string
+          track_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aplicacion_fecha?: string | null
+          aplicacion_hecha?: boolean
+          archivado_en?: string | null
+          block_id?: string | null
+          consigna?: string | null
+          created_at?: string
+          id?: string
+          orden?: number
+          slug?: string
+          teoria_fecha?: string | null
+          teoria_hecha?: boolean
+          teoria_link?: string | null
+          teoria_texto?: string | null
+          titulo?: string
+          track_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "blocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tracks: {
+        Row: {
+          activo: boolean
+          archivado_en: string | null
+          cadencia: number[]
+          color: string
+          created_at: string
+          fecha_inicio: string | null
+          id: string
+          nombre: string
+          orden: number
+          slug: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activo?: boolean
+          archivado_en?: string | null
+          cadencia?: number[]
+          color?: string
+          created_at?: string
+          fecha_inicio?: string | null
+          id?: string
+          nombre: string
+          orden?: number
+          slug: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activo?: boolean
+          archivado_en?: string | null
+          cadencia?: number[]
+          color?: string
+          created_at?: string
+          fecha_inicio?: string | null
+          id?: string
+          nombre?: string
+          orden?: number
+          slug?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      buscar_lecciones_hibrido: {
+        Args: {
+          p_consulta: string
+          p_embedding?: string | null
+          p_limite?: number
+          p_k?: number
+        }
+        Returns: {
+          archivado_en: string | null
+          categoria: Database["public"]["Enums"]["categoria_leccion"]
+          contenido: string
+          fecha: string
+          id: string
+          origen: Database["public"]["Enums"]["origen_leccion"]
+          project_id: string
+          puntaje: number
+          rank_texto: number | null
+          similitud: number | null
+          titulo: string
+        }[]
+      }
       fx_rate_for_date: {
         Args: { p_fecha: string }
         Returns: {
@@ -286,9 +695,29 @@ export type Database = {
       }
     }
     Enums: {
+      categoria_leccion:
+        | "tecnica"
+        | "producto"
+        | "comercial"
+        | "proceso"
+        | "personal"
+      estado_artefacto: "no_empezado" | "en_curso" | "completado"
+      estado_bandeja:
+        | "pendiente"
+        | "aceptado"
+        | "rechazado"
+        | "pospuesto"
+        | "error"
       estado_movimiento: "efectuado" | "planificado"
       frecuencia_recurrencia: "mensual" | "anual"
       moneda: "ARS" | "USD"
+      origen_leccion: "manual" | "importada" | "generada" | "retro"
+      tipo_bandeja:
+        | "categorizacion"
+        | "zombie"
+        | "leccion_sugerida"
+        | "leccion_extraida"
+        | "retro"
       tipo_movimiento: "ingreso" | "egreso"
     }
     CompositeTypes: {
@@ -417,9 +846,32 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      categoria_leccion: [
+        "tecnica",
+        "producto",
+        "comercial",
+        "proceso",
+        "personal",
+      ],
+      estado_artefacto: ["no_empezado", "en_curso", "completado"],
+      estado_bandeja: [
+        "pendiente",
+        "aceptado",
+        "rechazado",
+        "pospuesto",
+        "error",
+      ],
       estado_movimiento: ["efectuado", "planificado"],
       frecuencia_recurrencia: ["mensual", "anual"],
       moneda: ["ARS", "USD"],
+      origen_leccion: ["manual", "importada", "generada", "retro"],
+      tipo_bandeja: [
+        "categorizacion",
+        "zombie",
+        "leccion_sugerida",
+        "leccion_extraida",
+        "retro",
+      ],
       tipo_movimiento: ["ingreso", "egreso"],
     },
   },
@@ -442,3 +894,22 @@ export type Category = Database["public"]["Tables"]["categories"]["Row"];
 export type Movement = Database["public"]["Tables"]["movements"]["Row"];
 export type Recurrence = Database["public"]["Tables"]["recurrences"]["Row"];
 export type FxRate = Database["public"]["Tables"]["fx_rates"]["Row"];
+
+export type CategoriaLeccion =
+  Database["public"]["Enums"]["categoria_leccion"];
+export type OrigenLeccion = Database["public"]["Enums"]["origen_leccion"];
+export type EstadoArtefacto =
+  Database["public"]["Enums"]["estado_artefacto"];
+export type TipoBandeja = Database["public"]["Enums"]["tipo_bandeja"];
+export type EstadoBandeja = Database["public"]["Enums"]["estado_bandeja"];
+
+export type Track = Database["public"]["Tables"]["tracks"]["Row"];
+export type Block = Database["public"]["Tables"]["blocks"]["Row"];
+// `StudySession` y no `Session`: `@supabase/supabase-js` ya exporta un
+// `Session` (la sesión de auth) y las pantallas de estudio importan de
+// los dos lados.
+export type StudySession = Database["public"]["Tables"]["sessions"]["Row"];
+export type Artifact = Database["public"]["Tables"]["artifacts"]["Row"];
+export type DailyLog = Database["public"]["Tables"]["daily_log"]["Row"];
+export type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
+export type InboxItem = Database["public"]["Tables"]["inbox"]["Row"];

@@ -10,17 +10,29 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Guía del proyecto
 
-App de balance de ingresos y egresos por proyecto de software. Un solo
-usuario. El spec original está en `prompt-app-gastos.md` y sigue siendo la
-fuente de verdad de requisitos.
+**Pepe**: app personal de un solo usuario con tres secciones — Finanzas,
+Aprendizaje y Bitácora.
+
+Nació como app de balance de ingresos y egresos por proyecto
+(`prompt-app-gastos.md`, sigue siendo la fuente de verdad de esa parte).
+El 2026-08-07 absorbió una segunda app de estudio que vivía aparte
+(React + Vite + localStorage); el spec de esa fusión está en
+`E:\Beno\Downloads\spec-pepe-migracion.md`.
+
+`projects` es la **entidad raíz de toda la app**, no solo de finanzas: las
+lecciones y la bitácora también cuelgan de un proyecto.
 
 ## Comandos
 
 ```bash
 npm run dev        # desarrollo
-npm run build      # build de producción
+npm run build      # build de producción (baja el modelo si falta)
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
+
+npm run descargar:modelo      # pesos del modelo de embeddings (266 MB)
+npm run backfill:embeddings   # embeddings faltantes, por lotes y retomable
+npm run import:colmena        # importador de la app de estudio (histórico)
 ```
 
 No hay suite de tests versionada. Antes de dar algo por terminado, corré
@@ -37,6 +49,16 @@ ninguna credencial.
 
 Ojo: el `hashed_token` de `generate_link` **no** se canjea por
 `POST /auth/v1/verify` (ese espera el OTP crudo y devuelve `otp_expired`).
+
+Y ojo con la forma de la respuesta: según la versión de GoTrue, el link
+viene en `action_link` **en la raíz** o bajo `properties.action_link`.
+Al 2026-08-07 es en la raíz. Leé los dos.
+
+**No corras `npm run build` con un `next dev` vivo**: comparten `.next` y
+se pisan (`PageNotFoundError: Cannot find module for page`). Si el dev
+quedó con el manifiesto viejo después de editar muchos archivos, tira
+`__webpack_modules__[moduleId] is not a function` en rutas que están bien;
+se arregla bajando el dev, borrando `.next` y volviendo a levantar.
 
 ## Versión de Next
 
@@ -82,6 +104,85 @@ El formulario muestra ARS y USD a la vez. El campo que se escribe define
 `movement-form.tsx`, el efecto que recalcula el derivado **excluye a
 propósito** `monto_ars`/`monto_usd` de sus dependencias: incluirlos haría
 que se dispare con cada tecla y pise lo que se está escribiendo.
+
+### 4. Archivar en vez de borrar
+
+Todas las entidades del módulo de aprendizaje (`projects`, `lessons`,
+`tracks`, `blocks`, `sessions`, `artifacts`, `daily_log`) llevan
+`archivado_en` y **el borrado por defecto es archivado**.
+
+Los archivados se excluyen de las listas de la interfaz, pero **siguen
+participando de la búsqueda**: un proyecto cerrado no tiene que ensuciar
+las pantallas, pero su conocimiento no se pierde. El delete real existe
+solo como acción explícita y separada.
+
+### 5. El progreso de una sesión es doble
+
+`sessions` tiene `teoria_hecha`/`teoria_fecha` y
+`aplicacion_hecha`/`aplicacion_fecha` por separado. Leer la teoría y
+aplicarla **no son lo mismo**, y esa distinción es el punto de la sección
+de Aprendizaje. Un solo campo `estado` no puede representar "leí el 14
+pero todavía no lo apliqué".
+
+Hay checks en la base: `teoria_hecha = (teoria_fecha is not null)` y lo
+mismo para aplicación. Al marcar se setea la fecha, al desmarcar se pone
+en null. Nunca uno sin el otro. Lo mismo con `artifacts`:
+`(estado = 'completado') = (fecha_completado is not null)`.
+
+### 6. Nada se escribe sin confirmación
+
+Todo lo que propone un modelo va a la tabla `inbox` con estado
+`pendiente`. **Ninguna función escribe en las tablas de dominio sin que
+Beno apriete un botón.** `clave_dedupe` (con índice único sobre lo no
+resuelto) es lo que hace que los procesos por lotes se puedan reintentar
+sin duplicar propuestas.
+
+El enum de estados tiene dos valores más allá de los obvios: `pospuesto`
+(para los zombies que se miran más adelante) y `error` (cuando la salida
+del modelo no valida contra el esquema — queda visible en la bandeja en
+vez de descartarse en silencio).
+
+### 7. Ninguna feature de LLM puede ser bloqueante
+
+Si Groq está caído o se acabó la cuota, **la app sigue funcionando entera
+en modo manual**. Cargar un gasto, escribir una lección y registrar la
+bitácora tienen que andar sin el modelo, siempre. El error se muestra
+discreto y no interrumpe el flujo.
+
+Lo mismo vale para el buscador: si el embedding falla o tarda, la
+búsqueda responde igual solo con full-text y **eso no es un error**.
+
+## Búsqueda de lecciones
+
+Híbrida: full-text en español + similitud vectorial, fusionados con
+**Reciprocal Rank Fusion** (`buscar_lecciones_hibrido`). No es una suma
+ponderada a propósito: los dos puntajes no son comparables entre sí.
+
+- El full-text usa **OR, no AND**. `websearch_to_tsquery` une con AND y
+  exigía todas las palabras; uno no se acuerda de las palabras exactas
+  que escribió, se acuerda del tema. La precisión la da `ts_rank_cd`, no
+  el filtro.
+- El modelo es **`multilingual-e5-base` q8, 768 dimensiones**, corriendo
+  en un route handler de Vercel. Medido contra datos reales en español:
+  `gte-small` y `multilingual-e5-small` acertaron 2/4 con márgenes de
+  ruido; el base, 3/4 en q8 y 4/4 en fp32 (indesplegable, 1.1 GB).
+- **E5 exige los prefijos `"query: "` y `"passage: "`.** Sin eso la
+  calidad se cae. No es opcional.
+- El índice es **HNSW y no IVFFlat**: IVFFlat se entrena sobre datos ya
+  cargados y calibra `lists` contra la cantidad de filas, así que sobre
+  una tabla que arranca vacía nacería mal calibrado.
+- Los pesos (266 MB) **no van al repo** — es público y GitHub rechaza
+  archivos de más de 100 MB. Los baja `npm run descargar:modelo` dentro
+  del build, y `next.config.ts` los mete al bundle con
+  `outputFileTracingIncludes`.
+
+> Medición del 2026-08-07, con 6 entradas de bitácora reales y 4
+> lecciones sintéticas: **el full-text solo acertó 5/5**, mejor que
+> cualquier configuración de embeddings. Con un corpus chico el semántico
+> aporta poco; su caso real es la consulta cuyas palabras no aparecen en
+> el texto ("cuándo sumar gente al equipo" → "Contratar temprano"), que
+> el full-text no encuentra. **Volver a medir cuando haya lecciones
+> reales cargadas.**
 
 ## Cookies de sesión y el HTTP 431
 
@@ -162,8 +263,15 @@ las lee del documento y las relee cuando cambia el tema.
 
 ## Convenciones
 
-- Todo en **español rioplatense**: UI, nombres de columnas, enums,
+- **Tablas y claves foráneas en inglés, columnas y enums en español.**
+  `movements.descripcion`, `lessons.categoria`, `daily_log.contenido`.
+  Suena raro pero es consistente en todo el esquema; no lo "arregles" en
+  una tabla sola.
+- Todo el texto de la UI en **español rioplatense**, igual que los
   identificadores del dominio (`fecha`, `descripcion`, `monto_origen`).
+- Las tablas del módulo de aprendizaje llevan `slug`: es el id que traía
+  el export de la app vieja y es lo que hace **idempotente** al
+  importador (`upsert` sobre `(user_id, slug)`).
 - Formato `es-AR` vía `src/lib/format.ts`. ARS sin decimales, USD con dos.
 - El CSV se exporta con `;` y BOM: es lo que Excel en configuración
   argentina abre sin pasar por el asistente de importación.
@@ -177,3 +285,16 @@ las lee del documento y las relee cuando cambia el tema.
 El repo es **público**. `.gitignore` cubre `.env*` (salvo `.env.example`),
 `.vercel`, `.supabase`, claves, certificados y dumps de base. Antes de
 commitear algo nuevo que pueda tener secretos, verificá que esté cubierto.
+
+También quedan afuera, y no por secretos:
+
+- `colmena-backup-*.json` — el export de la app de estudio. Son entradas
+  personales de bitácora, no van a un repo público.
+- `.modelos/` — los pesos del modelo de embeddings (266 MB). GitHub
+  rechaza archivos de más de 100 MB; los baja el build.
+
+`npm audit` tiene que quedar en **cero**. `@huggingface/transformers`
+arrastra `onnxruntime-node` → `adm-zip`, que trae tres advisories high;
+está resuelto con un `override` a `^0.6.0` en `package.json`, al lado de
+los de `postcss` y `sharp`. Si tocás dependencias, verificá que siga en
+cero: `npm audit fix --force` te downgradea `transformers`.

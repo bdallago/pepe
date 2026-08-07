@@ -1,11 +1,17 @@
-# Balance de proyectos
+# Pepe
 
-App web personal para llevar los ingresos y egresos de mis proyectos de
-software, en pesos y en dólares. Reemplaza una planilla de Google Sheets.
+App web personal con tres secciones: la **plata** de mis proyectos de
+software, lo que **estudio** aplicado a ellos, y la **bitácora** de lo que
+voy aprendiendo.
+
+Nació como reemplazo de una planilla de gastos. En agosto de 2026 absorbió
+una segunda app mía de estudio, que dejó de existir por separado.
 
 Un solo usuario, autenticación con Google, base en Supabase, deploy en Vercel.
 
 ## Qué hace
+
+### Finanzas
 
 - **Balance general** con tarjetas de ingresos, egresos, balance neto y
   balance proyectado (incluyendo los planificados), conmutador global
@@ -19,7 +25,25 @@ Un solo usuario, autenticación con Google, base en Supabase, deploy en Vercel.
   genera como planificados, sin duplicar.
 - **Comprobantes**: subida opcional de imagen o PDF a un bucket privado,
   con preview y descarga por URL firmada.
-- **Carga rápida** con `⌘K` / `Ctrl+K` desde cualquier pantalla.
+- **Carga rápida** con `⌘K` / `Ctrl+K`, disponible dentro de Finanzas.
+
+### Aprendizaje
+
+- **Hoy**: la sesión que toca en cada track, con su teoría, la fuente y la
+  consigna a aplicar. Leer y aplicar se marcan por separado: no son lo
+  mismo, y esa distinción es el punto de la sección.
+- **Semana**: la grilla de lunes a domingo con lo que viene proyectado.
+- **Roadmap**: los bloques de cada track con su avance y su bibliografía.
+- **Artefactos**: los entregables que hay que producir, con su estado.
+- **Repaso**: un quiz armado con los temas ya completados. No usa ningún
+  modelo: las preguntas y los distractores salen de las propias sesiones.
+- **Lecciones**: buscador en lenguaje natural sobre lo aprendido
+  (ver "El buscador de lecciones" más abajo).
+
+### Bitácora
+
+Qué hice y qué aprendí cada día, atado a un proyecto. Es la materia prima
+de la que salen las lecciones.
 
 ## Las tres reglas que importan
 
@@ -76,6 +100,11 @@ Abrí el **SQL Editor** y ejecutá, en este orden, el contenido de:
 1. `supabase/migrations/20260101000000_schema.sql`
 2. `supabase/migrations/20260101000001_rls.sql`
 3. `supabase/migrations/20260101000002_storage.sql`
+4. `supabase/migrations/20260807000000_aprendizaje.sql`
+5. `supabase/migrations/20260807000001_aprendizaje_rls.sql`
+6. `supabase/migrations/20260807000002_track_fecha_inicio.sql`
+7. `supabase/migrations/20260807000003_busqueda_lecciones.sql`
+8. `supabase/migrations/20260807000004_busqueda_or.sql`
 
 **Opción B — con la CLI:**
 
@@ -125,6 +154,7 @@ Copiá `.env.example` a `.env.local` y completá:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API | Pública, protegida por RLS. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API | **Secreta.** Saltea RLS. Solo server-side. |
 | `CRON_SECRET` | Vos | `openssl rand -hex 32` |
+| `GROQ_API_KEY` | [console.groq.com/keys](https://console.groq.com/keys) | **Secreta.** Solo server-side. Sin ella la app anda entera en modo manual. |
 
 No hace falta configurar la URL del sitio: el redirect del OAuth se arma
 con `window.location.origin`, así que anda igual en localhost, en los
@@ -203,21 +233,60 @@ planificados y una recurrencia. Todo va prefijado con `[demo]` para que sea
 fácil de borrar; las instrucciones de limpieza están al principio del
 archivo.
 
+## El buscador de lecciones
+
+Busca en lenguaje natural (*"qué aprendí sobre cobrarle a clientes
+chicos"*) combinando **dos rankings**:
+
+1. **Full-text en español** de Postgres (`to_tsvector('spanish', …)`), con
+   el título pesando más que el cuerpo. Instantáneo y sin modelo.
+2. **Similitud semántica** con pgvector sobre embeddings de 768
+   dimensiones.
+
+Se fusionan con **Reciprocal Rank Fusion**, no con una suma ponderada: una
+similitud coseno de 0.83 y un `ts_rank` de 0.12 no están en la misma
+escala, y normalizarlas a mano habría metido otra constante arbitraria.
+
+El modelo es **`multilingual-e5-base`** (variante `q8`), corriendo local en
+un route handler. Se eligió midiendo contra datos reales en español:
+
+| Modelo | Dimensiones | Aciertos |
+|---|---|---|
+| `gte-small` (el nativo de las Edge Functions de Supabase, solo inglés) | 384 | 2/4 |
+| `multilingual-e5-small` | 384 | 2/4 |
+| `multilingual-e5-base` q8 | 768 | 3/4 |
+| `multilingual-e5-base` fp32 (1.1 GB, indesplegable) | 768 | 4/4 |
+
+**E5 exige prefijos**: `"query: "` para la consulta y `"passage: "` para lo
+que se indexa. Sin eso la calidad se cae y el modelo parece peor de lo que
+es.
+
+Los pesos (266 MB) **no están en el repo**: los baja `npm run
+descargar:modelo`, que corre dentro del `build`. El repo es público y
+GitHub rechaza archivos de más de 100 MB.
+
+**La búsqueda nunca depende del modelo.** Si no carga, tarda de más o
+falla, la consulta se responde igual solo con full-text.
+
 ## Comandos
 
 ```bash
 npm run dev        # servidor de desarrollo
-npm run build      # build de producción
+npm run build      # build de producción (baja el modelo si falta)
 npm run start      # servir el build
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
+
+npm run descargar:modelo      # pesos del modelo de embeddings
+npm run backfill:embeddings   # genera los embeddings faltantes, retomable
+npm run import:colmena        # importador de la app de estudio (histórico)
 ```
 
 ## Stack
 
 Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · shadcn/ui ·
-Supabase (Postgres + Auth + Storage) · Recharts · react-hook-form + Zod ·
-Vercel.
+Supabase (Postgres + Auth + Storage + pgvector) · Recharts ·
+react-hook-form + Zod · Transformers.js · Vercel.
 
 Tipografía **Fira Sans + Fira Code**. El mono no es decorativo: la clase
 `.cifra` lo aplica a montos, fechas y cotizaciones para que las columnas
@@ -246,4 +315,8 @@ npx supabase gen types typescript --project-id <ref> > src/lib/supabase/database
   `<user_id>/…` y políticas que validan el primer segmento del path. Las
   descargas van siempre por URL firmada.
 - `SUPABASE_SERVICE_ROLE_KEY` no lleva prefijo `NEXT_PUBLIC_` y solo se
-  importa desde módulos marcados con `server-only`.
+  importa desde módulos marcados con `server-only`. Lo mismo vale para
+  `GROQ_API_KEY`: todas las llamadas al modelo pasan por el servidor y la
+  key nunca llega al browser.
+- El export de la app de estudio (`colmena-backup-*.json`) está
+  gitignoreado: son entradas personales de bitácora y el repo es público.

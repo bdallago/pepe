@@ -88,6 +88,23 @@ export function addDays(iso: string, days: number): string {
   return toISODate(date);
 }
 
+/**
+ * Día de la semana en formato ISO: 1 = lunes … 7 = domingo.
+ *
+ * `getDay()` devuelve 0 para el domingo; acá se lo lleva a 7 para que el
+ * lunes sea el 1 y la semana arranque donde arranca en el calendario de
+ * acá. Es el mismo criterio que usa `tracks.cadencia` en la base.
+ */
+export function weekday(iso: string): number {
+  const dia = parseISODate(iso).getDay();
+  return dia === 0 ? 7 : dia;
+}
+
+/** Lunes de la semana que contiene `iso`. */
+export function mondayOf(iso: string): string {
+  return addDays(iso, -(weekday(iso) - 1));
+}
+
 export function addMonths(iso: string, months: number): string {
   const date = parseISODate(iso);
   date.setMonth(date.getMonth() + months);

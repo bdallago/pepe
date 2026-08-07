@@ -5,11 +5,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
+  CalendarDays,
+  GraduationCap,
   LayoutDashboard,
+  Lightbulb,
+  ListChecks,
   Menu,
+  Map,
+  NotebookPen,
   Plus,
   Repeat,
   Settings,
+  Sun,
   Wallet,
 } from "lucide-react";
 
@@ -26,12 +33,49 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "/", label: "Balance", icon: LayoutDashboard },
-  { href: "/proyectos", label: "Proyectos", icon: Wallet },
-  { href: "/movimientos", label: "Movimientos", icon: ArrowLeftRight },
-  { href: "/recurrentes", label: "Recurrentes", icon: Repeat },
-  { href: "/ajustes", label: "Ajustes", icon: Settings },
+/**
+ * La app tiene tres secciones y cada una tiene sus propias pantallas.
+ *
+ * La navegación es de dos pisos a propósito: arriba la sección, abajo las
+ * pantallas de esa sección. Con las nueve pantallas en una sola fila no
+ * entraban, y sobre todo no se entendía que Movimientos y Roadmap son
+ * cosas de mundos distintos.
+ *
+ * Ajustes queda afuera: es configuración de toda la app (proyectos,
+ * categorías, cotización, cadencia de los tracks), no una cuarta sección.
+ * Vive como icono a la derecha, al lado del menú de usuario.
+ */
+const SECCIONES = [
+  {
+    href: "/",
+    label: "Finanzas",
+    icon: Wallet,
+    pantallas: [
+      { href: "/", label: "Balance", icon: LayoutDashboard },
+      { href: "/proyectos", label: "Proyectos", icon: Wallet },
+      { href: "/movimientos", label: "Movimientos", icon: ArrowLeftRight },
+      { href: "/recurrentes", label: "Recurrentes", icon: Repeat },
+    ],
+  },
+  {
+    href: "/aprendizaje",
+    label: "Aprendizaje",
+    icon: GraduationCap,
+    pantallas: [
+      { href: "/aprendizaje", label: "Hoy", icon: Sun },
+      { href: "/aprendizaje/semana", label: "Semana", icon: CalendarDays },
+      { href: "/aprendizaje/roadmap", label: "Roadmap", icon: Map },
+      { href: "/aprendizaje/artefactos", label: "Artefactos", icon: ListChecks },
+      { href: "/aprendizaje/repaso", label: "Repaso", icon: GraduationCap },
+      { href: "/aprendizaje/lecciones", label: "Lecciones", icon: Lightbulb },
+    ],
+  },
+  {
+    href: "/bitacora",
+    label: "Bitácora",
+    icon: NotebookPen,
+    pantallas: [],
+  },
 ] as const;
 
 /**
@@ -57,30 +101,53 @@ function Marca() {
   );
 }
 
-function esRutaActiva(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
+/**
+ * Qué sección está abierta, o null si estamos en Ajustes.
+ *
+ * Finanzas cuelga de "/", así que no se puede resolver por prefijo: se
+ * resuelve por descarte. Si se agrega una sección nueva y no se la suma
+ * acá, Finanzas se queda marcada de más.
+ */
+function seccionActiva(pathname: string) {
+  const especifica = SECCIONES.find(
+    (s) => s.href !== "/" && (pathname === s.href || pathname.startsWith(`${s.href}/`)),
+  );
+  if (especifica) return especifica;
+  if (pathname === "/ajustes" || pathname.startsWith("/ajustes/")) return null;
+  return SECCIONES[0];
+}
+
+function esPantallaActiva(pathname: string, href: string): boolean {
+  // "/" y "/aprendizaje" son índices de su sección: sin match exacto
+  // quedarían activos en todas las pantallas de abajo.
+  if (href === "/" || href === "/aprendizaje") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function claseNav(activo: boolean) {
+  return cn(
+    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+    activo
+      ? "bg-secondary text-secondary-foreground"
+      : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+  );
+}
+
+function LinksSeccion({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const actual = seccionActiva(pathname);
 
   return (
     <>
-      {NAV.map(({ href, label, icon: Icon }) => {
-        const activo = esRutaActiva(pathname, href);
+      {SECCIONES.map(({ href, label, icon: Icon }) => {
+        const activo = actual?.href === href;
         return (
           <Link
             key={href}
             href={href}
             onClick={onNavigate}
             aria-current={activo ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              activo
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-            )}
+            className={claseNav(activo)}
           >
             <Icon className="size-4" aria-hidden="true" />
             {label}
@@ -88,6 +155,85 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         );
       })}
     </>
+  );
+}
+
+/** El segundo piso: las pantallas de la sección abierta. */
+function LinksPantallas() {
+  const pathname = usePathname();
+  const actual = seccionActiva(pathname);
+  if (!actual || actual.pantallas.length === 0) return null;
+
+  return (
+    <div className="border-b">
+      <nav
+        aria-label={`Pantallas de ${actual.label}`}
+        className="mx-auto flex w-full max-w-7xl items-center gap-1 overflow-x-auto px-4 py-1.5"
+      >
+        {actual.pantallas.map(({ href, label }) => {
+          const activo = esPantallaActiva(pathname, href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={activo ? "page" : undefined}
+              className={cn(
+                "shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors",
+                activo
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+/** En mobile no hay dos pisos: van las secciones con sus pantallas debajo. */
+function MenuMobile({ onNavigate }: { onNavigate: () => void }) {
+  const pathname = usePathname();
+
+  return (
+    <nav className="flex flex-col gap-1 p-3">
+      {SECCIONES.map(({ href, label, icon: Icon, pantallas }) => (
+        <div key={href}>
+          <Link
+            href={href}
+            onClick={onNavigate}
+            className={claseNav(seccionActiva(pathname)?.href === href)}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+            {label}
+          </Link>
+          {pantallas.length > 0 && (
+            <div className="mt-1 ml-4 flex flex-col gap-0.5 border-l pl-3">
+              {pantallas.map((p) => (
+                <Link
+                  key={p.href}
+                  href={p.href}
+                  onClick={onNavigate}
+                  aria-current={
+                    esPantallaActiva(pathname, p.href) ? "page" : undefined
+                  }
+                  className={cn(
+                    "rounded-md px-2 py-1.5 text-sm transition-colors",
+                    esPantallaActiva(pathname, p.href)
+                      ? "text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {p.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </nav>
   );
 }
 
@@ -104,70 +250,98 @@ export function AppShell({
 }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [cargaRapidaAbierta, setCargaRapidaAbierta] = useState(false);
+  const pathname = usePathname();
+
+  // El toggle de moneda y la carga rápida son de finanzas. En Aprendizaje
+  // no significan nada, y un Ctrl+K que abre un formulario de gasto
+  // mientras estás estudiando es ruido: el atajo vive dentro del diálogo,
+  // así que desmontarlo lo apaga.
+  const enFinanzas = seccionActiva(pathname)?.href === "/";
 
   return (
     <div className="flex min-h-svh flex-col">
-      <header className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-2 px-4">
-          <Sheet open={menuAbierto} onOpenChange={setMenuAbierto}>
-            <SheetTrigger asChild>
+      <header className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-40 backdrop-blur">
+        <div className="border-b">
+          <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-2 px-4">
+            <Sheet open={menuAbierto} onOpenChange={setMenuAbierto}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  aria-label="Abrir menú"
+                >
+                  <Menu className="size-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 p-0">
+                <SheetHeader className="border-b">
+                  <SheetTitle>Pepe</SheetTitle>
+                </SheetHeader>
+                <MenuMobile onNavigate={() => setMenuAbierto(false)} />
+              </SheetContent>
+            </Sheet>
+
+            <Link
+              href="/"
+              aria-label="Ir al balance general"
+              className="mr-3 hidden items-center md:flex"
+            >
+              <Marca />
+            </Link>
+
+            <nav aria-label="Secciones" className="hidden items-center gap-1 md:flex">
+              <LinksSeccion />
+            </nav>
+
+            <div className="ml-auto flex items-center gap-2">
+              {enFinanzas && (
+                <>
+                  <MonedaToggle />
+                  <Button
+                    size="sm"
+                    onClick={() => setCargaRapidaAbierta(true)}
+                    className="gap-1.5"
+                  >
+                    <Plus className="size-4" />
+                    <span className="hidden sm:inline">Cargar</span>
+                    <kbd className="bg-primary-foreground/15 ml-1 hidden rounded px-1.5 py-0.5 font-mono text-[10px] lg:inline">
+                      Ctrl K
+                    </kbd>
+                  </Button>
+                </>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden"
-                aria-label="Abrir menú"
+                asChild
+                aria-label="Ajustes"
+                className={cn(
+                  pathname.startsWith("/ajustes") && "bg-secondary text-secondary-foreground",
+                )}
               >
-                <Menu className="size-5" />
+                <Link href="/ajustes">
+                  <Settings className="size-4" />
+                </Link>
               </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
-              <SheetHeader className="border-b">
-                <SheetTitle>Balance de proyectos</SheetTitle>
-              </SheetHeader>
-              <nav className="flex flex-col gap-1 p-3">
-                <NavLinks onNavigate={() => setMenuAbierto(false)} />
-              </nav>
-            </SheetContent>
-          </Sheet>
-
-          <Link
-            href="/"
-            aria-label="Ir al balance general"
-            className="mr-3 hidden items-center md:flex"
-          >
-            <Marca />
-          </Link>
-
-          <nav className="hidden items-center gap-1 md:flex">
-            <NavLinks />
-          </nav>
-
-          <div className="ml-auto flex items-center gap-2">
-            <MonedaToggle />
-            <Button
-              size="sm"
-              onClick={() => setCargaRapidaAbierta(true)}
-              className="gap-1.5"
-            >
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Cargar</span>
-              <kbd className="bg-primary-foreground/15 ml-1 hidden rounded px-1.5 py-0.5 font-mono text-[10px] lg:inline">
-                Ctrl K
-              </kbd>
-            </Button>
-            <UserMenu nombre={nombre} email={email} avatarUrl={avatarUrl} />
+              <UserMenu nombre={nombre} email={email} avatarUrl={avatarUrl} />
+            </div>
           </div>
         </div>
+
+        <LinksPantallas />
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
         {children}
       </main>
 
-      <QuickAddDialog
-        open={cargaRapidaAbierta}
-        onOpenChange={setCargaRapidaAbierta}
-      />
+      {enFinanzas && (
+        <QuickAddDialog
+          open={cargaRapidaAbierta}
+          onOpenChange={setCargaRapidaAbierta}
+        />
+      )}
     </div>
   );
 }

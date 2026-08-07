@@ -68,6 +68,11 @@ next-env.d.ts
 .turbo/
 .swc/
 
+# Pesos del modelo de embeddings (~266 MB). Los baja el build con
+# `npm run descargar:modelo`. No se commitean: el repo es público y
+# GitHub rechaza archivos de más de 100 MB.
+/.modelos/
+
 # ─────────────────────────────────────────────────────────────
 # Testing y cobertura
 # ─────────────────────────────────────────────────────────────
@@ -120,6 +125,14 @@ $RECYCLE.BIN/
 scratch/
 tmp/
 *.local
+
+# ─────────────────────────────────────────────────────────────
+# Datos personales
+# ─────────────────────────────────────────────────────────────
+# Export de La Colmena: son mis entradas de bitácora, no van a un repo
+# público. El importador las lee de acá pero el archivo no se commitea.
+colmena-backup-*.json
+colmena-export.json
 
 # Nota: `vercel link` agrega ".vercel" y ".env*" al final de este archivo.
 # Ya están contemplados arriba, y ".env*" al final pisaría la excepción
