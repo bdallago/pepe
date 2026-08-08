@@ -161,10 +161,24 @@ export async function aceptarLeccion(
     .update({
       estado: "aceptado",
       resuelto_en: new Date().toISOString(),
-      // Deja de apuntar a la entrada de bitácora y pasa a apuntar a lo
-      // que se creó: así se puede ir de la propuesta a la lección.
-      entidad_tabla: "lessons",
-      entidad_id: leccion.id,
+      // `entidad_tabla` / `entidad_id` NO se tocan: siguen apuntando a
+      // la entrada de bitácora de la que salió la propuesta.
+      //
+      // Antes se repuntaban a la lección creada, para poder ir de la
+      // propuesta a la lección. Eso rompía el pase de extracción: busca
+      // lo ya mirado por `entidad_tabla = 'daily_log'`, así que apenas
+      // aceptabas una propuesta su entrada de origen volvía a parecer
+      // sin mirar y el pase la proponía de nuevo. Estuvo latente desde
+      // la etapa 6 y se vio el 2026-08-08, la primera vez que se aceptó
+      // algo: la corrida siguiente duplicó las cuatro lecciones.
+      //
+      // El vínculo hacia adelante no se pierde, va en el payload. Se
+      // parte del payload crudo y no del parseado para no perder los
+      // campos propios de cada tipo (`tema`, `retro_titulo`, `modelo`).
+      payload: {
+        ...(item.payload as Record<string, unknown>),
+        lesson_id: leccion.id,
+      },
       clave_dedupe: null,
     })
     .eq("id", idParseado.data);

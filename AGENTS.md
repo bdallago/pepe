@@ -165,6 +165,25 @@ la bandeja se abandona y todo el diseño de confirmación humana pierde
 sentido. Por lo mismo, **el embedding de la lección aceptada no se
 espera**: la pantalla lo dispara contra `/api/lecciones/indexar` y sigue.
 
+**Al aceptar, la fila de bandeja sigue apuntando a la entidad de
+origen.** Antes se repuntaba a la lección creada, y eso rompía el pase
+de extracción: busca lo ya mirado por `entidad_tabla = 'daily_log'`, así
+que apenas aceptabas una propuesta su entrada volvía a parecer sin mirar
+y la corrida siguiente la proponía de nuevo. Estuvo latente desde la
+etapa 6 y se vio el 2026-08-08, la primera vez que se aceptó algo: el
+pase duplicó las cuatro lecciones. El vínculo hacia la lección creada va
+en `payload.lesson_id`.
+
+**La vara del extractor es baja a propósito, y no es la misma que la de
+6.3 y 6.5.** Ahí el modelo inventa y lo genérico es relleno; acá
+reescribe lo que Beno vivió y escribió. Los dos errores no cuestan
+igual: un falso positivo se descarta con una tecla, un falso negativo es
+una lección suya que no ve nunca. La calibración original decía "ante la
+duda, no hay lección" y descartó sola 2 de 6 entradas reales; Beno se
+quedó con las seis. El prompt ahora dice **"ante la duda, proponela"** y
+pide respetar su formulación en vez de mejorarla. No lo vuelvas a
+apretar.
+
 El enum de estados tiene dos valores más allá de los obvios: `pospuesto`
 (para los zombies que se miran más adelante) y `error` (cuando la salida
 del modelo no valida contra el esquema — queda visible en la bandeja en

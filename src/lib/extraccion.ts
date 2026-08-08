@@ -51,10 +51,22 @@ const CATEGORIAS = [
 /**
  * Lo que se le pide al modelo.
  *
- * `tiene_leccion` primero y a propósito: la mitad de las entradas de una
- * bitácora no dejan ninguna lección, y forzar un título sobre "hoy avancé
- * con el roadmap" produce obviedades que ensucian la bandeja. Preferimos
- * una bandeja corta y buena a una larga.
+ * `tiene_leccion` primero y a propósito: hay entradas que son puro
+ * registro operativo ("hoy avancé con el roadmap") y forzar un título
+ * sobre eso produce obviedades.
+ *
+ * Pero **la vara acá es baja, y eso es deliberado.** Este pase no juzga
+ * la producción de un modelo: reescribe lo que Beno vivió y escribió.
+ * Los dos errores no cuestan lo mismo — un falso positivo se descarta
+ * con una tecla en la bandeja, un falso negativo es una lección suya que
+ * no ve nunca.
+ *
+ * La calibración anterior era la contraria ("ante la duda, no hay
+ * lección") y descartó sola 2 de las 6 entradas reales, por "describir
+ * un concepto" y por "ser una tarea operativa". Al revisarlas, Beno se
+ * quedó con las cuatro que sí habían pasado **y con las dos
+ * descartadas**: "más allá de que sean imperfectas, son mis lecciones".
+ * De ahí este cambio.
  */
 const respuestaSchema = z.object({
   tiene_leccion: z.boolean(),
@@ -64,15 +76,17 @@ const respuestaSchema = z.object({
   motivo: z.string().trim().max(300).optional().nullable(),
 });
 
-const SISTEMA = `Sos un asistente que lee la bitácora diaria de trabajo de una persona y extrae lecciones aprendidas.
+const SISTEMA = `Sos un asistente que lee la bitácora diaria de trabajo de una persona y rescata lo que aprendió, para que no se pierda.
 
-Una LECCIÓN es un aprendizaje que va a servir en el futuro, en otro proyecto u otro momento: una causa raíz que costó encontrar, una decisión que salió mal y por qué, una regla que conviene recordar, algo que resultó distinto de lo esperado.
+Una LECCIÓN es cualquier cosa que esa persona entendió, notó o decidió y que le va a servir volver a leer: una causa raíz que costó encontrar, una decisión y su porqué, una regla que conviene recordar, algo que resultó distinto de lo esperado, una distinción conceptual que le llevó tiempo agarrar, una duda que se respondió a sí misma leyendo.
 
-NO es una lección el registro operativo: "hice la sesión de SQL", "avancé con el roadmap", "terminé el diseño". Tampoco lo son las obviedades ni los consejos genéricos.
+Lo ÚNICO que NO es una lección es el registro puramente operativo, sin ninguna idea adentro: "hice la sesión de SQL", "avancé con el roadmap", "terminé el diseño".
 
-Ante la duda, respondé que no hay lección. Una bandeja corta y buena vale más que una larga.
+**Ante la duda, PROPONELA.** No sos vos quien decide qué se guarda: la persona revisa cada propuesta y descarta la que no le sirve, y eso le cuesta una tecla. En cambio, lo que vos descartes no lo va a ver nunca. Errar de más es barato; errar de menos le borra algo suyo.
 
-Si hay lección, reescribila AUTOCONTENIDA: tiene que entenderse sola dentro de un año, sin leer la entrada original ni saber en qué andaba esa semana.
+Tampoco es tu trabajo que la lección suene inteligente ni que sea una afirmación filosa. Si lo que entendió fue algo básico o de manual, rescatalo igual: era nuevo para esa persona ese día, y eso es lo que la hace suya.
+
+Respetá SU formulación y su punto de vista. No la corrijas, no la mejores, no le agregues consejos que no dio. Tu trabajo es hacer que se entienda sola dentro de un año —sin leer la entrada original ni saber en qué andaba esa semana—, no reescribir lo que pensó.
 
 Categorías posibles:
 - "tecnica": código, arquitectura, herramientas, infraestructura.
