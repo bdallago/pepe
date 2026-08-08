@@ -25,6 +25,13 @@ import type {
  * serie de cotizaciones) más dos preferencias de UI.
  */
 
+/*
+  Las claves siguen diciendo "app-gastos", el nombre viejo del proyecto.
+  **No las renombres.** Están escritas en el localStorage del browser de
+  Beno: cambiarlas no migra nada, simplemente hace que la app deje de
+  encontrar lo guardado y le resetee la moneda y el último proyecto. Es
+  la única mención del nombre viejo que sobrevive a propósito.
+*/
 const STORAGE_MONEDA = "app-gastos:moneda";
 const STORAGE_ULTIMO_PROYECTO = "app-gastos:ultimo-proyecto";
 

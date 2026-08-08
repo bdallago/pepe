@@ -24,9 +24,9 @@ export default async function LoginPage({
     <main className="flex min-h-svh items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Balance de proyectos</CardTitle>
+          <CardTitle className="text-2xl">Pepe</CardTitle>
           <CardDescription>
-            Ingresos y egresos de tus proyectos, en pesos y en dólares.
+            La plata, el estudio y la bitácora de tus proyectos.
           </CardDescription>
         </CardHeader>
         <CardContent>

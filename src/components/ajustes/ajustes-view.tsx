@@ -3,6 +3,7 @@
 import { CategoriasPanel } from "@/components/ajustes/categorias-panel";
 import { CotizacionPanel } from "@/components/ajustes/cotizacion-panel";
 import { ProyectosPanel } from "@/components/ajustes/proyectos-panel";
+import { RespaldoPanel } from "@/components/ajustes/respaldo-panel";
 import { SuscripcionesPanel } from "@/components/ajustes/suscripciones-panel";
 import { TracksPanel } from "@/components/ajustes/tracks-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,6 +26,7 @@ export function AjustesView({
         <TabsTrigger value="cotizacion">Cotización</TabsTrigger>
         <TabsTrigger value="tracks">Tracks</TabsTrigger>
         <TabsTrigger value="suscripciones">Suscripciones</TabsTrigger>
+        <TabsTrigger value="respaldo">Respaldo</TabsTrigger>
       </TabsList>
 
       <TabsContent value="proyectos">
@@ -45,6 +47,10 @@ export function AjustesView({
 
       <TabsContent value="suscripciones">
         <SuscripcionesPanel dias={diasInactividadZombie} />
+      </TabsContent>
+
+      <TabsContent value="respaldo">
+        <RespaldoPanel />
       </TabsContent>
     </Tabs>
   );

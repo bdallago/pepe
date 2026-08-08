@@ -502,11 +502,37 @@ las lee del documento y las relee cuando cambia el tema.
   importador (`upsert` sobre `(user_id, slug)`).
 - Formato `es-AR` vía `src/lib/format.ts`. ARS sin decimales, USD con dos.
 - El CSV se exporta con `;` y BOM: es lo que Excel en configuración
-  argentina abre sin pasar por el asistente de importación.
+  argentina abre sin pasar por el asistente de importación. **Convive con
+  el respaldo JSON, no lo reemplaza**: el spec decía "pasa a ser", pero
+  son dos usos distintos y Beno eligió quedarse con los dos. El JSON es
+  la red de seguridad; el CSV es para mirar los movimientos en Excel.
+- El **respaldo** (`lib/respaldo.ts`) es la única lectura de la app que
+  **no filtra lo archivado**, y la única que pagina de a 1000. Sin
+  paginar, una tabla de más de mil filas se exportaría cortada sin
+  ningún error visible, que es la peor forma posible de fallar en un
+  backup. Si agregás una tabla al esquema, agregala a `TABLAS`.
 - Server Actions devuelven `ActionResult<T>` (`{ ok, data } | { ok, error }`),
   nunca lanzan para errores esperables.
 - `createAdminClient()` saltea RLS. Solo lo usan el cron y la
   actualización forzada de cotización.
+
+## El nombre viejo
+
+La app se llamó **"Balance de proyectos"** y el paquete, `app-gastos`.
+El 2026-08-08 se limpió: título, metadata, login y `package.json` dicen
+**Pepe**.
+
+Sobrevive una sola mención, **a propósito**: las claves de
+`localStorage` (`app-gastos:moneda`, `app-gastos:ultimo-proyecto`).
+Están escritas en el browser de Beno y renombrarlas no migra nada, solo
+le resetea la moneda y el último proyecto elegidos. No las "arregles".
+
+Lo mismo con **"HRKit"**, el nombre viejo de Gentius. El temario
+importado se renombró (1 track, 8 bloques, 36 sesiones), pero **la
+entrada de bitácora que lo menciona quedó intacta**: es registro de lo
+que Beno pensó ese día y ese día el proyecto se llamaba así. Ojo: el
+backup de origen sigue diciendo HRKit, así que **volver a correr
+`npm run import:colmena` pisaría el renombre**.
 
 ## Seguridad
 

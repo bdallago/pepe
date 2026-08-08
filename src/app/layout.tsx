@@ -27,11 +27,11 @@ const firaCode = Fira_Code({
 
 export const metadata: Metadata = {
   title: {
-    default: "Balance de proyectos",
-    template: "%s · Balance de proyectos",
+    default: "Pepe",
+    template: "%s · Pepe",
   },
   description:
-    "Ingresos y egresos de mis proyectos de software, en pesos y en dólares.",
+    "La plata, el estudio y la bitácora de mis proyectos, en un solo lugar.",
 };
 
 export const viewport: Viewport = {

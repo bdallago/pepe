@@ -69,6 +69,22 @@ servidor. Si revisar veinte propuestas costara veinte clicks, la bandeja
 se abandonaría en dos semanas y todo el diseño de confirmación humana
 dejaría de tener sentido.
 
+### Respaldo
+
+El plan gratuito de Supabase **no hace backups automáticos**, así que
+desde Ajustes se baja **todo en un JSON**: proyectos, movimientos,
+categorías, recurrencias, tracks, bloques, sesiones, artefactos,
+bitácora, lecciones, retros, bandeja, preferencias y el histórico de
+cotizaciones. Un botón, un archivo.
+
+Es la única lectura de la app que **incluye lo archivado**: un respaldo
+que filtra por lo que hoy se ve en pantalla no es un respaldo. No trae
+los embeddings, que se regeneran, ni los comprobantes, que viven en el
+storage.
+
+El export a CSV de movimientos sigue existiendo aparte, para abrirlos en
+Excel.
+
 ### Suscripciones sin uso
 
 Todos los días, un job revisa si algún gasto que se repite mes a mes
@@ -377,11 +393,14 @@ tipo o categoría a mano.
 
 ### Límites del tier gratuito
 
-El techo que muerde **no son los 30 requests/minuto sino los 6000
-tokens/minuto**. Con ~800 tokens por entrada, el pase de extracción se
-choca el límite en la cuarta llamada con el contador de pedidos en 4 de
-30. El limitador de `llm.ts` cuenta las dos cosas y espera antes de
-salir, en vez de comerse el 429.
+El techo que muerde **no son los pedidos sino los tokens por minuto**.
+Con ~800 tokens por entrada, el pase de extracción se choca el límite en
+la cuarta llamada con el contador de pedidos en 4 de 1000.
+
+Y el techo de tokens **es por modelo**: 6000 para el chico, 12000 para
+`llama-3.3-70b` y 8000 para `gpt-oss-120b`. El limitador de `llm.ts`
+lleva una ventana por modelo y espera antes de salir, en vez de comerse
+el 429.
 
 ## Comandos
 

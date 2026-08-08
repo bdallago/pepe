@@ -15,6 +15,18 @@
  * Nada de acá toca las tablas de finanzas. La única escritura fuera del
  * módulo de aprendizaje es crear el proyecto Gentius, que es a lo que
  * cuelga la bitácora importada.
+ *
+ * ⚠ **Ya no se puede volver a correr sobre el JSON original sin perder
+ * trabajo.** El 2026-08-08 se renombró "HRKit" a "Gentius" en el temario
+ * ya importado —1 track, 8 bloques y 36 sesiones—, y el backup de origen
+ * sigue diciendo HRKit. Como el upsert es por `slug`, una corrida nueva
+ * pisaría los títulos, subtítulos y consignas con el nombre viejo.
+ *
+ * La entrada de bitácora que menciona HRKit **quedó intacta a propósito**:
+ * es registro de lo que Beno pensó ese día, y ese día el proyecto se
+ * llamaba así.
+ *
+ * Si alguna vez hace falta reimportar, corregir antes el JSON de origen.
  */
 
 import { readFileSync } from "node:fs";
