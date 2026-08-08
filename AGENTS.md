@@ -170,19 +170,35 @@ El enum de estados tiene dos valores más allá de los obvios: `pospuesto`
 del modelo no valida contra el esquema — queda visible en la bandeja en
 vez de descartarse en silencio).
 
-### 6.b El límite de Groq que muerde son los tokens, no los pedidos
+### 6.b El límite de Groq que muerde son los tokens, y es por modelo
 
 El spec pide un limitador propio de **30 requests/minuto**. Medido contra
 la cuenta real el 2026-08-07, ese no es el techo que se toca: el tier
-gratuito corta antes en **6000 tokens/minuto** sobre
-`llama-3.1-8b-instant`. El pase de extracción gasta entre 600 y 1000
-tokens por entrada, así que come un 429 en la cuarta llamada, con el
-contador de pedidos en 4 de 30.
+gratuito corta antes por tokens. El pase de extracción gasta entre 600 y
+1000 tokens por entrada, así que come un 429 en la cuarta llamada, con el
+contador de pedidos en 4 de **1000** (ese es el techo real de pedidos, no
+30).
 
-Por eso `lib/llm.ts` limita **las dos cosas**. La reserva de tokens se
-hace estimando (largo del prompt / 3 + `max_tokens`) y se **corrige con
-el `usage` de la respuesta**: sin esa corrección se reserva siempre el
-máximo de salida y el limitador frena de más.
+**El techo de tokens es por modelo y son distintos entre sí.** Leído de
+los headers `x-ratelimit-limit-tokens` el 2026-08-08:
+
+| modelo | tokens/minuto |
+|---|---|
+| `llama-3.1-8b-instant` | 6000 |
+| `llama-3.3-70b-versatile` | 12000 |
+| `openai/gpt-oss-120b` | 8000 |
+
+Por eso `lib/llm.ts` lleva **una ventana por modelo**. Antes había un
+balde único y global de 5500, que frenaba a la retro contra el techo del
+modelo más chico —uno que ni siquiera estaba usando—. Si agregás un
+modelo, agregalo a la tabla `TOKENS_POR_MINUTO`: lo que no está ahí cae
+al techo más conservador.
+
+La reserva de tokens se hace estimando (largo del prompt / 3 +
+`max_tokens`) y se **corrige con el `usage` de la respuesta**: sin esa
+corrección se reserva siempre el máximo de salida y el limitador frena
+de más. Con los modelos de razonamiento eso se nota, porque `max_tokens`
+tiene que ser holgado y lo real suele ser la mitad.
 
 ### 6.c El histórico le gana al modelo, y matchea ignorando el mes
 
@@ -226,16 +242,39 @@ afirmaciones discutibles ("Cobrar por cada versión mayor evita que el
 cliente exija cambios sin fin"); `qwen/qwen3.6-27b` ni siquiera devolvió
 JSON válido. De ahí `MODELO_RAZONADOR`.
 
-**No reemplaza a `MODELO_GRANDE`.** La retro (6.5) sigue con llama: ahí
-la entrada es enorme, la salida ya salía anclada en los datos reales y
-el razonamiento se comería el presupuesto de tokens sin comprar nada.
+**Las tres funciones de 6.3 a 6.5 usan el razonador.** La retro empezó
+con llama y se pasó el mismo día, por decisión explícita de Beno: pagar
+latencia y tokens a cambio de calidad, sin salirse del tier gratuito.
+Con llama las lecciones candidatas salían desparejas ("Es importante
+evaluar el gasto en herramientas"); con el razonador salen con el número
+adentro ("El 70 % de la facturación proviene de dos clientes").
+
+**El contrapeso del razonamiento es que confabula más**, y en una retro
+eso importa más que en ninguna otra parte: es un documento que se relee
+dentro de un año. La primera corrida inventó un "plazo previsto" que no
+existía, procesos que supuestamente faltaron y consecuencias que nadie
+registró. Por eso la regla antiinvención del prompt de `lib/retro.ts`
+**enumera los errores concretos uno por uno** en vez de decir "no
+inventes": el modelo respeta la lista, no el principio. Si tocás ese
+prompt, no la borres.
+
+`MODELO_GRANDE` quedó sin usar en la app, pero se deja: es el que hay
+que agarrar si aparece un caso con entrada enorme donde el razonamiento
+no compre nada.
 
 Ojo con el presupuesto: **los tokens de razonamiento se descuentan de
-`max_tokens`** y del techo por minuto. Con 1800 la lista volvía truncada
-a una sola lección; por eso 3500. Y por lo mismo el limitador tiene una
-salida de emergencia: si una sola llamada estima más que el techo del
-minuto, esperar no lo arregla —el minuto siguiente tiene el mismo
-techo—, así que con la ventana vacía sale igual.
+`max_tokens`** y del techo por minuto. Con 1800 la lista de 6.3 volvía
+truncada a una sola lección; por eso 3500 ahí y 4500 en la retro.
+Quedarse corto no degrada la respuesta: la trunca, no valida contra el
+esquema y se pierde la llamada entera. Por lo mismo, el contexto de la
+retro tiene **presupuesto de caracteres para la bitácora**
+(`PRESUPUESTO_BITACORA_CHARS`): es la única parte de la entrada que
+puede crecer sin límite.
+
+Y por lo mismo el limitador tiene una salida de emergencia: si una sola
+llamada estima más que el techo del minuto, esperar no lo arregla —el
+minuto siguiente tiene el mismo techo—, así que con la ventana vacía
+sale igual.
 
 ### 6.e Las tres funciones de 6.3 a 6.5 no comparten camino
 

@@ -86,17 +86,33 @@ const REQUESTS_POR_MINUTO = 28;
 /**
  * Techo de **tokens** por minuto, y el límite que realmente muerde.
  *
- * Medido contra la cuenta real el 2026-08-07: el tier gratuito corta en
- * 6000 TPM sobre `llama-3.1-8b-instant`, y el pase de extracción gasta
- * entre 600 y 1000 tokens por entrada. O sea que se choca el techo de
- * tokens en la cuarta llamada, mucho antes de acercarse a los 30
- * pedidos por minuto. Un limitador que solo cuenta pedidos —lo que pedía
- * el spec— no alcanza y come 429 igual.
+ * Medido contra la cuenta real el 2026-08-07: el tier gratuito corta por
+ * tokens mucho antes que por pedidos. El pase de extracción gasta entre
+ * 600 y 1000 tokens por entrada y come un 429 en la cuarta llamada, con
+ * el contador de pedidos en 4 de 1000. Un limitador que solo cuenta
+ * pedidos —lo que pedía el spec— no alcanza.
+ *
+ * **El techo es por modelo, y son distintos entre sí.** Leído de los
+ * headers `x-ratelimit-limit-tokens` el 2026-08-08: 6000 para el chico,
+ * 12000 para llama-70b y 8000 para gpt-oss-120b. Un balde único y global
+ * —lo que había antes— frenaba la retro contra el techo del modelo más
+ * chico, que ni siquiera estaba usando.
  *
  * Se deja margen porque el conteo de acá es una estimación hasta que
  * llega el `usage` de la respuesta.
  */
-const TOKENS_POR_MINUTO = 5_500;
+const TOKENS_POR_MINUTO: Readonly<Record<string, number>> = {
+  [MODELO_CHICO]: 5_500,
+  [MODELO_GRANDE]: 11_000,
+  [MODELO_RAZONADOR]: 7_300,
+};
+
+/** Para un modelo que no esté en la tabla, el techo más conservador. */
+const TOKENS_POR_MINUTO_POR_DEFECTO = 5_500;
+
+function techoDe(modelo: string): number {
+  return TOKENS_POR_MINUTO[modelo] ?? TOKENS_POR_MINUTO_POR_DEFECTO;
+}
 
 /** Caracteres por token en español. Conservador a propósito. */
 const CHARS_POR_TOKEN = 3;
@@ -148,13 +164,19 @@ export function hayModeloConfigurado(): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Limitador: pedidos por minuto Y tokens por minuto
+// Limitador: pedidos por minuto Y tokens por minuto, POR MODELO
 //
 // Ventana deslizante sobre las últimas salidas, con su costo en tokens.
-// Es estado de módulo, así que vale por instancia de función: con una app
-// de un solo usuario y llamadas serializadas alcanza y sobra. Si algún
-// día hay varias instancias en paralelo pegándole a Groq, esto se queda
-// corto y hay que mover el contador a la base.
+// Groq lleva un balde de tokens por modelo, así que acá hay uno por
+// modelo también: gastar el cupo del razonador no tiene por qué frenar
+// una extracción con el modelo chico.
+//
+// El carril de espera, en cambio, es **uno solo y compartido**. Las
+// llamadas se serializan para poder contarlas antes de salir; con una
+// app de un solo usuario que dispara estas cosas de a una, no hay nada
+// que ganar dejándolas competir. Es estado de módulo, o sea que vale por
+// instancia de función: si algún día hay varias en paralelo pegándole a
+// Groq, esto se queda corto y hay que mover el contador a la base.
 // ─────────────────────────────────────────────────────────────
 
 interface Salida {
@@ -163,22 +185,35 @@ interface Salida {
   tokens: number;
 }
 
-const salidas: Salida[] = [];
+/** Una ventana por modelo. */
+const salidasPorModelo = new Map<string, Salida[]>();
+
+function ventanaDe(modelo: string): Salida[] {
+  let v = salidasPorModelo.get(modelo);
+  if (!v) {
+    v = [];
+    salidasPorModelo.set(modelo, v);
+  }
+  return v;
+}
 
 /** Cola de un solo carril: las llamadas se serializan para poder contarlas. */
 let turno: Promise<void> = Promise.resolve();
 
-function purgar(ahora: number): void {
+function purgar(salidas: Salida[], ahora: number): void {
   while (salidas.length > 0 && ahora - salidas[0]!.t >= VENTANA_MS) {
     salidas.shift();
   }
 }
 
 /**
- * Espera hasta que haya cupo de pedidos **y** de tokens, y reserva el
- * lugar. Devuelve la reserva para poder corregirla con el uso real.
+ * Espera hasta que haya cupo de pedidos **y** de tokens para ese modelo,
+ * y reserva el lugar. Devuelve la reserva para corregirla con el uso real.
  */
-async function esperarTurno(tokensEstimados: number): Promise<Salida> {
+async function esperarTurno(
+  modelo: string,
+  tokensEstimados: number,
+): Promise<Salida> {
   const anterior = turno;
   let liberar!: () => void;
   turno = new Promise<void>((resolver) => {
@@ -187,14 +222,17 @@ async function esperarTurno(tokensEstimados: number): Promise<Salida> {
 
   await anterior;
 
+  const salidas = ventanaDe(modelo);
+  const techo = techoDe(modelo);
+
   try {
     for (;;) {
       const ahora = Date.now();
-      purgar(ahora);
+      purgar(salidas, ahora);
 
       const usados = salidas.reduce((total, s) => total + s.tokens, 0);
       const hayPedidos = salidas.length < REQUESTS_POR_MINUTO;
-      const hayTokens = usados + tokensEstimados <= TOKENS_POR_MINUTO;
+      const hayTokens = usados + tokensEstimados <= techo;
 
       // Una sola llamada puede estimar más que el techo del minuto: la
       // retro de un proyecto grande, con toda su bitácora adentro, lo
@@ -202,7 +240,7 @@ async function esperarTurno(tokensEstimados: number): Promise<Salida> {
       // techo— así que con la ventana vacía se sale igual y que conteste
       // Groq. Sin esta salida el bucle no termina nunca y, peor, lee
       // `salidas[0]` de un array vacío.
-      const noEntraNunca = tokensEstimados > TOKENS_POR_MINUTO;
+      const noEntraNunca = tokensEstimados > techo;
 
       if (hayPedidos && (hayTokens || (noEntraNunca && salidas.length === 0))) {
         const reserva: Salida = { t: ahora, tokens: tokensEstimados };
@@ -217,8 +255,9 @@ async function esperarTurno(tokensEstimados: number): Promise<Salida> {
         ? VENTANA_MS - (ahora - salidas[0].t) + 100
         : VENTANA_MS;
       console.warn(
-        `[llm] limitador: ${salidas.length} pedidos y ${usados} tokens en el último minuto` +
-          ` (falta ${hayTokens ? "cupo de pedidos" : "cupo de tokens"}), espero ${espera} ms.`,
+        `[llm] limitador de ${modelo}: ${salidas.length} pedidos y ${usados}/${techo} tokens` +
+          ` en el último minuto (falta ${hayTokens ? "cupo de pedidos" : "cupo de tokens"}),` +
+          ` espero ${espera} ms.`,
       );
       await dormir(espera);
     }
@@ -311,7 +350,7 @@ export async function completarJSON<T>({
   for (let intento = 0; intento <= reintentos; intento++) {
     if (signal?.aborted) throw new ErrorLLM("red", "Pase cancelado.");
 
-    const reserva = await esperarTurno(estimado);
+    const reserva = await esperarTurno(modelo, estimado);
 
     const arranque = Date.now();
     let respuesta: Response;

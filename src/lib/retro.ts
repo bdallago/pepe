@@ -7,7 +7,7 @@ import {
   type Balances,
 } from "@/lib/balances";
 import { todayISO } from "@/lib/dates";
-import { MODELO_GRANDE, completarJSON } from "@/lib/llm";
+import { MODELO_RAZONADOR, completarJSON } from "@/lib/llm";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type {
   CategoriaLeccion,
@@ -55,6 +55,20 @@ const ENTRADAS_EN_CONTEXTO = 40;
 /** Recorte de cada entrada de bitácora. Las hay muy largas. */
 const CHARS_POR_ENTRADA = 800;
 
+/**
+ * Presupuesto de caracteres para el bloque de bitácora.
+ *
+ * No es prolijidad: es lo que mantiene la llamada adentro del tier
+ * gratuito. El techo de `gpt-oss-120b` es de 8000 tokens por minuto y la
+ * salida ya reserva 4500 para razonar y escribir, así que la entrada
+ * entera tiene que caber en unos 3500 tokens. Los agregados, los
+ * movimientos y las lecciones son acotados por naturaleza; la bitácora
+ * es la única parte que puede crecer sin límite, así que el freno va
+ * acá. Se llena desde la entrada más nueva hacia atrás: el cierre de un
+ * proyecto se entiende mejor por cómo terminó que por cómo arrancó.
+ */
+const PRESUPUESTO_BITACORA_CHARS = 9_000;
+
 const CATEGORIAS = [
   "tecnica",
   "producto",
@@ -90,7 +104,16 @@ Escribís cuatro secciones y una lista de lecciones candidatas.
 
 Reglas:
 
-1. **Todo lo que afirmes tiene que apoyarse en los datos que te di.** No inventes hechos, cifras, clientes ni decisiones que no aparezcan. Si algo no está, no lo digas.
+1. **Todo lo que afirmes tiene que apoyarse en los datos que te di.** No inventes hechos, cifras, clientes, herramientas ni decisiones que no aparezcan. Si algo no está, no lo digas.
+
+   Esta es la regla más importante y la que más se rompe sola. Errores concretos que NO tenés que cometer:
+   - Hablar de plazos, fechas previstas o entregas a tiempo. **No te di ningún plan ni ninguna fecha objetivo**, solo la fecha de cada movimiento. No podés saber si algo llegó tarde o temprano.
+   - Nombrar herramientas, servicios o proveedores que no figuren en la descripción de un movimiento.
+   - Afirmar que faltaron procesos, controles o documentación. Que no te lo haya contado no significa que no existiera: significa que no lo sabés.
+   - Atribuir causas a resultados ("el marketing no generó leads") cuando los datos solo muestran el gasto y no de dónde vino cada venta.
+   - Describir consecuencias que no están registradas ("hubo retrabajo", "necesitó refactorizaciones", "generó sorpresas en el presupuesto").
+
+   Ante la duda, escribí menos. Una sección corta y cierta vale más que una larga y adornada. Si de verdad no hay nada que decir en una sección, dejala en pocas oraciones o vacía.
 2. Los números ya los tiene calculados en la app y te los paso. En "costo_real" NO repitas la tabla: interpretá. Adónde se fue la plata de verdad, qué salió más caro de lo que parecía, qué gasto era chico pero constante.
 3. Nada de tono corporativo ni de informe. Es una nota para uno mismo dentro de un año.
 4. Si algo salió mal, decilo derecho. Una retro que no dice qué no funcionó no sirve.
@@ -218,13 +241,29 @@ export async function generarRetro(
   });
 
   const { datos, uso } = await completarJSON({
-    modelo: MODELO_GRANDE,
+    modelo: MODELO_RAZONADOR,
     sistema: SISTEMA,
     usuario,
     esquema: respuestaSchema,
     etiqueta: "retro-proyecto",
     temperatura: 0.4,
-    maxTokens: 3000,
+    // Con llama-70b las lecciones candidatas salían desparejas: una
+    // buena y una genérica ("Es importante evaluar el gasto en
+    // herramientas"). Beno prefirió pagar latencia y tokens a cambio de
+    // calidad, y el balde de gpt-oss-120b (8000 TPM propios) da para
+    // esto sin salirse del tier gratuito.
+    esfuerzo: "medium",
+    // Los tokens de razonamiento salen de acá. Medido el 2026-08-08
+    // contra los dos proyectos reales: 1000 a 1750 de entrada y 1200 a
+    // 2400 de salida. El 4500 es margen contra un proyecto más gordo,
+    // porque quedarse corto no degrada la respuesta: la trunca, no
+    // valida contra el esquema y se pierde la llamada entera.
+    //
+    // El costo de ese margen es que el limitador reserva 4500 hasta que
+    // llega el `usage` real, así que dos retros seguidas dentro del
+    // mismo minuto esperan. No importa: se dispara a mano al cerrar un
+    // proyecto, de a una.
+    maxTokens: 4500,
     // Es la llamada más pesada: mucho contexto de entrada y una salida
     // larga. El timeout por defecto se le queda corto.
     timeoutMs: 180_000,
@@ -364,13 +403,28 @@ function armarContexto({
   }
 
   if (bitacora.length > 0) {
-    // Las últimas: el cierre de un proyecto se entiende mejor por cómo
-    // terminó que por cómo arrancó.
-    const detalle = bitacora
-      .slice(-ENTRADAS_EN_CONTEXTO)
-      .map((e) => `--- ${e.fecha}\n${e.contenido.slice(0, CHARS_POR_ENTRADA)}`)
-      .join("\n\n");
-    partes.push(`Entradas de bitácora del proyecto:\n${detalle}`);
+    // De la más nueva hacia atrás hasta gastar el presupuesto, y recién
+    // ahí se da vuelta para que el modelo las lea en orden cronológico.
+    const elegidas: string[] = [];
+    let gastado = 0;
+
+    for (const e of bitacora.slice(-ENTRADAS_EN_CONTEXTO).reverse()) {
+      const texto = `--- ${e.fecha}\n${e.contenido.slice(0, CHARS_POR_ENTRADA)}`;
+      if (gastado + texto.length > PRESUPUESTO_BITACORA_CHARS) break;
+      elegidas.push(texto);
+      gastado += texto.length;
+    }
+
+    if (elegidas.length > 0) {
+      const recortadas = bitacora.length - elegidas.length;
+      partes.push(
+        `Entradas de bitácora del proyecto` +
+          (recortadas > 0
+            ? ` (las ${elegidas.length} más recientes de ${bitacora.length})`
+            : "") +
+          `:\n${elegidas.reverse().join("\n\n")}`,
+      );
+    }
   }
 
   return partes.join("\n\n");
