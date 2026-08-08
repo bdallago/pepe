@@ -242,6 +242,72 @@ export async function descartarErrorBandeja(
   return resolver(itemId, "rechazado");
 }
 
+/**
+ * Acepta un zombie: "sí, lo doy de baja" (spec 6.2).
+ *
+ * Si el gasto tenía una **recurrencia declarada**, se desactiva: es lo
+ * único que la app puede dar de baja de verdad, y evita que el cron
+ * siga generando el movimiento planificado todos los meses.
+ *
+ * Si no la tenía —el caso de los datos reales, donde las suscripciones
+ * son movimientos sueltos— no hay ninguna fila que apagar: la baja la
+ * hace Beno en el sitio del proveedor y esto solo cierra el aviso. La
+ * pantalla lo dice con todas las letras en vez de fingir que hizo algo.
+ */
+export async function aceptarZombie(
+  itemId: string,
+): Promise<ActionResult<{ recurrenciaDesactivada: boolean }>> {
+  const idParseado = uuid.safeParse(itemId);
+  if (!idParseado.success) return fail("Identificador inválido.");
+
+  const { supabase } = await requireSession();
+
+  const { data: item, error: errorLectura } = await supabase
+    .from("inbox")
+    .select("id, tipo, estado, payload")
+    .eq("id", idParseado.data)
+    .maybeSingle();
+
+  if (errorLectura) return fail(mensajeDeError(errorLectura));
+  if (!item) return fail("No encontré ese aviso.");
+  if (item.tipo !== "zombie") return fail("Ese ítem no es una suscripción.");
+  if (item.estado !== "pendiente" && item.estado !== "pospuesto") {
+    return fail("Ese aviso ya estaba resuelto.");
+  }
+
+  const payload = item.payload as { recurrence_id?: unknown } | null;
+  const recurrenceId =
+    typeof payload?.recurrence_id === "string" ? payload.recurrence_id : null;
+
+  let desactivada = false;
+
+  if (recurrenceId) {
+    const { error } = await supabase
+      .from("recurrences")
+      .update({ activa: false })
+      .eq("id", recurrenceId);
+
+    if (error) return fail(mensajeDeError(error));
+    desactivada = true;
+  }
+
+  const { error: errorCierre } = await supabase
+    .from("inbox")
+    .update({
+      estado: "aceptado",
+      resuelto_en: new Date().toISOString(),
+      // La clave se conserva: el gasto sigue existiendo en el histórico
+      // y el detector lo volvería a ver. Si se liberara, el próximo
+      // escaneo propondría de nuevo algo que Beno ya dio de baja.
+    })
+    .eq("id", idParseado.data);
+
+  if (errorCierre) return fail(mensajeDeError(errorCierre));
+
+  revalidatePath("/", "layout");
+  return ok({ recurrenciaDesactivada: desactivada });
+}
+
 async function resolver(
   itemId: string,
   estado: "rechazado",
@@ -251,15 +317,30 @@ async function resolver(
 
   const { supabase } = await requireSession();
 
+  // Los zombies son la excepción, y es un requisito del spec: "lo marco
+  // como falso positivo **y no me lo vuelve a mostrar**". Como la
+  // detección es una consulta sobre todo el histórico, el gasto va a
+  // seguir apareciendo en cada corrida; lo único que puede acordarse de
+  // que Beno ya dijo que no es la clave conservada en la fila rechazada,
+  // que el escaneo lee antes de proponer.
+  //
+  // Para el resto, liberar la clave es lo correcto: permite volver a
+  // proponer sobre la misma entidad si algo cambia. El índice único solo
+  // cubre lo no resuelto, así que conservarla acá no bloquea nada.
+  const { data: item } = await supabase
+    .from("inbox")
+    .select("tipo")
+    .eq("id", idParseado.data)
+    .maybeSingle();
+
+  const esZombie = item?.tipo === "zombie";
+
   const { error } = await supabase
     .from("inbox")
     .update({
       estado,
       resuelto_en: new Date().toISOString(),
-      // Liberar la clave permite que una corrida futura vuelva a
-      // proponer sobre la misma entidad si algo cambia. El índice único
-      // solo cubre lo no resuelto.
-      clave_dedupe: null,
+      ...(esZombie ? {} : { clave_dedupe: null }),
     })
     .eq("id", idParseado.data)
     .in("estado", ["pendiente", "pospuesto", "error"]);

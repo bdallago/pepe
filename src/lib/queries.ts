@@ -117,6 +117,27 @@ export async function getArtefactos(): Promise<Artifact[]> {
 }
 
 /**
+ * Días de inactividad a partir de los cuales un gasto recurrente se
+ * considera sospechoso (spec 6.2).
+ *
+ * La fila de `settings` se crea recién la primera vez que Beno guarda
+ * algo, así que mientras no exista vale el default. El mismo número está
+ * como `default` en la columna: si se toca uno, tocar el otro.
+ */
+export const DIAS_INACTIVIDAD_ZOMBIE_POR_DEFECTO = 90;
+
+export async function getDiasInactividadZombie(): Promise<number> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("settings")
+    .select("dias_inactividad_zombie")
+    .maybeSingle();
+
+  return data?.dias_inactividad_zombie ?? DIAS_INACTIVIDAD_ZOMBIE_POR_DEFECTO;
+}
+
+/**
  * Retros vigentes de un proyecto, de la más nueva a la más vieja.
  *
  * Un proyecto puede tener más de una: se cierra una etapa, se reabre, se

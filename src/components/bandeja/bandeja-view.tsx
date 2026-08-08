@@ -18,11 +18,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   aceptarLeccion,
+  aceptarZombie,
   descartarErrorBandeja,
   posponerItemBandeja,
   rechazarItemBandeja,
 } from "@/lib/actions/inbox";
 import { formatDate } from "@/lib/dates";
+import { formatMoney } from "@/lib/format";
 import type { Json } from "@/lib/supabase/database.types";
 import type {
   CategoriaLeccion,
@@ -94,6 +96,44 @@ interface Propuesta {
   retro_titulo?: string;
 }
 
+/** Lo que muestra un aviso de suscripción sin uso (spec 6.2). */
+interface Zombie {
+  descripcion: string;
+  aviso: string;
+  monto_origen: number;
+  moneda_origen: "ARS" | "USD";
+  project_id: string | null;
+  meses_con_cargo: number;
+  ultimo_cargo: string;
+  ultima_actividad: string;
+  dias_sin_actividad: number;
+  recurrence_id: string | null;
+}
+
+function leerZombie(payload: Json): Zombie | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+  const p = payload as Record<string, unknown>;
+  if (typeof p.descripcion !== "string" || typeof p.aviso !== "string") {
+    return null;
+  }
+  return {
+    descripcion: p.descripcion,
+    aviso: p.aviso,
+    monto_origen: Number(p.monto_origen ?? 0),
+    moneda_origen: p.moneda_origen === "USD" ? "USD" : "ARS",
+    project_id: typeof p.project_id === "string" ? p.project_id : null,
+    meses_con_cargo: Number(p.meses_con_cargo ?? 0),
+    ultimo_cargo: typeof p.ultimo_cargo === "string" ? p.ultimo_cargo : "",
+    ultima_actividad:
+      typeof p.ultima_actividad === "string" ? p.ultima_actividad : "",
+    dias_sin_actividad: Number(p.dias_sin_actividad ?? 0),
+    recurrence_id:
+      typeof p.recurrence_id === "string" ? p.recurrence_id : null,
+  };
+}
+
 /** Lee el payload jsonb con desconfianza: la base no garantiza su forma. */
 function leerPropuesta(payload: Json): Propuesta | null {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
@@ -158,7 +198,10 @@ export function BandejaView({
   }, [itemsIniciales]);
 
   const actual = items[0] ?? null;
-  const propuesta = actual ? leerPropuesta(actual.payload) : null;
+  const esZombie = actual?.tipo === "zombie";
+  const propuesta =
+    actual && !esZombie ? leerPropuesta(actual.payload) : null;
+  const zombie = actual && esZombie ? leerZombie(actual.payload) : null;
   const esError = actual?.estado === "error";
 
   const nombreProyecto = (id: string) =>
@@ -191,7 +234,23 @@ export function BandejaView({
   );
 
   const aceptar = useCallback(() => {
-    if (!actual || esError || !propuesta) return;
+    if (!actual || esError) return;
+
+    // Un zombie no crea nada: confirma que lo diste de baja. Si había
+    // una recurrencia declarada se desactiva; si no, el gasto era un
+    // patrón de movimientos y la baja la hiciste vos en el proveedor.
+    if (esZombie) {
+      resolver(actual, async () => {
+        const resultado = await aceptarZombie(actual.id);
+        if (resultado.ok && resultado.data.recurrenciaDesactivada) {
+          toast.success("Recurrencia desactivada: no se genera más.");
+        }
+        return resultado;
+      });
+      return;
+    }
+
+    if (!propuesta) return;
     const edicion = borrador
       ? {
           titulo: borrador.titulo,
@@ -219,7 +278,7 @@ export function BandejaView({
       },
       "Lección guardada.",
     );
-  }, [actual, borrador, esError, propuesta, resolver]);
+  }, [actual, borrador, esError, esZombie, propuesta, resolver]);
 
   const rechazar = useCallback(() => {
     if (!actual) return;
@@ -451,6 +510,64 @@ export function BandejaView({
               </p>
             )}
           </div>
+        ) : esZombie ? (
+          zombie ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className="text-sm font-semibold">{zombie.descripcion}</p>
+                <span className="cifra text-muted-foreground text-sm">
+                  {formatMoney(zombie.monto_origen, zombie.moneda_origen)} por mes
+                </span>
+              </div>
+
+              <p className="text-sm">{zombie.aviso}</p>
+
+              <dl className="text-muted-foreground grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+                <div className="flex justify-between gap-2 sm:justify-start">
+                  <dt>Meses con cargo</dt>
+                  <dd className="cifra">{zombie.meses_con_cargo}</dd>
+                </div>
+                <div className="flex justify-between gap-2 sm:justify-start">
+                  <dt>Último cargo</dt>
+                  <dd className="cifra">{formatDate(zombie.ultimo_cargo)}</dd>
+                </div>
+                <div className="flex justify-between gap-2 sm:justify-start">
+                  <dt>Imputado a</dt>
+                  <dd>
+                    {zombie.project_id
+                      ? nombreProyecto(zombie.project_id)
+                      : "Compartido"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2 sm:justify-start">
+                  <dt>Sin actividad hace</dt>
+                  <dd className="cifra">{zombie.dias_sin_actividad} días</dd>
+                </div>
+              </dl>
+
+              <p className="text-muted-foreground border-t border-dashed pt-3 text-xs">
+                {zombie.recurrence_id ? (
+                  <>
+                    Aceptar <strong>desactiva la recurrencia</strong>: deja de
+                    generarse el movimiento todos los meses. La baja con el
+                    proveedor la hacés vos.
+                  </>
+                ) : (
+                  <>
+                    Este gasto no tiene una recurrencia declarada, así que{" "}
+                    <strong>aceptar no da de baja nada</strong>: solo cierra el
+                    aviso. La baja la hacés en el sitio del proveedor.
+                  </>
+                )}{" "}
+                Rechazar lo marca como falso positivo y{" "}
+                <strong>no te lo vuelve a mostrar</strong>.
+              </p>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Este aviso quedó incompleto. Rechazalo.
+            </p>
+          )
         ) : !mostrada ? (
           <p className="text-muted-foreground text-sm">
             Esta propuesta quedó incompleta y no se puede aceptar. Rechazala.
@@ -586,14 +703,22 @@ export function BandejaView({
       {/* Los mismos gestos, para el mouse y para el que recién llega. */}
       <div className="flex flex-wrap items-center gap-2">
         {!esError && (
-          <Button onClick={aceptar} disabled={!mostrada} className="gap-1.5">
+          <Button
+            onClick={aceptar}
+            disabled={esZombie ? !zombie : !mostrada}
+            className="gap-1.5"
+          >
             <Check className="size-4" aria-hidden="true" />
-            Aceptar
+            {esZombie ? "La doy de baja" : "Aceptar"}
           </Button>
         )}
         <Button onClick={rechazar} variant="outline" className="gap-1.5">
           <X className="size-4" aria-hidden="true" />
-          {esError ? "Descartar" : "Rechazar"}
+          {esError
+            ? "Descartar"
+            : esZombie
+              ? "La sigo usando"
+              : "Rechazar"}
         </Button>
         {!esError && (
           <>
@@ -601,15 +726,18 @@ export function BandejaView({
               <Clock className="size-4" aria-hidden="true" />
               Después
             </Button>
-            <Button
-              onClick={editar}
-              variant="ghost"
-              disabled={!mostrada || editando}
-              className="gap-1.5"
-            >
-              <Pencil className="size-4" aria-hidden="true" />
-              Editar
-            </Button>
+            {/* Un zombie no se edita: no hay texto propuesto que corregir. */}
+            {!esZombie && (
+              <Button
+                onClick={editar}
+                variant="ghost"
+                disabled={!mostrada || editando}
+                className="gap-1.5"
+              >
+                <Pencil className="size-4" aria-hidden="true" />
+                Editar
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -620,7 +748,7 @@ export function BandejaView({
         {!esError && (
           <>
             <Atajo tecla="P">posponer</Atajo>
-            <Atajo tecla="E">editar</Atajo>
+            {!esZombie && <Atajo tecla="E">editar</Atajo>}
           </>
         )}
         <span className="text-muted-foreground text-xs sm:hidden">

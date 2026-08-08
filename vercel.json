@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/fx",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/zombies",
+      "schedule": "30 12 * * *"
     }
   ]
 }

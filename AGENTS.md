@@ -326,6 +326,50 @@ midiendo: **el título tiene que ser una afirmación discutible, no un
 rótulo.** Si podría estar en la tapa de cualquier libro de negocios,
 está mal.
 
+### 6.f Los zombies se detectan sobre movimientos, no sobre recurrencias
+
+El spec dice "gastos recurrentes cuyo **proyecto asociado** no tiene
+actividad reciente". Medido contra los datos reales el 2026-08-08, esa
+frase no detecta nada, por dos motivos:
+
+1. **No hay ninguna recurrencia declarada.** Los cuatro gastos que se
+   repiten de verdad —Claude Pro, Vercel Pro, Verificado de Twitter,
+   Google Ads— son movimientos sueltos. Por eso `detectar_zombies`
+   agrupa `movements` por `nucleo_descripcion` (el mismo mecanismo de
+   6.c) y cruza `recurrences` después, no antes.
+2. **Los cuatro son compartidos** (`project_id is null`), así que no
+   tienen proyecto contra el cual medir. Decisión de Beno: un gasto
+   compartido se mide contra la actividad de **toda la app**.
+
+**Se cuentan meses con cargo, no cargos.** "Google Ads" son cuatro
+cargos del mismo mes: es una campaña, no una suscripción. El criterio
+es `count(meses distintos) >= 2`.
+
+**El propio cargo de la suscripción no cuenta como actividad.** Si
+contara, toda suscripción se mantendría viva sola —se paga, luego hay
+movimiento, luego el proyecto está activo— y el detector no dispararía
+nunca. Los núcleos recurrentes se excluyen del cálculo de actividad.
+
+Hay un segundo filtro, `p_dias_vigencia` (75 días): si hace más de dos
+ciclos que no aparece el cargo, la suscripción ya está dada de baja y no
+hay nada que avisar.
+
+**El rechazo de un zombie conserva `clave_dedupe`, al revés que todo el
+resto de la bandeja.** Como la detección es una consulta sobre todo el
+histórico, el gasto va a seguir apareciendo en cada corrida; la fila
+resuelta es lo único que se acuerda de que Beno ya dijo que no. El spec
+lo pide con todas las letras: "y no me lo vuelve a mostrar".
+
+Aceptado y rechazado silencian distinto, y la diferencia importa:
+rechazado (falso positivo) es para siempre; aceptado ("la di de baja")
+vale **hasta que aparezca un cargo posterior a la resolución**. Seguir
+pagando algo que creías dado de baja es justo el caso en que más
+necesitás el aviso.
+
+Aceptar un zombie **desactiva la recurrencia declarada si existe**; si
+no existe —el caso de hoy— no da de baja nada y la pantalla lo dice, en
+vez de fingir que hizo algo.
+
 ### 7. Ninguna feature de LLM puede ser bloqueante
 
 Si Groq está caído o se acabó la cuota, **la app sigue funcionando entera

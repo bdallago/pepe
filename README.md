@@ -69,6 +69,20 @@ servidor. Si revisar veinte propuestas costara veinte clicks, la bandeja
 se abandonaría en dos semanas y todo el diseño de confirmación humana
 dejaría de tener sentido.
 
+### Suscripciones sin uso
+
+Todos los días, un job revisa si algún gasto que se repite mes a mes
+sigue corriendo sobre algo que ya no tocás, y lo manda a la bandeja. La
+detección es **SQL puro, sin modelo**: el modelo solo redacta el aviso, y
+si no está disponible lo escribe la app.
+
+Cuenta como actividad un movimiento, una lección o una entrada de
+bitácora — **nunca el propio cargo de la suscripción**, que si no se
+mantendría viva sola. Los gastos compartidos se miden contra la
+actividad de toda la app. El umbral se configura en Ajustes.
+
+Rechazar un aviso lo marca como falso positivo y no vuelve a aparecer.
+
 ### Retro de proyecto
 
 En la pantalla de cada proyecto hay un botón para cerrarlo: el modelo lee

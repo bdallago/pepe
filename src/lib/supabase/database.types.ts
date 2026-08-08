@@ -663,6 +663,27 @@ export type Database = {
           },
         ]
       }
+      settings: {
+        Row: {
+          created_at: string
+          dias_inactividad_zombie: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dias_inactividad_zombie?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dias_inactividad_zombie?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tracks: {
         Row: {
           activo: boolean
@@ -732,6 +753,25 @@ export type Database = {
           rank_texto: number
           similitud: number
           titulo: string
+        }[]
+      }
+      detectar_zombies: {
+        Args: { p_dias?: number; p_dias_vigencia?: number; p_user_id: string }
+        Returns: {
+          category_id: string
+          descripcion_ultima: string
+          dias_sin_actividad: number
+          meses_con_cargo: number
+          moneda_origen: Database["public"]["Enums"]["moneda"]
+          monto_ars: number
+          monto_origen: number
+          monto_usd: number
+          nucleo: string
+          primer_cargo: string
+          project_id: string
+          recurrence_id: string
+          ultima_actividad: string
+          ultimo_cargo: string
         }[]
       }
       fx_rate_for_date: {
@@ -983,3 +1023,4 @@ export type DailyLog = Database["public"]["Tables"]["daily_log"]["Row"];
 export type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
 export type InboxItem = Database["public"]["Tables"]["inbox"]["Row"];
 export type Retro = Database["public"]["Tables"]["retros"]["Row"];
+export type Settings = Database["public"]["Tables"]["settings"]["Row"];
