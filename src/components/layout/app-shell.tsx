@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   CalendarDays,
   GraduationCap,
+  Inbox,
   LayoutDashboard,
   Lightbulb,
   ListChecks,
@@ -113,7 +114,11 @@ function seccionActiva(pathname: string) {
     (s) => s.href !== "/" && (pathname === s.href || pathname.startsWith(`${s.href}/`)),
   );
   if (especifica) return especifica;
-  if (pathname === "/ajustes" || pathname.startsWith("/ajustes/")) return null;
+  // Ajustes y Bandeja no son secciones: son de toda la app y viven como
+  // iconos a la derecha. Sin esto, Finanzas quedaría marcada de más.
+  for (const suelta of ["/ajustes", "/bandeja"]) {
+    if (pathname === suelta || pathname.startsWith(`${suelta}/`)) return null;
+  }
   return SECCIONES[0];
 }
 
@@ -241,11 +246,14 @@ export function AppShell({
   email,
   nombre,
   avatarUrl,
+  pendientesBandeja,
   children,
 }: {
   email: string;
   nombre: string;
   avatarUrl?: string;
+  /** Cuántas propuestas del modelo esperan una decisión. */
+  pendientesBandeja: number;
   children: React.ReactNode;
 }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -311,6 +319,38 @@ export function AppShell({
                   </Button>
                 </>
               )}
+              {/*
+                La bandeja no es una sección: es el portón por donde entra
+                todo lo que propone un modelo, para finanzas y para
+                aprendizaje por igual. Vive al lado de Ajustes, con el
+                contador visible — una cola de confirmación que no se ve
+                es una cola que no se procesa.
+              */}
+              <Button
+                variant="ghost"
+                size="icon"
+                asChild
+                aria-label={
+                  pendientesBandeja > 0
+                    ? `Bandeja: ${pendientesBandeja} sin revisar`
+                    : "Bandeja"
+                }
+                className={cn(
+                  "relative",
+                  pathname.startsWith("/bandeja") &&
+                    "bg-secondary text-secondary-foreground",
+                )}
+              >
+                <Link href="/bandeja">
+                  <Inbox className="size-4" />
+                  {pendientesBandeja > 0 && (
+                    <span className="bg-primary text-primary-foreground cifra absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full text-[10px] leading-none">
+                      {pendientesBandeja > 9 ? "9+" : pendientesBandeja}
+                    </span>
+                  )}
+                </Link>
+              </Button>
+
               <Button
                 variant="ghost"
                 size="icon"

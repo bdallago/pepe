@@ -35,6 +35,22 @@ npm run backfill:embeddings   # embeddings faltantes, por lotes y retomable
 npm run import:colmena        # importador de la app de estudio (histórico)
 ```
 
+Para aplicar migraciones y regenerar tipos hace falta el access token de
+Supabase (`SUPABASE_ACCESS_TOKEN=sbp_…`, lo tiene Beno):
+
+```bash
+SUPABASE_ACCESS_TOKEN=… npx supabase db push --linked
+SUPABASE_ACCESS_TOKEN=… npx supabase gen types typescript \
+  --project-id thlocwmhxzqkmmnxmunf --schema public
+```
+
+Al regenerar tipos hay que **volver a pegar a mano** el bloque de alias
+del final de `database.types.ts`. Y ojo: el generador **no** agrega
+`| null` a los argumentos con `default null` de las funciones RPC. No
+lo parchees en el archivo generado —se pierde en la próxima corrida—:
+pasá `?? undefined` en el call site, que omite el parámetro y deja que
+Postgres aplique su default.
+
 No hay suite de tests versionada. Antes de dar algo por terminado, corré
 `npm run typecheck && npm run lint && npm run build`.
 
@@ -137,10 +153,63 @@ Beno apriete un botón.** `clave_dedupe` (con índice único sobre lo no
 resuelto) es lo que hace que los procesos por lotes se puedan reintentar
 sin duplicar propuestas.
 
+La bandeja no es una sección: es el portón por donde entra todo lo que
+propone un modelo, para finanzas y para aprendizaje por igual. Vive como
+icono con contador al lado de Ajustes.
+
+Su diseño es requisito del spec, no cosmética: **un ítem por vez, sin
+scroll, todo con teclado** (A aceptar, R rechazar, P posponer, E editar;
+swipe en mobile) y la acción **aplicada en optimista**, antes de que
+conteste el servidor. Si revisar veinte propuestas cuesta veinte clicks,
+la bandeja se abandona y todo el diseño de confirmación humana pierde
+sentido. Por lo mismo, **el embedding de la lección aceptada no se
+espera**: la pantalla lo dispara contra `/api/lecciones/indexar` y sigue.
+
 El enum de estados tiene dos valores más allá de los obvios: `pospuesto`
 (para los zombies que se miran más adelante) y `error` (cuando la salida
 del modelo no valida contra el esquema — queda visible en la bandeja en
 vez de descartarse en silencio).
+
+### 6.b El límite de Groq que muerde son los tokens, no los pedidos
+
+El spec pide un limitador propio de **30 requests/minuto**. Medido contra
+la cuenta real el 2026-08-07, ese no es el techo que se toca: el tier
+gratuito corta antes en **6000 tokens/minuto** sobre
+`llama-3.1-8b-instant`. El pase de extracción gasta entre 600 y 1000
+tokens por entrada, así que come un 429 en la cuarta llamada, con el
+contador de pedidos en 4 de 30.
+
+Por eso `lib/llm.ts` limita **las dos cosas**. La reserva de tokens se
+hace estimando (largo del prompt / 3 + `max_tokens`) y se **corrige con
+el `usage` de la respuesta**: sin esa corrección se reserva siempre el
+máximo de salida y el limitador frena de más.
+
+### 6.c El histórico le gana al modelo, y matchea ignorando el mes
+
+Al cargar un movimiento se sugiere tipo y categoría en **este orden
+exacto**: primero `sugerir_categoria_historico` (SQL puro, contra
+índice), y **solo si no encontró nada** se llama al modelo. No es por
+ahorrar tokens: es que las decisiones de Beno le ganen siempre a las de
+un modelo. Como cada movimiento confirmado entra al histórico, el paso 2
+se llama cada vez menos.
+
+La comparación exacta sola **no alcanza**, y eso se midió: las cargas
+recurrentes se describen con el período adentro ("Claude Pro - Julio",
+"Vercel Pro - Junio"), así que la descripción normalizada nunca se
+repite y todo caía al modelo. Por eso hay dos niveles — texto idéntico
+primero, y si no, el **núcleo** (la descripción sin el mes ni el año del
+final). La función devuelve `exacto` para que la interfaz diga cuál de
+los dos fue: "como las 3 veces anteriores" no es lo mismo que "como los
+meses anteriores".
+
+`movements.descripcion_normalizada` es una **columna generada**. Su
+expresión y `normalizarDescripcion()` en `src/lib/clasificacion.ts`
+tienen que dar exactamente lo mismo; si tocás una, tocá la otra.
+
+La sugerencia **nunca decide**: llega precargada al formulario y se
+apaga apenas Beno elige tipo o categoría a mano. El formulario es el
+"panel de confirmación" que pide la sección 6 del spec, por eso esto no
+pasa por `inbox`.
 
 ### 7. Ninguna feature de LLM puede ser bloqueante
 

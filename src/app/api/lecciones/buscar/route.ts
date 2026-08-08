@@ -107,7 +107,10 @@ export async function POST(
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("buscar_lecciones_hibrido", {
     p_consulta: consulta,
-    p_embedding: embedding,
+    // `?? undefined` y no `null`: omitir el parámetro deja que Postgres
+    // aplique su `default null`, que es exactamente el caso degradado.
+    // Los tipos generados no aceptan null en un argumento con default.
+    p_embedding: embedding ?? undefined,
     p_limite: limite,
   });
 

@@ -34,6 +34,14 @@ export async function createClient() {
 }
 
 /**
+ * El cliente con sesión, tipado contra el esquema. Sirve para pasarlo a
+ * funciones de dominio (`lib/extraccion.ts`, por ejemplo) en vez de que
+ * cada una lo cree por su cuenta: la lógica queda reusable y testeable, y
+ * el día que haya un MCP propio se le pasa otro cliente y listo.
+ */
+export type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
  * Cliente con service role: saltea RLS. Lo usa únicamente el cron, que
  * corre sin sesión de usuario y necesita escribir fx_rates y generar
  * movimientos recurrentes de todos los usuarios.

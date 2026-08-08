@@ -39,3 +39,15 @@ export function supabaseServiceRoleKey(): string {
 export function cronSecret(): string {
   return required(process.env.CRON_SECRET, "CRON_SECRET");
 }
+
+/**
+ * Key de Groq. Solo server-side: nunca puede viajar al browser.
+ *
+ * Lanza si falta, igual que las demás. Quien no quiera que falte de forma
+ * ruidosa tiene `hayModeloConfigurado()` en `lib/llm.ts`: la app entera
+ * funciona en modo manual sin esta variable, y eso es un requisito del
+ * spec, no una tolerancia.
+ */
+export function groqApiKey(): string {
+  return required(process.env.GROQ_API_KEY, "GROQ_API_KEY");
+}

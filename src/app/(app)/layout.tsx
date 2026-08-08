@@ -23,11 +23,23 @@ export default async function AppLayout({
 
   const supabase = await createClient();
 
-  const [projectsResult, categoriesResult, rates] = await Promise.all([
-    supabase.from("projects").select("*").order("nombre"),
-    supabase.from("categories").select("*").order("tipo").order("nombre"),
-    getSerieTasas(),
-  ]);
+  const ahora = new Date().toISOString();
+
+  const [projectsResult, categoriesResult, rates, bandejaResult] =
+    await Promise.all([
+      supabase.from("projects").select("*").order("nombre"),
+      supabase.from("categories").select("*").order("tipo").order("nombre"),
+      getSerieTasas(),
+      // Contador de la bandeja: mismo criterio que la pantalla — lo
+      // pendiente, lo que ya venció de pospuesto, y los errores que hay
+      // que mirar. Es un `head: true`, así que trae el número y nada más.
+      supabase
+        .from("inbox")
+        .select("id", { count: "exact", head: true })
+        .or(
+          `estado.eq.pendiente,estado.eq.error,and(estado.eq.pospuesto,posponer_hasta.lte.${ahora})`,
+        ),
+    ]);
 
   return (
     <AppDataProvider
@@ -36,6 +48,7 @@ export default async function AppLayout({
       rates={rates}
     >
       <AppShell
+        pendientesBandeja={bandejaResult.count ?? 0}
         email={user.email ?? ""}
         nombre={
           (user.user_metadata?.full_name as string | undefined) ??

@@ -281,6 +281,7 @@ export type Database = {
       lessons: {
         Row: {
           archivado_en: string | null
+          busqueda: unknown
           categoria: Database["public"]["Enums"]["categoria_leccion"]
           contenido: string
           created_at: string
@@ -296,6 +297,7 @@ export type Database = {
         }
         Insert: {
           archivado_en?: string | null
+          busqueda?: unknown
           categoria: Database["public"]["Enums"]["categoria_leccion"]
           contenido: string
           created_at?: string
@@ -311,6 +313,7 @@ export type Database = {
         }
         Update: {
           archivado_en?: string | null
+          busqueda?: unknown
           categoria?: Database["public"]["Enums"]["categoria_leccion"]
           contenido?: string
           created_at?: string
@@ -347,6 +350,7 @@ export type Database = {
           comprobante_path: string | null
           created_at: string
           descripcion: string
+          descripcion_normalizada: string | null
           estado: Database["public"]["Enums"]["estado_movimiento"]
           fecha: string
           id: string
@@ -367,6 +371,7 @@ export type Database = {
           comprobante_path?: string | null
           created_at?: string
           descripcion: string
+          descripcion_normalizada?: string | null
           estado?: Database["public"]["Enums"]["estado_movimiento"]
           fecha: string
           id?: string
@@ -387,6 +392,7 @@ export type Database = {
           comprobante_path?: string | null
           created_at?: string
           descripcion?: string
+          descripcion_normalizada?: string | null
           estado?: Database["public"]["Enums"]["estado_movimiento"]
           fecha?: string
           id?: string
@@ -659,12 +665,12 @@ export type Database = {
       buscar_lecciones_hibrido: {
         Args: {
           p_consulta: string
-          p_embedding?: string | null
-          p_limite?: number
+          p_embedding?: string
           p_k?: number
+          p_limite?: number
         }
         Returns: {
-          archivado_en: string | null
+          archivado_en: string
           categoria: Database["public"]["Enums"]["categoria_leccion"]
           contenido: string
           fecha: string
@@ -672,8 +678,8 @@ export type Database = {
           origen: Database["public"]["Enums"]["origen_leccion"]
           project_id: string
           puntaje: number
-          rank_texto: number | null
-          similitud: number | null
+          rank_texto: number
+          similitud: number
           titulo: string
         }[]
       }
@@ -692,6 +698,17 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      nucleo_descripcion: { Args: { p_normalizada: string }; Returns: string }
+      sugerir_categoria_historico: {
+        Args: { p_descripcion: string }
+        Returns: {
+          category_id: string
+          exacto: boolean
+          tipo: Database["public"]["Enums"]["tipo_movimiento"]
+          ultima: string
+          veces: number
+        }[]
       }
     }
     Enums: {
@@ -876,6 +893,7 @@ export const Constants = {
     },
   },
 } as const
+
 
 // ─────────────────────────────────────────────────────────────
 // Alias de conveniencia usados en toda la app.

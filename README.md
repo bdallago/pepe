@@ -26,6 +26,9 @@ Un solo usuario, autenticación con Google, base en Supabase, deploy en Vercel.
 - **Comprobantes**: subida opcional de imagen o PDF a un bucket privado,
   con preview y descarga por URL firmada.
 - **Carga rápida** con `⌘K` / `Ctrl+K`, disponible dentro de Finanzas.
+- **Sugerencia de tipo y categoría** al escribir la descripción: primero
+  contra el propio histórico, y solo si no hay match, con un modelo
+  (ver "Lo que propone el modelo" más abajo).
 
 ### Aprendizaje
 
@@ -44,6 +47,19 @@ Un solo usuario, autenticación con Google, base en Supabase, deploy en Vercel.
 
 Qué hice y qué aprendí cada día, atado a un proyecto. Es la materia prima
 de la que salen las lecciones.
+
+### Bandeja
+
+No es una cuarta sección: es el portón por donde entra **todo** lo que
+propone un modelo, para finanzas y para aprendizaje por igual. Vive como
+icono con contador arriba a la derecha.
+
+Se procesa como el triage de Linear: **un ítem por vez, sin scroll, todo
+con teclado** (`A` aceptar, `R` rechazar, `P` posponer, `E` editar) y
+swipe en mobile. La acción se aplica al instante, sin esperar al
+servidor. Si revisar veinte propuestas costara veinte clicks, la bandeja
+se abandonaría en dos semanas y todo el diseño de confirmación humana
+dejaría de tener sentido.
 
 ## Las tres reglas que importan
 
@@ -105,6 +121,8 @@ Abrí el **SQL Editor** y ejecutá, en este orden, el contenido de:
 6. `supabase/migrations/20260807000002_track_fecha_inicio.sql`
 7. `supabase/migrations/20260807000003_busqueda_lecciones.sql`
 8. `supabase/migrations/20260807000004_busqueda_or.sql`
+9. `supabase/migrations/20260807000005_clasificacion.sql`
+10. `supabase/migrations/20260807000006_historico_nucleo.sql`
 
 **Opción B — con la CLI:**
 
@@ -179,8 +197,8 @@ no se pueden cargar movimientos.
 
 1. Subí el repo a GitHub.
 2. En [vercel.com](https://vercel.com) importá el repositorio.
-3. Cargá las cuatro variables de entorno en **Settings → Environment
-   Variables**, para *Production*, *Preview* y *Development*.
+3. Cargá las variables de entorno de la tabla de arriba en **Settings →
+   Environment Variables**, para *Production*, *Preview* y *Development*.
 4. Deploy.
 5. Volvé a Supabase → **Authentication → URL Configuration** y actualizá el
    *Site URL* y las *Redirect URLs* con el dominio de Vercel.
@@ -268,6 +286,69 @@ GitHub rechaza archivos de más de 100 MB.
 **La búsqueda nunca depende del modelo.** Si no carga, tarda de más o
 falla, la consulta se responde igual solo con full-text.
 
+## Lo que propone el modelo
+
+El motor de inferencia es **Groq**, detrás de `GROQ_API_KEY`. Todas las
+llamadas pasan por el servidor y están centralizadas en `src/lib/llm.ts`:
+salida JSON validada con Zod antes de tocar la base, reintentos con
+backoff, timeout y logging de uso.
+
+**Nada de esto es bloqueante.** Sin Groq —caído, sin cuota o sin key— la
+app funciona entera en modo manual: cargar un gasto, escribir una lección
+y registrar la bitácora andan siempre.
+
+### Extracción de lecciones desde la bitácora
+
+Un pase que recorre las entradas y le pide al modelo que separe el
+registro operativo ("hice la sesión de SQL") del aprendizaje real ("me
+trabé con X, la causa era Y"), y reescriba lo segundo como lección
+autocontenida.
+
+Las propuestas van a la **bandeja**, nunca directo a `lessons`. Al
+aceptar una, se crea la lección con `origen = 'importada'` y se genera su
+embedding en segundo plano. Es retomable: cada entrada ya mirada queda
+registrada, así que el pase se puede cortar y volver a correr sin
+reprocesar ni duplicar.
+
+### Categoría sugerida al cargar un movimiento
+
+En **este orden exacto**:
+
+1. **Contra el histórico**, en SQL y sin modelo. Si la descripción ya
+   apareció antes, se usa la categoría de esa vez. Gana la más usada, y
+   ante empate la más reciente.
+2. **Recién ahí, el modelo**, con la lista de categorías y ejemplos de
+   movimientos previos.
+
+El orden no es para ahorrar tokens: es para que las decisiones propias le
+ganen siempre a las de un modelo. Y como cada movimiento confirmado entra
+al histórico, el paso 2 se llama cada vez menos.
+
+El match tiene dos niveles, y el segundo salió de medir contra datos
+reales: las cargas recurrentes se describen con el período adentro
+("Claude Pro - Julio", "Vercel Pro - Junio"), así que la descripción
+normalizada **nunca se repite** y con comparación exacta todo caía al
+modelo. Por eso también se compara el **núcleo**: la descripción sin el
+mes ni el año del final. La interfaz distingue los dos casos, porque la
+evidencia no es la misma:
+
+| Lo que escribís | De dónde sale | Qué dice la pantalla |
+|---|---|---|
+| `Vercel Pro - Julio` | histórico, texto idéntico | "como la vez anterior" |
+| `Claude Pro - Agosto` | histórico, mismo núcleo | "como los meses anteriores" |
+| `Alquiler de oficina` | modelo | "sugerida" |
+
+La sugerencia **nunca decide**: llega precargada y se apaga apenas tocás
+tipo o categoría a mano.
+
+### Límites del tier gratuito
+
+El techo que muerde **no son los 30 requests/minuto sino los 6000
+tokens/minuto**. Con ~800 tokens por entrada, el pase de extracción se
+choca el límite en la cuarta llamada con el contador de pedidos en 4 de
+30. El limitador de `llm.ts` cuenta las dos cosas y espera antes de
+salir, en vez de comerse el 429.
+
 ## Comandos
 
 ```bash
@@ -303,8 +384,16 @@ directo, con tipos en `src/lib/supabase/database.types.ts`. Para
 regenerarlos desde el esquema real:
 
 ```bash
-npx supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
+npx supabase gen types typescript --project-id <ref> --schema public \
+  > src/lib/supabase/database.types.ts
 ```
+
+Después hay que **volver a pegar a mano** el bloque de alias del final del
+archivo. Y ojo con un detalle del generador: a los argumentos de funciones
+RPC con `default null` no les agrega `| null`. No lo parchees en el
+archivo generado —se pierde en la próxima corrida—: pasá `?? undefined`
+en el call site, que omite el parámetro y deja que Postgres aplique su
+default.
 
 ## Notas de seguridad
 

@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Loader2, TriangleAlert } from "lucide-react";
+import { History, Loader2, Sparkles, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -64,6 +64,28 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+/**
+ * Lo que devuelve `/api/movimientos/sugerir`. Se declara acá y no se
+ * importa de `lib/clasificacion.ts` porque ese módulo es `server-only`.
+ */
+interface Sugerencia {
+  tipo: TipoMovimiento;
+  categoryId: string;
+  categoriaNombre: string;
+  origen: "historico" | "modelo";
+  veces?: number;
+  exacto?: boolean;
+}
+
+/**
+ * Cuánto se espera después de la última tecla antes de pedir sugerencia.
+ *
+ * Suficiente para que escribir "Suscripción a Vercel" sea un pedido y no
+ * veinte, y poco como para que la sugerencia llegue mientras todavía se
+ * está mirando el formulario.
+ */
+const ESPERA_SUGERENCIA_MS = 600;
+
 interface Props {
   /** Si viene, el formulario edita en vez de crear. */
   movimiento?: Movement;
@@ -94,6 +116,12 @@ export function MovementForm({
 
   const editando = Boolean(movimiento);
   const descripcionRef = useRef<HTMLInputElement>(null);
+
+  const [sugerencia, setSugerencia] = useState<Sugerencia | null>(null);
+  // Una vez que Beno elige tipo o categoría a mano, se deja de sugerir en
+  // este formulario. La sugerencia sirve para ahorrarle el paso, no para
+  // discutirle: pisarle lo que acaba de elegir sería peor que no sugerir.
+  const decidioAMano = useRef(false);
 
   const proyectoInicial =
     movimiento?.project_id ??
@@ -129,7 +157,68 @@ export function MovementForm({
   const categoryId = watch("category_id");
   const comprobantePath = watch("comprobante_path");
 
+  const descripcion = watch("descripcion");
+
   const tasaDeFecha = useMemo(() => tasaPara(fecha), [tasaPara, fecha]);
+
+  /**
+   * Sugerencia de tipo y categoría a partir de la descripción (spec 6.1).
+   *
+   * Se dispara sola mientras se escribe, con espera: el endpoint resuelve
+   * primero contra el histórico (instantáneo, sin modelo) y solo llama a
+   * Groq si no encontró nada.
+   *
+   * Tres cosas que no se negocian:
+   *  - **Solo al crear.** Editar un movimiento viejo y que le cambie la
+   *    categoría sola sería una sorpresa desagradable.
+   *  - **Nunca pisa una decisión manual** (`decidioAMano`).
+   *  - **Si falla, no pasa nada.** El endpoint contesta `null` en vez de
+   *    error justamente para eso: sin Groq, el formulario anda igual.
+   */
+  useEffect(() => {
+    if (editando || decidioAMano.current) return;
+
+    const texto = descripcion.trim();
+    if (texto.length < 3) {
+      setSugerencia(null);
+      return;
+    }
+
+    const controlador = new AbortController();
+    const temporizador = setTimeout(async () => {
+      try {
+        const respuesta = await fetch("/api/movimientos/sugerir", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ descripcion: texto }),
+          signal: controlador.signal,
+        });
+        const resultado = await respuesta.json();
+        if (!resultado.ok || !resultado.data) return;
+
+        // Entre que salió el pedido y volvió, Beno pudo elegir a mano.
+        if (decidioAMano.current) return;
+
+        const propuesta = resultado.data as Sugerencia;
+        setSugerencia(propuesta);
+        setValue("tipo", propuesta.tipo);
+        setValue("category_id", propuesta.categoryId);
+      } catch {
+        // Abortado o sin red. No se avisa: es una comodidad, no un paso.
+      }
+    }, ESPERA_SUGERENCIA_MS);
+
+    return () => {
+      clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [descripcion, editando, setValue]);
+
+  /** Deja de sugerir y limpia la marca: a partir de acá manda el usuario. */
+  const elegirAMano = useCallback(() => {
+    decidioAMano.current = true;
+    setSugerencia(null);
+  }, []);
 
   const tasaEfectiva = useMemo(() => {
     if (tasaManual) {
@@ -298,7 +387,10 @@ export function MovementForm({
           <Label htmlFor="tipo">Tipo</Label>
           <Select
             value={tipo}
-            onValueChange={(v) => setValue("tipo", v as TipoMovimiento)}
+            onValueChange={(v) => {
+              elegirAMano();
+              setValue("tipo", v as TipoMovimiento);
+            }}
           >
             <SelectTrigger id="tipo" className="w-full">
               <SelectValue />
@@ -431,10 +523,49 @@ export function MovementForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="categoria">Categoría</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="categoria">Categoría</Label>
+            {/*
+              De dónde salió la sugerencia, dicho sin vueltas. Que venga
+              del histórico o de un modelo cambia cuánto conviene
+              confiarle: lo primero es una decisión propia repetida, lo
+              segundo es una opinión ajena.
+            */}
+            {sugerencia ? (
+              <span
+                className="text-muted-foreground inline-flex items-center gap-1 text-[10px]"
+                title={
+                  sugerencia.origen === "historico"
+                    ? sugerencia.exacto
+                      ? "Ya cargaste esta misma descripción con esta categoría."
+                      : "Coincide con cargas anteriores salvo por el mes."
+                    : "Propuesta por el modelo. Revisala."
+                }
+              >
+                {sugerencia.origen === "historico" ? (
+                  <>
+                    <History className="size-3" aria-hidden="true" />
+                    {!sugerencia.exacto
+                      ? "como los meses anteriores"
+                      : sugerencia.veces === 1
+                        ? "como la vez anterior"
+                        : `como las ${sugerencia.veces} veces anteriores`}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-3" aria-hidden="true" />
+                    sugerida
+                  </>
+                )}
+              </span>
+            ) : null}
+          </div>
           <Select
             value={categoryId}
-            onValueChange={(v) => setValue("category_id", v)}
+            onValueChange={(v) => {
+              elegirAMano();
+              setValue("category_id", v);
+            }}
           >
             <SelectTrigger id="categoria" className="w-full">
               <SelectValue placeholder="Elegí una" />
