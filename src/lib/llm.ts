@@ -35,10 +35,48 @@ import { groqApiKey } from "@/lib/env";
 export const MODELO_CHICO = "llama-3.1-8b-instant";
 
 /**
- * Modelo grande, para razonar. La retro por proyecto es su caso: mucho
- * contexto y una sola llamada, donde la calidad vale más que la latencia.
+ * Modelo grande, para tragar mucho contexto. La retro por proyecto es su
+ * caso: se le pasan todos los movimientos, las lecciones y la bitácora de
+ * un proyecto y una sola llamada tiene que salir bien.
  */
 export const MODELO_GRANDE = "llama-3.3-70b-versatile";
+
+/**
+ * Modelo con razonamiento, para cuando el enemigo es la generalidad.
+ *
+ * Medido el 2026-08-08 con el prompt real de generación de lecciones
+ * (6.3), mismo sistema y mismo usuario:
+ *
+ * - `llama-3.3-70b-versatile` devolvió cinco lecciones con títulos que
+ *   son rótulos: "Establecer límites de soporte", "Priorizar la
+ *   documentación", "Revisar contratos". El contenido no está mal, pero
+ *   el título podría estar en cualquier libro de negocios, que es
+ *   exactamente lo que el prompt prohíbe.
+ * - `openai/gpt-oss-120b` con `reasoning_effort: "medium"` devolvió
+ *   afirmaciones discutibles: "Los clientes pequeños deben pagar una
+ *   cuota de mantenimiento o te devoran", "Cobrar por cada versión mayor
+ *   evita que el cliente exija cambios sin fin".
+ * - `qwen/qwen3.6-27b` ni siquiera devolvió JSON válido (400 de Groq).
+ *
+ * Los ejemplos en contraste dentro del prompt no alcanzaron para mover a
+ * llama: el techo era el modelo. **No reemplaza a `MODELO_GRANDE`**, que
+ * sigue siendo el de la retro: ahí la entrada es enorme, la salida ya
+ * salía anclada en los datos y el razonamiento se comería el presupuesto
+ * de tokens sin comprar nada.
+ */
+export const MODELO_RAZONADOR = "openai/gpt-oss-120b";
+
+/**
+ * Cuánto piensa antes de contestar un modelo de razonamiento.
+ *
+ * Los tokens de razonamiento **cuentan dentro de `max_tokens`** y dentro
+ * del techo de tokens por minuto, así que esto es una perilla de costo y
+ * no solo de calidad. Medido con el prompt de 6.3: `low` gastó 294
+ * tokens de salida y devolvió 3 lecciones; `medium`, 2668 y devolvió 4,
+ * bastante mejores. Con una feature que se dispara a mano y de a una,
+ * `medium` se paga.
+ */
+export type EsfuerzoRazonamiento = "low" | "medium" | "high";
 
 const URL_GROQ = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -158,14 +196,26 @@ async function esperarTurno(tokensEstimados: number): Promise<Salida> {
       const hayPedidos = salidas.length < REQUESTS_POR_MINUTO;
       const hayTokens = usados + tokensEstimados <= TOKENS_POR_MINUTO;
 
-      if (hayPedidos && hayTokens) {
+      // Una sola llamada puede estimar más que el techo del minuto: la
+      // retro de un proyecto grande, con toda su bitácora adentro, lo
+      // pasa. Esperar no lo arregla —el minuto siguiente tiene el mismo
+      // techo— así que con la ventana vacía se sale igual y que conteste
+      // Groq. Sin esta salida el bucle no termina nunca y, peor, lee
+      // `salidas[0]` de un array vacío.
+      const noEntraNunca = tokensEstimados > TOKENS_POR_MINUTO;
+
+      if (hayPedidos && (hayTokens || (noEntraNunca && salidas.length === 0))) {
         const reserva: Salida = { t: ahora, tokens: tokensEstimados };
         salidas.push(reserva);
         return reserva;
       }
 
       // La salida más vieja de la ventana define cuándo se libera cupo.
-      const espera = VENTANA_MS - (ahora - salidas[0]!.t) + 100;
+      // Si no hay ninguna, el freno es el de pedidos y no queda otra que
+      // esperar la ventana entera.
+      const espera = salidas[0]
+        ? VENTANA_MS - (ahora - salidas[0].t) + 100
+        : VENTANA_MS;
       console.warn(
         `[llm] limitador: ${salidas.length} pedidos y ${usados} tokens en el último minuto` +
           ` (falta ${hayTokens ? "cupo de pedidos" : "cupo de tokens"}), espero ${espera} ms.`,
@@ -197,6 +247,11 @@ export interface OpcionesLLM<T> {
   esquema: z.ZodType<T>;
   /** Bajo a propósito: acá se quiere consistencia, no creatividad. */
   temperatura?: number;
+  /**
+   * Solo para `MODELO_RAZONADOR`. Los modelos sin razonamiento ignoran
+   * el parámetro, así que mandarlo de más no rompe nada.
+   */
+  esfuerzo?: EsfuerzoRazonamiento;
   maxTokens?: number;
   timeoutMs?: number;
   reintentos?: number;
@@ -235,6 +290,7 @@ export async function completarJSON<T>({
   usuario,
   esquema,
   temperatura = 0.2,
+  esfuerzo,
   maxTokens = 1024,
   timeoutMs = TIMEOUT_POR_DEFECTO_MS,
   reintentos = REINTENTOS_POR_DEFECTO,
@@ -273,6 +329,7 @@ export async function completarJSON<T>({
               model: modelo,
               temperature: temperatura,
               max_tokens: maxTokens,
+              ...(esfuerzo ? { reasoning_effort: esfuerzo } : {}),
               // Groq garantiza JSON sintácticamente válido con esto; la
               // forma la garantiza Zod, más abajo.
               response_format: { type: "json_object" },

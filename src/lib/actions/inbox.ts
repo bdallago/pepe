@@ -10,6 +10,10 @@ import {
   requireSession,
   type ActionResult,
 } from "./shared";
+import type {
+  OrigenLeccion,
+  TipoBandeja,
+} from "@/lib/supabase/database.types";
 
 /**
  * Bandeja: el único lugar por donde entra a la app lo que propone un
@@ -29,6 +33,28 @@ import {
  */
 
 const uuid = z.string().uuid("Identificador inválido.");
+
+/**
+ * Los tres tipos de bandeja que terminan en una fila de `lessons`, y con
+ * qué `origen` nace cada uno.
+ *
+ * El origen no es decorativo: `generada` sale de una hipótesis del modelo
+ * sobre un tema y la lista de Lecciones la muestra distinta (borde
+ * punteado, "Hipótesis generada"). `importada` salió de algo que Beno
+ * escribió y vivió; `retro`, del cierre de un proyecto. Perder esa
+ * distinción sería perder de dónde viene cada cosa que uno cree saber.
+ */
+const ORIGEN_POR_TIPO = {
+  leccion_extraida: "importada",
+  leccion_sugerida: "generada",
+  retro: "retro",
+} as const satisfies Partial<Record<TipoBandeja, OrigenLeccion>>;
+
+type TipoConLeccion = keyof typeof ORIGEN_POR_TIPO;
+
+function esTipoConLeccion(tipo: TipoBandeja): tipo is TipoConLeccion {
+  return tipo in ORIGEN_POR_TIPO;
+}
 
 /** Lo que el pase dejó en `payload`, revalidado antes de escribir. */
 const payloadSchema = z.object({
@@ -70,10 +96,15 @@ export type EdicionLeccion = z.infer<typeof edicionSchema>;
 /**
  * Acepta una propuesta de lección: la crea de verdad y resuelve el ítem.
  *
+ * Sirve para los tres tipos que terminan en una lección —la extraída de
+ * la bitácora, la generada sobre un tema y la que salió de una retro—:
+ * el payload tiene la misma forma en los tres y lo único que cambia es
+ * el `origen` con el que nace la fila.
+ *
  * Devuelve el id de la lección creada para que la pantalla dispare la
  * indexación sin bloquear el triage.
  */
-export async function aceptarLeccionExtraida(
+export async function aceptarLeccion(
   itemId: string,
   edicion?: EdicionLeccion,
 ): Promise<ActionResult<{ lessonId: string }>> {
@@ -95,8 +126,8 @@ export async function aceptarLeccionExtraida(
 
   if (errorLectura) return fail(mensajeDeError(errorLectura));
   if (!item) return fail("No encontré esa propuesta.");
-  if (item.tipo !== "leccion_extraida") {
-    return fail("Esa propuesta no es una lección extraída.");
+  if (!esTipoConLeccion(item.tipo)) {
+    return fail("Esa propuesta no genera una lección.");
   }
   if (item.estado !== "pendiente" && item.estado !== "pospuesto") {
     return fail("Esa propuesta ya estaba resuelta.");
@@ -118,9 +149,7 @@ export async function aceptarLeccionExtraida(
       titulo: edicionParseada.data.titulo ?? payload.data.titulo,
       contenido: edicionParseada.data.contenido ?? payload.data.contenido,
       categoria: edicionParseada.data.categoria ?? payload.data.categoria,
-      // 'importada' y no 'generada': salió de algo que Beno escribió y
-      // vivió, no de una hipótesis del modelo sobre un tema.
-      origen: "importada",
+      origen: ORIGEN_POR_TIPO[item.tipo],
     })
     .select("id")
     .single();

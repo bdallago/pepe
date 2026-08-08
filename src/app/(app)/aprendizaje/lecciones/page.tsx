@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { LeccionesView } from "@/components/aprendizaje/lecciones-view";
+import { hayModeloConfigurado } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
 import type { Lesson } from "@/lib/supabase/database.types";
 
@@ -39,7 +40,7 @@ export default async function LeccionesPage() {
         </p>
       </div>
 
-      <LeccionesView lecciones={lecciones} />
+      <LeccionesView lecciones={lecciones} hayModelo={hayModeloConfigurado()} />
     </div>
   );
 }

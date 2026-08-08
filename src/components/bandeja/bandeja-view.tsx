@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  aceptarLeccionExtraida,
+  aceptarLeccion,
   descartarErrorBandeja,
   posponerItemBandeja,
   rechazarItemBandeja,
@@ -88,6 +88,10 @@ interface Propuesta {
   categoria: CategoriaLeccion;
   fecha: string;
   project_id: string;
+  /** Solo en las generadas: el pedido que las originó (spec 6.3). */
+  tema?: string;
+  /** Solo en las de retro: de qué cierre salieron (spec 6.5). */
+  retro_titulo?: string;
 }
 
 /** Lee el payload jsonb con desconfianza: la base no garantiza su forma. */
@@ -111,6 +115,9 @@ function leerPropuesta(payload: Json): Propuesta | null {
     categoria: p.categoria as CategoriaLeccion,
     fecha: p.fecha,
     project_id: p.project_id,
+    tema: typeof p.tema === "string" ? p.tema : undefined,
+    retro_titulo:
+      typeof p.retro_titulo === "string" ? p.retro_titulo : undefined,
   };
 }
 
@@ -196,7 +203,7 @@ export function BandejaView({
     resolver(
       actual,
       async () => {
-        const resultado = await aceptarLeccionExtraida(actual.id, edicion);
+        const resultado = await aceptarLeccion(actual.id, edicion);
         if (resultado.ok) {
           // Indexación en segundo plano: el triage no la espera.
           void fetch("/api/lecciones/indexar", {
@@ -450,24 +457,53 @@ export function BandejaView({
           </p>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Origen */}
+            {/*
+              De dónde salió la propuesta. Cambia según el tipo, y no es
+              cosmética: es lo que te deja juzgarla sin adivinar. Una
+              lección extraída se juzga contra lo que escribiste ese día;
+              una generada, contra el tema que pediste — y sabiendo que
+              nadie la vivió.
+            */}
             <section className="space-y-2">
               <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                Lo que escribiste
+                {actual.tipo === "leccion_extraida"
+                  ? "Lo que escribiste"
+                  : actual.tipo === "retro"
+                    ? "De qué retro salió"
+                    : "Lo que pediste"}
               </h2>
-              {actual.entrada ? (
-                <>
-                  <p className="text-muted-foreground cifra text-xs">
-                    {formatDate(actual.entrada.fecha)}
+
+              {actual.tipo === "leccion_extraida" ? (
+                actual.entrada ? (
+                  <>
+                    <p className="text-muted-foreground cifra text-xs">
+                      {formatDate(actual.entrada.fecha)}
+                    </p>
+                    <p className="max-h-64 overflow-y-auto text-sm whitespace-pre-line">
+                      {actual.entrada.contenido}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    La entrada original ya no está.
                   </p>
-                  <p className="max-h-64 overflow-y-auto text-sm whitespace-pre-line">
-                    {actual.entrada.contenido}
-                  </p>
-                </>
+                )
               ) : (
-                <p className="text-muted-foreground text-sm">
-                  La entrada original ya no está.
-                </p>
+                <div className="space-y-3">
+                  <p className="text-sm">
+                    {actual.tipo === "retro"
+                      ? (mostrada.retro_titulo ??
+                        "Del cierre de este proyecto.")
+                      : (mostrada.tema ?? "Sin tema registrado.")}
+                  </p>
+                  {actual.tipo === "leccion_sugerida" && (
+                    <p className="text-muted-foreground text-xs">
+                      Es una <strong>hipótesis</strong>: la propuso el modelo
+                      sobre ese tema, no salió de nada que hayas vivido. Si la
+                      aceptás queda marcada así en la lista de Lecciones.
+                    </p>
+                  )}
+                </div>
               )}
             </section>
 

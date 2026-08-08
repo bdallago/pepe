@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
   CalendarDays,
+  Compass,
   GraduationCap,
   Inbox,
   LayoutDashboard,
@@ -69,6 +70,11 @@ const SECCIONES = [
       { href: "/aprendizaje/artefactos", label: "Artefactos", icon: ListChecks },
       { href: "/aprendizaje/repaso", label: "Repaso", icon: GraduationCap },
       { href: "/aprendizaje/lecciones", label: "Lecciones", icon: Lightbulb },
+      {
+        href: "/aprendizaje/sugerencias",
+        label: "Sugerencias",
+        icon: Compass,
+      },
     ],
   },
   {

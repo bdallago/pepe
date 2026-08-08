@@ -16,6 +16,10 @@ import { StatCards } from "@/components/dashboard/stat-cards";
 import { MovementDialog } from "@/components/movimientos/movement-dialog";
 import { useAppData } from "@/components/providers/app-data-provider";
 import { ProyectoMovimientos } from "@/components/proyectos/proyecto-movimientos";
+import {
+  RetroPanel,
+  type RetroGuardada,
+} from "@/components/proyectos/retro-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,9 +41,13 @@ import type { Movement, Project } from "@/lib/supabase/database.types";
 export function ProyectoView({
   proyecto,
   movements,
+  retros,
+  hayModelo,
 }: {
   proyecto: Project;
   movements: Movement[];
+  retros: RetroGuardada[];
+  hayModelo: boolean;
 }) {
   const { projects, categories, moneda } = useAppData();
 
@@ -162,6 +170,14 @@ export function ProyectoView({
       <ProyectoMovimientos
         imputados={imputados}
         uniformes={uniformes}
+        moneda={moneda}
+      />
+
+      <RetroPanel
+        projectId={proyecto.id}
+        nombreProyecto={proyecto.nombre}
+        retros={retros}
+        hayModelo={hayModelo}
         moneda={moneda}
       />
 

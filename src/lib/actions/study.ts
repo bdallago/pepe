@@ -15,6 +15,7 @@ import {
   mensajeDeError,
   ok,
   requireSession,
+  slugify,
   type ActionResult,
 } from "./shared";
 
@@ -181,6 +182,74 @@ export async function actualizarTrack(
     .from("tracks")
     .update(cambio)
     .eq("id", parsedId.data)
+    .select()
+    .single();
+
+  if (error) return fail(mensajeDeError(error));
+
+  revalidatePath("/", "layout");
+  return ok(data);
+}
+
+/**
+ * Convierte una sugerencia de estudio en una sesión de un track (spec 6.4).
+ *
+ * Es lo único que la pantalla de sugerencias escribe en la base, y lo
+ * escribe porque Beno apretó el botón: la sugerencia en sí es salida en
+ * pantalla y no pasa por la bandeja.
+ *
+ * La sesión nace al final del track y sin bloque: no es parte del temario
+ * que vino del importador, es algo que se agregó después. Meterla en un
+ * bloque existente mentiría sobre de dónde salió.
+ */
+export async function crearSesionDesdeSugerencia(
+  trackId: string,
+  input: { titulo: string; consigna: string; teoriaTexto?: string },
+): Promise<ActionResult<StudySession>> {
+  const parsedTrack = uuid.safeParse(trackId);
+  if (!parsedTrack.success) return fail("Identificador inválido.");
+
+  const parsed = z
+    .object({
+      titulo: z.string().trim().min(1, "Poné un título.").max(200),
+      consigna: z.string().trim().min(1, "Poné una consigna.").max(2000),
+      teoriaTexto: z.string().trim().max(4000).optional(),
+    })
+    .safeParse(input);
+
+  if (!parsed.success) {
+    return fail(parsed.error.issues[0]?.message ?? "Datos inválidos.");
+  }
+
+  const { supabase, userId } = await requireSession();
+
+  // El orden va después de la última del track, archivadas incluidas: si
+  // se contaran solo las visibles, desarchivar una podría dejar dos
+  // sesiones con el mismo número.
+  const { data: ultima } = await supabase
+    .from("sessions")
+    .select("orden")
+    .eq("track_id", parsedTrack.data)
+    .order("orden", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .insert({
+      user_id: userId,
+      track_id: parsedTrack.data,
+      // El slug es único por usuario y acá no viene de ningún export, así
+      // que se genera. El sufijo aleatorio evita chocar con una sesión
+      // vieja de título parecido.
+      slug: `sugerida-${slugify(parsed.data.titulo).slice(0, 60)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+      titulo: parsed.data.titulo,
+      consigna: parsed.data.consigna,
+      teoria_texto: parsed.data.teoriaTexto ?? null,
+      orden: (ultima?.orden ?? 0) + 1,
+    })
     .select()
     .single();
 

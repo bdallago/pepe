@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ProyectoView } from "@/components/proyectos/proyecto-view";
-import { getMovimientos, getProyectoPorSlug } from "@/lib/queries";
+import { hayModeloConfigurado } from "@/lib/llm";
+import { getMovimientos, getProyectoPorSlug, getRetros } from "@/lib/queries";
 
 export async function generateMetadata({
   params,
@@ -28,5 +29,14 @@ export default async function ProyectoPage({
 
   if (!proyecto) notFound();
 
-  return <ProyectoView proyecto={proyecto} movements={movements} />;
+  const retros = await getRetros(proyecto.id);
+
+  return (
+    <ProyectoView
+      proyecto={proyecto}
+      movements={movements}
+      retros={retros}
+      hayModelo={hayModeloConfigurado()}
+    />
+  );
 }

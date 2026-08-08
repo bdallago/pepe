@@ -116,6 +116,25 @@ export async function getArtefactos(): Promise<Artifact[]> {
   return data ?? [];
 }
 
+/**
+ * Retros vigentes de un proyecto, de la más nueva a la más vieja.
+ *
+ * Un proyecto puede tener más de una: se cierra una etapa, se reabre, se
+ * vuelve a cerrar. Por eso es una lista y no una fila sola.
+ */
+export async function getRetros(projectId: string) {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("retros")
+    .select("*")
+    .eq("project_id", projectId)
+    .is("archivado_en", null)
+    .order("fecha", { ascending: false });
+
+  return data ?? [];
+}
+
 /** Bitácora, de la entrada más nueva a la más vieja. */
 export async function getBitacora(): Promise<DailyLog[]> {
   const supabase = await createClient();

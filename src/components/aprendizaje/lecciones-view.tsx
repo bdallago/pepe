@@ -7,6 +7,7 @@ import {
   BuscadorLecciones,
   type Resultado,
 } from "@/components/aprendizaje/buscador-lecciones";
+import { GenerarLecciones } from "@/components/aprendizaje/generar-lecciones";
 import { useAppData } from "@/components/providers/app-data-provider";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/dates";
@@ -106,7 +107,13 @@ function TarjetaLeccion({
   );
 }
 
-export function LeccionesView({ lecciones }: { lecciones: Lesson[] }) {
+export function LeccionesView({
+  lecciones,
+  hayModelo,
+}: {
+  lecciones: Lesson[];
+  hayModelo: boolean;
+}) {
   const { projects } = useAppData();
   const [resultados, setResultados] = useState<Resultado[] | null>(null);
   const [consulta, setConsulta] = useState("");
@@ -123,6 +130,12 @@ export function LeccionesView({ lecciones }: { lecciones: Lesson[] }) {
           setConsulta(texto);
         }}
       />
+
+      {hayModelo && (
+        <div className="flex justify-end">
+          <GenerarLecciones />
+        </div>
+      )}
 
       {resultados !== null ? (
         resultados.length === 0 ? (

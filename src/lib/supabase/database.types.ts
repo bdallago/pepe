@@ -1,15 +1,4 @@
-/**
- * Tipos de la base de datos.
- *
- * GENERADO — no editar a mano. Para regenerar:
- *
- *   npx supabase gen types typescript --project-id <ref> --schema public \
- *     > src/lib/supabase/database.types.ts
- *
- * y volver a pegar el bloque de alias del final.
- */
-
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -537,6 +526,68 @@ export type Database = {
           },
         ]
       }
+      retros: {
+        Row: {
+          archivado_en: string | null
+          balance_ars: number | null
+          balance_usd: number | null
+          conclusion: string
+          costo_real: string
+          created_at: string
+          fecha: string
+          id: string
+          modelo: string | null
+          project_id: string
+          que_funciono: string
+          que_no_funciono: string
+          titulo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archivado_en?: string | null
+          balance_ars?: number | null
+          balance_usd?: number | null
+          conclusion?: string
+          costo_real?: string
+          created_at?: string
+          fecha?: string
+          id?: string
+          modelo?: string | null
+          project_id: string
+          que_funciono?: string
+          que_no_funciono?: string
+          titulo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archivado_en?: string | null
+          balance_ars?: number | null
+          balance_usd?: number | null
+          conclusion?: string
+          costo_real?: string
+          created_at?: string
+          fecha?: string
+          id?: string
+          modelo?: string | null
+          project_id?: string
+          que_funciono?: string
+          que_no_funciono?: string
+          titulo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retros_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessions: {
         Row: {
           aplicacion_fecha: string | null
@@ -931,3 +982,4 @@ export type Artifact = Database["public"]["Tables"]["artifacts"]["Row"];
 export type DailyLog = Database["public"]["Tables"]["daily_log"]["Row"];
 export type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
 export type InboxItem = Database["public"]["Tables"]["inbox"]["Row"];
+export type Retro = Database["public"]["Tables"]["retros"]["Row"];

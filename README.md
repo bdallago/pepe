@@ -41,7 +41,15 @@ Un solo usuario, autenticación con Google, base en Supabase, deploy en Vercel.
 - **Repaso**: un quiz armado con los temas ya completados. No usa ningún
   modelo: las preguntas y los distractores salen de las propias sesiones.
 - **Lecciones**: buscador en lenguaje natural sobre lo aprendido
-  (ver "El buscador de lecciones" más abajo).
+  (ver "El buscador de lecciones" más abajo). Desde acá también se le
+  pueden pedir lecciones sobre un tema: van a la bandeja marcadas como
+  hipótesis, no como experiencia vivida.
+- **Sugerencias**: qué me conviene estudiar según lo que vengo
+  trabajando. Cada sugerencia viene con el dato mío que la justifica —el
+  proyecto con movimiento, la categoría donde se me fue la plata, el
+  track trabado— y se puede convertir en una sesión de un track. Es la
+  única salida de un modelo que se muestra sin pasar por la bandeja,
+  porque no escribe nada.
 
 ### Bitácora
 
@@ -60,6 +68,18 @@ swipe en mobile. La acción se aplica al instante, sin esperar al
 servidor. Si revisar veinte propuestas costara veinte clicks, la bandeja
 se abandonaría en dos semanas y todo el diseño de confirmación humana
 dejaría de tener sentido.
+
+### Retro de proyecto
+
+En la pantalla de cada proyecto hay un botón para cerrarlo: el modelo lee
+sus movimientos, sus lecciones y su bitácora y devuelve un borrador con
+qué funcionó, qué no y cuánto costó de verdad. Es la llamada más pesada
+de la app y tarda.
+
+El texto vuelve **como borrador editable y no se guarda solo**: recién
+con "Guardar" queda como documento del proyecto, con el balance de ese
+momento congelado adentro. Las lecciones candidatas que salen de la retro
+van a la bandeja y se confirman de a una, como todo lo demás.
 
 ## Las tres reglas que importan
 

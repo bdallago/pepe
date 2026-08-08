@@ -211,6 +211,63 @@ apaga apenas Beno elige tipo o categoría a mano. El formulario es el
 "panel de confirmación" que pide la sección 6 del spec, por eso esto no
 pasa por `inbox`.
 
+### 6.d Contra la generalidad, el techo era el modelo
+
+`lib/llm.ts` tiene **tres** modelos, no dos, y el tercero se agregó
+midiendo. Generar lecciones sobre un tema (6.3) con
+`llama-3.3-70b-versatile` devolvía rótulos —"Establecer límites de
+soporte", "Priorizar la documentación", "Revisar contratos"—, que es
+exactamente lo que el prompt prohíbe. Agregarle ejemplos en contraste al
+prompt **no movió la aguja**: el techo era el modelo.
+
+Medido el 2026-08-08 con el prompt real, mismo sistema y mismo usuario:
+`openai/gpt-oss-120b` con `reasoning_effort: "medium"` devolvió
+afirmaciones discutibles ("Cobrar por cada versión mayor evita que el
+cliente exija cambios sin fin"); `qwen/qwen3.6-27b` ni siquiera devolvió
+JSON válido. De ahí `MODELO_RAZONADOR`.
+
+**No reemplaza a `MODELO_GRANDE`.** La retro (6.5) sigue con llama: ahí
+la entrada es enorme, la salida ya salía anclada en los datos reales y
+el razonamiento se comería el presupuesto de tokens sin comprar nada.
+
+Ojo con el presupuesto: **los tokens de razonamiento se descuentan de
+`max_tokens`** y del techo por minuto. Con 1800 la lista volvía truncada
+a una sola lección; por eso 3500. Y por lo mismo el limitador tiene una
+salida de emergencia: si una sola llamada estima más que el techo del
+minuto, esperar no lo arregla —el minuto siguiente tiene el mismo
+techo—, así que con la ventana vacía sale igual.
+
+### 6.e Las tres funciones de 6.3 a 6.5 no comparten camino
+
+- **6.3 generar lecciones** y **6.5 retro** dejan propuestas en `inbox`
+  (`leccion_sugerida` y `retro`). Se aceptan en la bandeja como
+  cualquier otra cosa; lo único que cambia es el `origen` con el que
+  nace la lección: `generada` y `retro` respectivamente.
+- **6.4 sugerir qué estudiar** es la única salida de un modelo que se
+  muestra directamente, sin bandeja. Se puede porque **no escribe nada**.
+  Lo único que toca la base es convertir una sugerencia en sesión, y eso
+  es un botón aparte. Las sugerencias tampoco se guardan: al recargar no
+  están, a propósito.
+- **El texto de la retro no se guarda solo.** Vuelve a pantalla como
+  borrador editable y recién con "Guardar" pasa a la tabla `retros`. Las
+  lecciones candidatas, en cambio, ya quedaron esperando en la bandeja.
+
+El `balance_ars` / `balance_usd` de `retros` se **congela** al guardar,
+con el mismo criterio que el tipo de cambio de `movements`: la retro
+dice lo que el proyecto costó cuando se cerró. Nunca recalcularlo al
+leerla.
+
+Las sesiones que salen de 6.4 nacen **sin bloque** y al final del track:
+no son parte del temario importado y meterlas en un bloque existente
+mentiría sobre de dónde salieron. El Roadmap las junta en un grupo
+"Agregadas" — sin ese grupo no aparecerían en ninguna parte, porque esa
+pantalla agrupa por bloque.
+
+Y la regla que rige las tres, escrita en los prompts y verificada
+midiendo: **el título tiene que ser una afirmación discutible, no un
+rótulo.** Si podría estar en la tapa de cualquier libro de negocios,
+está mal.
+
 ### 7. Ninguna feature de LLM puede ser bloqueante
 
 Si Groq está caído o se acabó la cuota, **la app sigue funcionando entera
