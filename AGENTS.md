@@ -520,7 +520,23 @@ las lee del documento y las relee cuando cambia el tema.
 
 La app se llamó **"Balance de proyectos"** y el paquete, `app-gastos`.
 El 2026-08-08 se limpió: título, metadata, login y `package.json` dicen
-**Pepe**.
+**Pepe**, y también se renombró la infraestructura:
+
+| Dónde | Antes | Ahora |
+|---|---|---|
+| Repo | `bdallago/balance-proyectos` | `bdallago/pepe` |
+| Vercel | proyecto `balance-proyectos` | proyecto `pepe-beno` |
+| URL | `balance-proyectos.vercel.app` | **`pepe-beno.vercel.app`** |
+| Supabase | proyecto `balance-proyectos` | proyecto `Pepe` |
+
+`pepe.vercel.app` y casi todas las variantes cortas estaban tomadas por
+terceros; `pepe-beno` estaba libre. El **ref de Supabase no cambió**
+(`thlocwmhxzqkmmnxmunf`): es inmutable, así que renombrar el proyecto
+allá es puramente cosmético y no toca ninguna URL de la base.
+
+Al cambiar la URL hay que actualizar **`site_url` y `uri_allow_list` en
+Supabase Auth** o el login deja de andar. Google OAuth **no** se toca:
+apunta a la callback de Supabase, que no depende del dominio de la app.
 
 Sobrevive una sola mención, **a propósito**: las claves de
 `localStorage` (`app-gastos:moneda`, `app-gastos:ultimo-proyecto`).
