@@ -89,10 +89,26 @@ El único con lógica nueva. Detallado abajo.
 
 ### Ola 3 — depende de una decisión pendiente
 
-| Agente | Ejemplo | Decisión abierta |
+| Agente | Ejemplo | Destino |
 |---|---|---|
-| Conocimiento | *"aprendí que conviene cobrar por versión mayor"* | Va a bandeja (regla 6), sin discusión |
-| Bitácora | *"hoy peleé con el deploy toda la tarde"* | **Si transcribe tu texto tal cual, escribe directo; si lo reformula, va a bandeja.** Sin resolver. |
+| Conocimiento | *"aprendí que conviene cobrar por versión mayor"* | **Bandeja** (regla 6) |
+| Bitácora | *"hoy peleé con el deploy toda la tarde"* | **Escribe directo** |
+
+**Bitácora transcribe literal y no reformula** (decidido el 2026-08-09).
+Eso lo saca del alcance de la regla 6, y no por excepción: la regla
+protege contra que se escriba producción de un modelo sin confirmar, y
+acá **no hay producción de modelo**. El texto es de Beno, palabra por
+palabra. Lo único que un modelo toca es la fecha, cuando la frase la
+menciona (*"ayer peleé con el deploy"* → 08/08).
+
+Consecuencia de diseño: **no le pongas al prompt ninguna instrucción de
+mejorar, resumir o corregir el texto.** Apenas reformule, deja de valer
+el razonamiento de arriba y pasa a necesitar la bandeja.
+
+El riesgo que sí queda es la derivación equivocada: un mensaje que iba a
+otro lado termina como entrada del día. Se cubre mostrando lo que
+escribió con un deshacer inmediato, y porque borrar es archivar
+(regla 4), así que nada se pierde.
 
 ### Ola 4
 
@@ -201,9 +217,7 @@ escala; lo único que compra es sacarse el techo de 30 por minuto.
 
 ## Decisiones abiertas
 
-1. **Bitácora**: ¿transcribe y escribe directo, o reformula y va a
-   bandeja? Bloquea la ola 3.
-2. **Nombres y tono de los agentes**: si tienen nombre propio o se los
+1. **Nombres y tono de los agentes**: si tienen nombre propio o se los
    nombra por función. No bloquea nada.
 
 ## Fuera de alcance
