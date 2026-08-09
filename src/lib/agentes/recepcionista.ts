@@ -41,6 +41,17 @@ import { decisionSchema, type Decision } from "@/lib/agentes/tipos";
  * línea que separa los dos: lo que Beno **escribió** es `buscador` aunque
  * el tema sea de plata; `consultas` es solo cuando pide números.
  *
+ * **`roadmap` y `estudio` no se separan solos.** Medido el 2026-08-09,
+ * antes de tocar nada: las tres frases de roadmap se iban a `estudio` con
+ * 0.8/0.9, y las dos de sugerencias ni siquiera caían ahí ("qué lecciones
+ * sugerís hoy" → `lecciones_tema` 0.8, "según toda la actividad que vengo
+ * haciendo, qué sugerís hoy" → `buscador` 0.8). No alcanzó con agregar el
+ * bullet: hicieron falta las dos líneas de frontera de abajo, una contra
+ * `roadmap` (leer el plan que existe vs. proponer lo que no) y otra contra
+ * `lecciones_tema` (que siempre trae un tema; una sugerencia sin tema es
+ * `estudio`). Las dos están escritas sin nombrar ningún tema concreto, por
+ * lo que dice el párrafo que sigue.
+ *
  * Ojo con qué palabras se ponen en esa línea. La primera versión usaba
  * "pricing" como ejemplo de tema y eso subió el ancla documentada de
  * "pricing" suelto de 0.3 a 0.8 — justo la ambigüedad que la regla
@@ -60,8 +71,12 @@ Los especialistas:
 - "buscador": buscar algo que ya está escrito, lecciones o bitácora. Ej:
   "tenía algo sobre backlogs", "qué había anotado de clientes", "qué
   anotaciones tengo sobre pricing", "qué apuntes tengo de contratos".
-- "estudio": qué estudiar o cómo viene el temario. Ej: "qué me toca hoy",
-  "cómo voy con el track de PM", "qué estudio ahora".
+- "roadmap": qué le toca del plan de estudio que YA está armado. Ej: "qué
+  me toca hoy", "qué sesión sigue", "cómo voy con el track de PM".
+- "estudio": que le SUGIERAS qué estudiar mirando lo que viene haciendo,
+  temas que todavía no están en el plan. Ej: "qué lecciones sugerís hoy",
+  "según toda la actividad que vengo haciendo, qué sugerís hoy",
+  "sugerime qué estudiar".
 - "retro": cerrar un proyecto y hacer su retrospectiva. Ej: "cerrá Proder",
   "hacé la retro de Gentius".
 - "lecciones_tema": sacar lecciones sobre un tema. Ej: "sacá lecciones de
@@ -77,6 +92,15 @@ Si Beno pregunta por algo que ESCRIBIÓ (anotaciones, apuntes, notas,
 bitácora, lecciones), es "buscador" aunque el tema sea de plata:
 "presupuestos", "facturación" o "costos" son temas sobre los que se
 escribe. "consultas" es solo cuando pide NÚMEROS de movimientos cargados.
+
+"roadmap" y "estudio" se parecen y no son lo mismo. "roadmap" LEE el plan
+que ya existe: la sesión de hoy, la que sigue, cuánto avanzó un track.
+"estudio" es cuando pide que le PROPONGAS algo que todavía no está en
+ningún track ("sugerís", "recomendás", "proponés"). Si no pide nada
+nuevo, es "roadmap".
+
+"lecciones_tema" viene siempre con un tema del que sacar lecciones. Si
+pide sugerencias sin nombrar ningún tema, es "estudio".
 
 En "argumento" poné el dato concreto sobre el que trabaja el especialista:
 el nombre del proyecto para "retro", el tema para "lecciones_tema", lo que

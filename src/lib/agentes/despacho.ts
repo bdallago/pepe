@@ -1,6 +1,7 @@
 import "server-only";
 
 import { resolverProyecto } from "@/lib/agentes/resolver";
+import { computeToday, trackProgress } from "@/lib/aprendizaje";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
 import { addDays, compareISO, formatDate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
@@ -9,8 +10,9 @@ import { proximoVencimiento } from "@/lib/recurrences";
 import { generarRetro } from "@/lib/retro";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
+import type { ItemDeHoy } from "@/lib/aprendizaje";
 import type { SupabaseClient } from "@/lib/supabase/server";
-import type { Recurrence } from "@/lib/supabase/database.types";
+import type { Recurrence, StudySession } from "@/lib/supabase/database.types";
 import type { Decision, RespuestaAgente } from "@/lib/agentes/tipos";
 
 /**
@@ -35,6 +37,112 @@ export async function despachar(
   decision: Decision,
 ): Promise<RespuestaAgente> {
   switch (decision.destino) {
+    case "roadmap": {
+      // "Qué me toca hoy" NO es "qué me sugerís estudiar". Esto es lectura
+      // pura del plan que ya está armado: sale entero de la base y no toca
+      // ningún modelo. Antes caía en `estudio`, o sea que una pregunta por
+      // el temario existente se contestaba con temas inventados por el
+      // razonador — la respuesta equivocada, y la más cara de dar.
+      //
+      // Las tres consultas calcan a `getTracks` / `getBlocks` /
+      // `getSessions` de `lib/queries.ts`: sin archivados y por `orden`.
+      // No se llaman directo porque esas arman su propio cliente desde las
+      // cookies y acá el cliente ya viene dado. Si el criterio se separara,
+      // el agente contestaría un plan distinto al de la pantalla.
+      const [tracksRes, blocksRes, sessionsRes] = await Promise.all([
+        supabase
+          .from("tracks")
+          .select("*")
+          .is("archivado_en", null)
+          .order("orden"),
+        supabase
+          .from("blocks")
+          .select("*")
+          .is("archivado_en", null)
+          .order("orden"),
+        supabase
+          .from("sessions")
+          .select("*")
+          .is("archivado_en", null)
+          .order("orden"),
+      ]);
+
+      const tracks = tracksRes.data ?? [];
+      const blocks = blocksRes.data ?? [];
+      const sessions = sessionsRes.data ?? [];
+
+      // Los mismos argumentos que le pasa la pantalla "Hoy". La fecha se
+      // resuelve una sola vez, acá.
+      const hoy = computeToday({ fecha: todayISO(), tracks, blocks, sessions });
+
+      if (!hoy.algunTrackArranco) {
+        return {
+          clase: "aviso",
+          titulo: "El plan todavía no arrancó",
+          cuerpo:
+            "Ningún track activo tiene una fecha de inicio ya cumplida. Poné una desde el Roadmap y esto empieza a contestar qué toca cada día.",
+        };
+      }
+
+      // Primero lo que toca hoy y después lo que descansa, igual que la
+      // pantalla; dentro de cada grupo manda el orden de los tracks.
+      const conSesion = (esHoy: boolean) =>
+        hoy.items.filter(
+          (i): i is ItemDeHoy & { session: StudySession } =>
+            i.esHoy === esHoy && i.session !== null,
+        );
+
+      const items = [...conSesion(true), ...conSesion(false)];
+
+      if (items.length === 0) {
+        return {
+          clase: "aviso",
+          titulo: "No te queda nada pendiente",
+          cuerpo:
+            "Todos los tracks activos están terminados. Podés agregar sesiones desde el Roadmap o pedirme sugerencias de qué estudiar.",
+        };
+      }
+
+      const tocanHoy = items.filter((i) => i.esHoy).length;
+
+      let titulo = "Esto es lo que te toca hoy";
+      if (tocanHoy === 0) {
+        titulo = "Hoy no hay sesión programada. Esto es lo que sigue";
+      } else if (hoy.diaDoble) {
+        titulo = `Hoy tocan ${tocanHoy} tracks`;
+      }
+
+      return {
+        clase: "lista",
+        destino: "roadmap",
+        titulo,
+        items: items.map(({ track, block, session, esHoy }) => {
+          const progreso = trackProgress(track.id, blocks, sessions);
+
+          return {
+            titulo: `${track.nombre} · ${session.titulo}`,
+            detalle: [
+              esHoy
+                ? "Toca hoy."
+                : "Hoy no toca; queda para el próximo día del track.",
+              block ? `Bloque: ${block.titulo}` : null,
+              // Teoría y aplicación van SEPARADAS y no colapsadas en un
+              // "hecha / no hecha" (regla 5): "leí el tema pero todavía no
+              // lo apliqué" es un estado real y es el punto de la sección.
+              // La pantalla las muestra como dos checks independientes;
+              // acá son dos marcas, no una.
+              `Teoría ${session.teoria_hecha ? "hecha" : "pendiente"} · Aplicación ${
+                session.aplicacion_hecha ? "hecha" : "pendiente"
+              }`,
+              `Track: ${progreso.hechas} de ${progreso.total} sesiones completas (${progreso.pct} %)`,
+            ]
+              .filter((linea): linea is string => linea !== null)
+              .join("\n"),
+          };
+        }),
+      };
+    }
+
     case "estudio": {
       const sugerencias = await sugerirQueEstudiar(supabase);
 

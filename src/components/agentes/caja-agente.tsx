@@ -139,6 +139,7 @@ export function CajaAgente({
 const ETIQUETA_DESTINO: Record<Destino, string> = {
   consultas: "Números",
   buscador: "Buscador",
+  roadmap: "Roadmap",
   estudio: "Estudio",
   retro: "Retro",
   lecciones_tema: "Lecciones",

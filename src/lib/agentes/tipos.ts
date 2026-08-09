@@ -8,10 +8,17 @@ import { z } from "zod";
  * recepcionista quedaría mintiendo sobre lo que la app entiende. Con el
  * destino declarado, el despacho contesta "todavía no, usá el formulario",
  * que es la verdad.
+ *
+ * `roadmap` y `estudio` son dos preguntas distintas y por un tiempo
+ * compartieron destino: "qué me toca hoy" terminaba llamando a 6.4, que
+ * INVENTA temas nuevos con el razonador. Son cosas opuestas — una lee el
+ * plan que ya está armado (sin modelo), la otra propone lo que todavía no
+ * existe (con el modelo más caro de la app)— así que van separadas.
  */
 export const DESTINOS = [
   "consultas",
   "buscador",
+  "roadmap",
   "estudio",
   "retro",
   "lecciones_tema",
