@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { AtajoGlobal } from "@/components/agentes/atajo-global";
 import { AppShell } from "@/components/layout/app-shell";
 import { AppDataProvider } from "@/components/providers/app-data-provider";
 import { getSerieTasas } from "@/lib/fx-server";
@@ -59,6 +60,13 @@ export default async function AppLayout({
       >
         {children}
       </AppShell>
+
+      {/*
+        Vive fuera del shell y no ocupa lugar hasta que lo pedís con
+        Ctrl/⌘+K: es la misma caja del inicio, disponible desde cualquier
+        pantalla.
+      */}
+      <AtajoGlobal />
     </AppDataProvider>
   );
 }
