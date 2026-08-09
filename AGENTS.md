@@ -380,6 +380,60 @@ discreto y no interrumpe el flujo.
 Lo mismo vale para el buscador: si el embedding falla o tarda, la
 búsqueda responde igual solo con full-text y **eso no es un error**.
 
+### 8. El MCP se construye en dos tiempos, y el corte está en quién escribe
+
+La sección 12 del spec pide un servidor MCP nativo para operar Pepe
+desde Claude Code, y dice que hay que esperar a que Beno use la app con
+datos reales. La razón es buena —la forma de las herramientas depende de
+cómo pide las cosas, y sin uso se diseñan sobre suposiciones— pero
+tomada al pie de la letra se muerde la cola: **el MCP puede ser
+justamente lo que haga que la use.** Cargar un gasto llenando un
+formulario compite mal contra decirlo en una línea.
+
+Por eso el corte no es temporal, es por **quién termina escribiendo en
+la base** (decidido con Beno el 2026-08-09):
+
+- **Ahora, las lecturas.** Balance, búsqueda de lecciones, bitácora,
+  roadmap. No escriben nada, así que no tienen que resolver la regla
+  número uno y si el diseño sale torcido se rehace sin costo.
+- **Ahora también, las escrituras que solo proponen.** Un tool que deja
+  la fila en `inbox` como `pendiente` **no viola la regla 6**: sigue
+  siendo Beno el que aprieta el botón, en la misma bandeja de siempre.
+  No hay que inventar un mecanismo de confirmación nuevo; ya existe.
+- **Después, con uso encima**, la escritura directa —si alguna vez se
+  quiere— y absorber 6.3, 6.4 y 6.5. Ahí sí hace falta haber medido.
+
+La regla que ordena todo esto: **un tool de MCP que escriba en una tabla
+de dominio sin pasar por `inbox` es una violación de la regla 6**, no un
+atajo. Si aparece la tentación, la respuesta es proponer, no escribir.
+
+Ayuda que toda la lógica ya viva en módulos de `src/lib/` que reciben un
+cliente de Supabase y devuelven datos tipados (`balances`, `prorrateo`,
+`aprendizaje`, `clasificacion`, `extraccion`, `generacion`,
+`sugerencias`, `retro`, `zombies`, `respaldo`): el servidor MCP los
+importa y los expone, sin duplicar una sola regla de dominio.
+
+## Respaldo automático
+
+Además del botón de Ajustes, hay un respaldo **diario y automático**:
+`/api/cron/respaldo` (mismo contenido que `/api/respaldo`, pero con
+`CRON_SECRET` y `createAdminClient()` porque corre sin usuario).
+
+**No está en `vercel.json` a propósito.** El que lo agenda es un workflow
+de GitHub Actions que vive en el repo privado `bdallago/pepe-respaldos`,
+que es también donde se guarda. No es por falta de crons —la cuenta es
+Pro— sino porque así **agendar y guardar son el mismo paso**: un cron de
+Vercel tendría que pushear a GitHub por su cuenta, con un token de
+GitHub guardado en Vercel y el disparador corriendo en la misma
+plataforma que respalda.
+
+Es un solo `respaldo.json` que se sobrescribe; **el archivo histórico es
+el historial de git**. Y el workflow **valida antes de commitear** —HTTP
+200, JSON parseable, marca `__pepe`, conteos distintos de cero—: como el
+archivo es uno solo, un JSON roto committeado se llevaría puesto el
+último respaldo bueno, en silencio, y te enterarías el día que lo
+necesitás.
+
 ## Búsqueda de lecciones
 
 Híbrida: full-text en español + similitud vectorial, fusionados con
