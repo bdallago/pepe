@@ -189,23 +189,43 @@ El enum de estados tiene dos valores más allá de los obvios: `pospuesto`
 del modelo no valida contra el esquema — queda visible en la bandeja en
 vez de descartarse en silencio).
 
-### 6.b El límite de Groq que muerde son los tokens, y es por modelo
+### 6.b Los límites de Groq, medidos disparando contra la cuenta
 
-El spec pide un limitador propio de **30 requests/minuto**. Medido contra
-la cuenta real el 2026-08-07, ese no es el techo que se toca: el tier
-gratuito corta antes por tokens. El pase de extracción gasta entre 600 y
-1000 tokens por entrada, así que come un 429 en la cuarta llamada, con el
-contador de pedidos en 4 de **1000** (ese es el techo real de pedidos, no
-30).
+⚠ **Esta sección decía que el techo de 30 pedidos/minuto del spec no
+existía y que el real era 1000. Era falso**, y estuvo escrito así entre
+el 2026-08-07 y el 2026-08-09. El 1000 es el techo **diario** de pedidos
+de dos de los modelos; se confundió con uno por minuto. `REQUESTS_POR_MINUTO
+= 28` en `lib/llm.ts` siempre estuvo bien.
 
-**El techo de tokens es por modelo y son distintos entre sí.** Leído de
-los headers `x-ratelimit-limit-tokens` el 2026-08-08:
+Medido el 2026-08-09 disparando pedidos reales, no leyendo documentación:
+45 llamadas mínimas seguidas al modelo chico entran **exactamente 30** y
+de la 31 en adelante son todas 429, en 12 segundos. Repetido con el
+razonador: idéntico. **Los 30 por minuto del spec son reales.**
 
-| modelo | tokens/minuto |
-|---|---|
-| `llama-3.1-8b-instant` | 6000 |
-| `llama-3.3-70b-versatile` | 12000 |
-| `openai/gpt-oss-120b` | 8000 |
+| modelo | ped./min | ped./día | tok./min | tok./día |
+|---|---|---|---|---|
+| `llama-3.1-8b-instant` | **30** | 14 400 | **6000** | 500 000 |
+| `llama-3.3-70b-versatile` | 30 | 1000 | **12 000** | 100 000 |
+| `openai/gpt-oss-120b` | **30** | 1000 | **8000** | 200 000 |
+
+En negrita lo verificado a mano; el resto es la documentación oficial,
+que coincidió con todo lo medible.
+
+**Los pedidos se cuentan por día, no por minuto**, y eso se lee en los
+propios headers: 1000 pedidos con `x-ratelimit-reset-requests: 1m26.4s`,
+y 86400 ÷ 1000 = 86,4. Es un balde que gotea a lo largo del día. **Y hay
+un techo diario de tokens** que los headers no informan.
+
+La ventana de 429 se recupera sola: al minuto siguiente ya contesta 200.
+
+**Que esto no te frena es una conclusión medida, no un supuesto.** Un
+gasto dictado gasta 800-1500 tokens y 2-3 pedidos, así que el techo
+diario del modelo chico da para ~330 gastos por día. Lo único que puede
+tocar un techo de verdad es el **backfill histórico de una casilla de
+mail**: 2000 mails son 67 minutos solo por el ritmo de pedidos y unos
+tres días por el techo diario de tokens. Se resuelve con un pase por
+lotes y retomable, no pagando — pagar cuesta centavos por mes a esta
+escala y lo único que compra es sacarse el techo de 30/minuto.
 
 Por eso `lib/llm.ts` lleva **una ventana por modelo**. Antes había un
 balde único y global de 5500, que frenaba a la retro contra el techo del
