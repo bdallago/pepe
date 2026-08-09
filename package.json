@@ -10,7 +10,8 @@
     "descargar:modelo": "node --experimental-strip-types --conditions=react-server scripts/descargar-modelo.ts",
     "backfill:embeddings": "node --experimental-strip-types --conditions=react-server scripts/backfill-embeddings.ts",
     "import:colmena": "node --experimental-strip-types scripts/importar-colmena.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mcp": "tsx mcp/servidor.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -45,6 +47,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.22",
     "tailwindcss": "^4",
+    "tsx": "^4.23.11",
     "typescript": "^5"
   },
   "overrides": {

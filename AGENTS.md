@@ -407,11 +407,34 @@ La regla que ordena todo esto: **un tool de MCP que escriba en una tabla
 de dominio sin pasar por `inbox` es una violación de la regla 6**, no un
 atajo. Si aparece la tentación, la respuesta es proponer, no escribir.
 
-Ayuda que toda la lógica ya viva en módulos de `src/lib/` que reciben un
-cliente de Supabase y devuelven datos tipados (`balances`, `prorrateo`,
-`aprendizaje`, `clasificacion`, `extraccion`, `generacion`,
-`sugerencias`, `retro`, `zombies`, `respaldo`): el servidor MCP los
-importa y los expone, sin duplicar una sola regla de dominio.
+**El servidor es local y por stdio** (`mcp/servidor.mts`, lo arranca
+Claude Code; `.mcp.json` lo declara). No es una ruta de la app, y eso
+fue una decisión de seguridad de Beno: un `/api/mcp` público es un
+endpoint de internet donde lo único que te separa de un atacante es un
+token estático, y si se filtra una vez el que lo tenga se lleva todo el
+detalle financiero sin que te enteres. Local no tiene URL, así que no
+tiene superficie. El acceso desde afuera no hacía falta: Claude Code
+corre en su máquina.
+
+Ese diseño también contiene la **inyección por prompt**, que es más
+probable que un ataque dirigido: si un texto de la base trae
+instrucciones escondidas, el peor caso posible es una bandeja con
+propuestas basura que se rechazan con una tecla. Nadie puede corromper
+un movimiento porque no existe el camino.
+
+**Ojo con lo que se puede importar.** El MCP no corre dentro de Next, así
+que **no puede importar ninguno de los módulos marcados con
+`server-only`** — son 13, entre ellos `queries.ts` — ni nada que use
+`next/headers`. Lo que sí importa, y es lo que importa: los módulos
+puros con las reglas de dominio (`balances`, `prorrateo`, `fx`,
+`dates`, `format`, `schemas`). Por eso `mcp/datos.mts` reescribe **las
+consultas**, que son triviales, y **ninguna regla**: el prorrateo sigue
+teniendo un solo lugar donde vive.
+
+Y por eso mismo `mcp/datos.mts` lee los proyectos igual que
+`app/(app)/layout.tsx` —sin filtrar `archivado_en`, ordenados por
+nombre—: filtrar ahí haría que el MCP conteste números distintos a los
+de la pantalla.
 
 ## Respaldo automático
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pepe": {
+      "command": "npx",
+      "args": ["tsx", "mcp/servidor.mts"]
+    }
+  }
+}
