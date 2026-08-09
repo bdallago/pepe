@@ -1,5 +1,8 @@
 import "server-only";
 
+import { resolverProyecto } from "@/lib/agentes/resolver";
+import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
+import { formatMoney } from "@/lib/format";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
 import type { SupabaseClient } from "@/lib/supabase/server";
@@ -71,6 +74,81 @@ export async function despachar(
         cuerpo:
           "Entendí que querés anotar plata, pero ese agente todavía no está. Cargalo desde Movimientos.",
       };
+
+    case "consultas": {
+      // Las tres consultas son idénticas a las del layout de las pantallas
+      // privadas: proyectos sin filtrar `archivado_en` y ordenados por
+      // nombre, categorías por tipo y nombre. Si acá se filtrara distinto,
+      // el agente contestaría números que no coinciden con la pantalla.
+      const [movimientosRes, proyectosRes, categoriasRes] = await Promise.all([
+        supabase.from("movements").select("*").limit(20000),
+        supabase.from("projects").select("*").order("nombre"),
+        supabase.from("categories").select("*").order("tipo").order("nombre"),
+      ]);
+
+      const movimientos = movimientosRes.data ?? [];
+      const proyectos = proyectosRes.data ?? [];
+      const categorias = categoriasRes.data ?? [];
+
+      // La moneda no la decide el modelo: es la que Beno tiene elegida en
+      // la app. Acá se usa ARS y la caja ofrece el link a la pantalla, que
+      // sí tiene el conmutador.
+      const moneda = "ARS" as const;
+      const filtros = { estado: "efectuado" as const };
+
+      const proyecto = resolverProyecto(decision.argumento, proyectos);
+
+      if (proyecto === "ambiguo") {
+        return {
+          clase: "aviso",
+          titulo: "No sé de qué proyecto me hablás",
+          cuerpo: `Hay más de uno que coincide con “${decision.argumento}”.`,
+        };
+      }
+
+      if (proyecto) {
+        const b = calcularBalancesProyecto(
+          movimientos,
+          proyectos,
+          categorias,
+          proyecto.id,
+          moneda,
+          filtros,
+        );
+
+        return {
+          clase: "texto",
+          destino: "consultas",
+          titulo: proyecto.nombre,
+          cuerpo: [
+            `Ingresos: ${formatMoney(b.efectuado.ingresos, moneda)}`,
+            `Egresos: ${formatMoney(b.efectuado.egresos, moneda)}`,
+            `Balance: ${formatMoney(b.efectuado.balance, moneda)}`,
+            `Sobre ${b.cantidadMovimientos} movimientos.`,
+          ].join("\n"),
+        };
+      }
+
+      const b = calcularBalances(
+        movimientos,
+        proyectos,
+        categorias,
+        moneda,
+        filtros,
+      );
+
+      return {
+        clase: "texto",
+        destino: "consultas",
+        titulo: "Balance general",
+        cuerpo: [
+          `Ingresos: ${formatMoney(b.efectuado.ingresos, moneda)}`,
+          `Egresos: ${formatMoney(b.efectuado.egresos, moneda)}`,
+          `Balance: ${formatMoney(b.efectuado.balance, moneda)}`,
+          `Sobre ${b.cantidadMovimientos} movimientos.`,
+        ].join("\n"),
+      };
+    }
 
     default:
       return {
