@@ -424,10 +424,15 @@ un movimiento porque no existe el camino.
 
 **Ojo con lo que se puede importar.** El MCP no corre dentro de Next, así
 que **no puede importar ninguno de los módulos marcados con
-`server-only`** — son 13, entre ellos `queries.ts` — ni nada que use
+`server-only`** — son 11, entre ellos `queries.ts` — ni nada que use
 `next/headers`. Lo que sí importa, y es lo que importa: los módulos
-puros con las reglas de dominio (`balances`, `prorrateo`, `fx`,
-`dates`, `format`, `schemas`). Por eso `mcp/datos.mts` reescribe **las
+puros con las reglas de dominio (`aprendizaje`, `balances`, `prorrateo`,
+`fx`, `dates`, `format`, `schemas`, `quiz`).
+
+Para saber cuáles son, buscá el import y no la palabra:
+`grep -lE '^import "server-only"' src/lib/*.ts`. Buscar el texto suelto
+da falsos positivos — `aprendizaje.ts` menciona `server-only` en un
+comentario justamente para decir que **no** lo usa. Por eso `mcp/datos.mts` reescribe **las
 consultas**, que son triviales, y **ninguna regla**: el prorrateo sigue
 teniendo un solo lugar donde vive.
 

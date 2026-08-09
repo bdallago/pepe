@@ -3,15 +3,26 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import {
+  blockProgress,
+  isComplete,
+  nextSession,
+  orderedSessions,
+  trackProgress,
+} from "@/lib/aprendizaje";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
 import { formatMoney } from "@/lib/format";
 import { formatDate } from "@/lib/dates";
 
 import {
+  buscarLecciones,
   getBitacora,
+  getBlocks,
   getCategorias,
   getMovimientos,
   getProyectos,
+  getSessions,
+  getTracks,
 } from "./datos.mts";
 
 /**
@@ -248,6 +259,163 @@ server.registerTool(
     };
   },
 );
+
+server.registerTool(
+  "buscar_lecciones",
+  {
+    title: "Buscar lecciones",
+    description:
+      "Busca en las lecciones aprendidas por texto completo en español. " +
+      "Incluye las archivadas a propósito: un proyecto cerrado no ensucia " +
+      "las pantallas, pero su conocimiento no se pierde.",
+    inputSchema: {
+      consulta: z.string().min(1).describe("Qué buscar. Basta con el tema."),
+      limite: z.number().int().min(1).max(25).default(10),
+    },
+  },
+  async ({ consulta, limite }) => {
+    const resultados = await buscarLecciones(consulta, limite);
+
+    if (resultados.length === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Ninguna lección coincide con "${consulta}".`,
+          },
+        ],
+      };
+    }
+
+    const texto = resultados
+      .map((r, i) => {
+        const marca = r.archivado_en ? " [archivada]" : "";
+        return (
+          `${i + 1}. ${r.titulo}${marca}\n` +
+          `   ${formatDate(r.fecha)} · ${r.categoria} · origen: ${r.origen}\n` +
+          `   ${r.contenido}`
+        );
+      })
+      .join("\n\n");
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          // Se aclara el modo para que nadie lea "no hay resultados" como
+          // "no existe la lección": si las palabras no aparecen en el
+          // texto, el full-text no la encuentra aunque el tema sea ese.
+          text:
+            `${resultados.length} lecciones (búsqueda por texto, sin ` +
+            `similitud semántica):\n\n${texto}`,
+        },
+      ],
+    };
+  },
+);
+
+server.registerTool(
+  "ver_roadmap",
+  {
+    title: "Ver el roadmap",
+    description:
+      "El temario de estudio: tracks, bloques y sesiones con su progreso. " +
+      "El progreso de cada sesión es doble — leer la teoría y aplicarla son " +
+      "dos cosas distintas — así que se informan por separado.",
+    inputSchema: {
+      track: z
+        .string()
+        .optional()
+        .describe("Slug del track. Omitilo para ver todos."),
+      solo_pendientes: z
+        .boolean()
+        .default(false)
+        .describe("Mostrar únicamente las sesiones que faltan completar."),
+    },
+  },
+  async ({ track, solo_pendientes }) => {
+    const [tracks, bloques, sesiones] = await Promise.all([
+      getTracks(),
+      getBlocks(),
+      getSessions(),
+    ]);
+
+    const elegidos = track ? tracks.filter((t) => t.slug === track) : tracks;
+
+    if (elegidos.length === 0) {
+      const slugs = tracks.map((t) => t.slug).join(", ");
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: `No existe el track "${track}". Los que hay: ${slugs}.`,
+          },
+        ],
+      };
+    }
+
+    const partes = elegidos.map((t) => {
+      const progreso = trackProgress(t.id, bloques, sesiones);
+      const proxima = nextSession(t.id, bloques, sesiones);
+      const ordenadas = orderedSessions(t.id, bloques, sesiones);
+
+      const lineas: string[] = [
+        `# ${t.nombre} (${t.slug})`,
+        `Progreso: ${progreso.hechas}/${progreso.total} sesiones (${progreso.pct} %)`,
+        proxima ? `Próxima: ${proxima.titulo}` : `Track terminado.`,
+        ``,
+      ];
+
+      const deBloque = bloques.filter((b) => b.track_id === t.id);
+
+      for (const b of deBloque) {
+        const p = blockProgress(b.id, sesiones);
+        const suyas = ordenadas.filter((s) => s.block_id === b.id);
+        const visibles = solo_pendientes
+          ? suyas.filter((s) => !isComplete(s))
+          : suyas;
+
+        if (visibles.length === 0) continue;
+
+        lineas.push(`## ${b.titulo} — ${p.hechas}/${p.total}`);
+        for (const s of visibles) lineas.push(`   ${lineaSesion(s)}`);
+        lineas.push(``);
+      }
+
+      // Las sesiones sin bloque son las que salieron de convertir una
+      // sugerencia (spec 6.4): nacen al final del track y a propósito
+      // fuera del temario importado. Sin este grupo no aparecerían en
+      // ninguna parte, porque el Roadmap agrupa por bloque.
+      const sueltas = ordenadas.filter((s) => s.block_id === null);
+      const visiblesSueltas = solo_pendientes
+        ? sueltas.filter((s) => !isComplete(s))
+        : sueltas;
+
+      if (visiblesSueltas.length > 0) {
+        lineas.push(`## Agregadas`);
+        for (const s of visiblesSueltas) lineas.push(`   ${lineaSesion(s)}`);
+      }
+
+      return lineas.join("\n").trimEnd();
+    });
+
+    return {
+      content: [{ type: "text" as const, text: partes.join("\n\n") }],
+    };
+  },
+);
+
+/** Una sesión con su progreso doble, que es el punto de la sección. */
+function lineaSesion(s: {
+  titulo: string;
+  teoria_hecha: boolean;
+  aplicacion_hecha: boolean;
+}): string {
+  const teoria = s.teoria_hecha ? "teoría ✓" : "teoría ·";
+  const aplicacion = s.aplicacion_hecha ? "aplicación ✓" : "aplicación ·";
+  return `${s.titulo}  [${teoria} | ${aplicacion}]`;
+}
 
 // ---------------------------------------------------------------------
 

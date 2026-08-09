@@ -1,10 +1,14 @@
 import { getUserId, supabase } from "./supabase.mts";
 
 import type {
+  Block,
   Category,
   DailyLog,
+  Database,
   Movement,
   Project,
+  StudySession,
+  Track,
 } from "@/lib/supabase/database.types";
 
 /**
@@ -91,5 +95,88 @@ export async function getBitacora(desde?: string, hasta?: string): Promise<Daily
   const { data, error } = await q.limit(500);
 
   if (error) throw new Error(`No se pudo leer la bitácora: ${error.message}`);
+  return data ?? [];
+}
+
+// ---------------------------------------------------------------------
+// Aprendizaje
+// ---------------------------------------------------------------------
+
+export async function getTracks(): Promise<Track[]> {
+  const userId = await getUserId();
+
+  const { data, error } = await supabase
+    .from("tracks")
+    .select("*")
+    .eq("user_id", userId)
+    .is("archivado_en", null)
+    .order("orden");
+
+  if (error) throw new Error(`No se pudieron leer los tracks: ${error.message}`);
+  return data ?? [];
+}
+
+export async function getBlocks(): Promise<Block[]> {
+  const userId = await getUserId();
+
+  const { data, error } = await supabase
+    .from("blocks")
+    .select("*")
+    .eq("user_id", userId)
+    .is("archivado_en", null)
+    .order("orden");
+
+  if (error) throw new Error(`No se pudieron leer los bloques: ${error.message}`);
+  return data ?? [];
+}
+
+export async function getSessions(): Promise<StudySession[]> {
+  const userId = await getUserId();
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .is("archivado_en", null)
+    .order("orden")
+    .limit(5000);
+
+  if (error) throw new Error(`No se pudieron leer las sesiones: ${error.message}`);
+  return data ?? [];
+}
+
+export type ResultadoLeccion =
+  Database["public"]["Functions"]["buscar_lecciones_hibrido"]["Returns"][number];
+
+/**
+ * Búsqueda de lecciones, **solo full-text**.
+ *
+ * La búsqueda de la app es híbrida: full-text en español + similitud
+ * vectorial, fusionados con Reciprocal Rank Fusion. Acá se llama al mismo
+ * RPC pero sin `p_embedding`, y eso **no es una versión degradada por
+ * accidente**: es el modo que la propia app declara válido cuando el
+ * embedding falla o tarda ("eso no es un error", regla 7). Generarlo
+ * requiere los 266 MB del modelo, que hoy viven dentro de la función de
+ * Vercel.
+ *
+ * Además, con el corpus actual es lo que mejor midió: con 6 lecciones el
+ * full-text solo acertó 5/5. Cuando haya lecciones reales y variadas hay
+ * que volver a medirlo, y ahí se decide si vale traer el modelo acá.
+ *
+ * `?? undefined` y no `null`: omitir el parámetro deja que Postgres aplique
+ * su `default null`. Los tipos generados no aceptan null en un argumento
+ * con default.
+ */
+export async function buscarLecciones(
+  consulta: string,
+  limite: number,
+): Promise<ResultadoLeccion[]> {
+  const { data, error } = await supabase.rpc("buscar_lecciones_hibrido", {
+    p_consulta: consulta,
+    p_embedding: undefined,
+    p_limite: limite,
+  });
+
+  if (error) throw new Error(`Falló la búsqueda: ${error.message}`);
   return data ?? [];
 }
