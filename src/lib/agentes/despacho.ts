@@ -259,7 +259,18 @@ export async function despachar(
     }
 
     case "lecciones_tema": {
-      const tema = decision.argumento?.trim();
+      // Cuando Beno elige una opción de la pregunta de abajo, el argumento
+      // vuelve como "tema — slug". Se parte acá, explícito.
+      //
+      // Sin esto igual "funcionaba", pero por accidente: `resolverProyecto`
+      // encontraba el proyecto porque su NOMBRE quedaba adentro del string
+      // una vez normalizado, no por el slug. Eso se rompe con cualquier
+      // proyecto cuyo slug no derive de su nombre —Pepe ya tiene uno,
+      // `gentius`, que se llamaba HRKit— y además arrastraba el slug hasta
+      // el prompt del modelo y hasta el texto en pantalla ("no encontré
+      // material sobre «clientes — proder»").
+      const [temaCrudo, slugElegido] = partirArgumento(decision.argumento);
+      const tema = temaCrudo;
 
       if (!tema) {
         return {
@@ -274,12 +285,10 @@ export async function despachar(
         .select("*")
         .order("nombre");
 
-      const proyecto = resolverProyecto(decision.argumento, proyectos ?? []);
+      // Si vino de la pregunta, el slug manda y no se adivina de nuevo.
+      const proyecto = resolverProyecto(slugElegido ?? tema, proyectos ?? []);
 
       if (!proyecto || proyecto === "ambiguo") {
-        // El argumento de la opción lleva tema y proyecto pegados: al
-        // volver, `resolverProyecto` reconoce el nombre adentro de la
-        // frase igual que reconoce "cómo viene Proder".
         return {
           clase: "pregunta",
           titulo: `¿De qué proyecto saco lecciones sobre “${tema}”?`,
@@ -321,4 +330,25 @@ export async function despachar(
           "Probá con algo como “cómo viene Proder”, “qué me toca hoy” o “qué estoy pagando que no uso”.",
       };
   }
+}
+
+/**
+ * Parte el argumento de `lecciones_tema` en tema y slug de proyecto.
+ *
+ * La rama arma las opciones de su propia pregunta como `"tema — slug"`,
+ * así que este es el único lugar que conoce ese formato: entra por acá y
+ * sale partido. Si nunca hubo pregunta de por medio, el slug es `null` y
+ * el tema es la frase entera.
+ *
+ * Se parte por el guion largo con espacios, que es el separador que arma
+ * la propia rama. Un tema escrito por Beno que lo contenga se partiría
+ * mal, pero para eso tendría que tipear " — " a mano.
+ */
+function partirArgumento(argumento: string | null): [string, string | null] {
+  const texto = argumento?.trim() ?? "";
+  const corte = texto.lastIndexOf(" — ");
+
+  if (corte === -1) return [texto, null];
+
+  return [texto.slice(0, corte).trim(), texto.slice(corte + 3).trim() || null];
 }
