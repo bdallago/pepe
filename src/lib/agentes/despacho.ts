@@ -2,14 +2,25 @@ import "server-only";
 
 import { resolverProyecto } from "@/lib/agentes/resolver";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
-import { formatDate } from "@/lib/dates";
+import { addDays, compareISO, formatDate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
+import { proximoVencimiento } from "@/lib/recurrences";
 import { generarRetro } from "@/lib/retro";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
 import type { SupabaseClient } from "@/lib/supabase/server";
+import type { Recurrence } from "@/lib/supabase/database.types";
 import type { Decision, RespuestaAgente } from "@/lib/agentes/tipos";
+
+/**
+ * Qué tan lejos mira el agente de vencimientos.
+ *
+ * Treinta días es un ciclo mensual entero: alcanza para que toda
+ * recurrencia mensual aparezca al menos una vez, y no tanto como para que
+ * la lista deje de ser "lo que se viene".
+ */
+const DIAS_DE_VENCIMIENTO_PROXIMO = 30;
 
 /**
  * Llama al especialista que corresponde y arma la respuesta para pantalla.
@@ -67,6 +78,62 @@ export async function despachar(
         titulo: "Encontré suscripciones que quizá no estés usando",
         cuantas: reporte.propuestos,
         href: "/bandeja",
+      };
+    }
+
+    case "vencimientos": {
+      // Es la otra pregunta sobre lo recurrente, y no es la de arriba:
+      // `suscripciones` mira lo que Beno **no usa** (regla 6.f: se detecta
+      // sobre movimientos, porque casi nada está declarado como
+      // recurrencia). Acá lo que se pregunta es qué se viene, y eso solo
+      // lo sabe lo que sí está declarado en `recurrences`.
+      const { data, error } = await supabase
+        .from("recurrences")
+        .select("*")
+        .eq("activa", true);
+
+      if (error) {
+        return {
+          clase: "aviso",
+          titulo: "No pude mirar los vencimientos",
+          cuerpo: error.message,
+        };
+      }
+
+      const hoy = todayISO();
+      const limite = addDays(hoy, DIAS_DE_VENCIMIENTO_PROXIMO);
+
+      // `proximoVencimiento` es de `lib/recurrences.ts`, el módulo puro
+      // donde vive esa regla y que ya usan el cron y la pantalla de
+      // Recurrentes. Repetir acá el cálculo del día efectivo (el 31 en un
+      // mes de 30) sería copiarse una regla que ya tiene dueño.
+      const proximos = (data ?? [])
+        .map((recurrencia) => ({
+          recurrencia,
+          fecha: proximoVencimiento(recurrencia, hoy),
+        }))
+        .filter(
+          (v): v is { recurrencia: Recurrence; fecha: string } =>
+            v.fecha !== null && v.fecha <= limite,
+        )
+        .sort((a, b) => compareISO(a.fecha, b.fecha));
+
+      if (proximos.length === 0) {
+        return {
+          clase: "aviso",
+          titulo: "No se te viene nada",
+          cuerpo: `Ninguna recurrencia activa vence en los próximos ${DIAS_DE_VENCIMIENTO_PROXIMO} días.`,
+        };
+      }
+
+      return {
+        clase: "lista",
+        destino: "vencimientos",
+        titulo: `Lo que se te viene en los próximos ${DIAS_DE_VENCIMIENTO_PROXIMO} días`,
+        items: proximos.map(({ recurrencia, fecha }) => ({
+          titulo: recurrencia.descripcion,
+          detalle: `${formatMoney(recurrencia.monto_origen, recurrencia.moneda_origen)} · vence el ${formatDate(fecha)}`,
+        })),
       };
     }
 

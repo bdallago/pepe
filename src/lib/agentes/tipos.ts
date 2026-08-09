@@ -16,6 +16,7 @@ export const DESTINOS = [
   "retro",
   "lecciones_tema",
   "suscripciones",
+  "vencimientos",
   "movimientos",
   "desconocido",
 ] as const;

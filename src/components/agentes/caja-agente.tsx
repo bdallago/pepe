@@ -143,6 +143,7 @@ const ETIQUETA_DESTINO: Record<Destino, string> = {
   retro: "Retro",
   lecciones_tema: "Lecciones",
   suscripciones: "Suscripciones",
+  vencimientos: "Vencimientos",
   movimientos: "Movimientos",
   desconocido: "—",
 };

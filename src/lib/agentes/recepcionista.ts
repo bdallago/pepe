@@ -6,8 +6,9 @@ import { decisionSchema, type Decision } from "@/lib/agentes/tipos";
 /**
  * Decide a qué especialista va una frase.
  *
- * Usa `MODELO_CHICO`: es una clasificación entre ocho opciones con salida
- * de decenas de tokens. Pagar razonamiento acá sería tirar latencia.
+ * Usa `MODELO_CHICO`: es una clasificación entre un puñado de opciones
+ * con salida de decenas de tokens. Pagar razonamiento acá sería tirar
+ * latencia.
  *
  * No decide nada más. El especialista hace su trabajo, y resolver el
  * argumento a un id es determinístico (`resolver.ts`).
@@ -30,6 +31,21 @@ import { decisionSchema, type Decision } from "@/lib/agentes/tipos";
  * regla generaliza a nombres que no están en la lista ("el hosting" →
  * 0.3), los ejemplos anclan los que el modelo reconoce demasiado bien.
  * Si sacás los ejemplos, "Claude Code" vuelve a 1.
+ *
+ * **El tema de plata le gana al verbo de buscar, y hubo que decirlo
+ * aparte.** Medido el 2026-08-09: "qué anotaciones tengo sobre gestión de
+ * presupuestos" se iba a `consultas` con 0.8, o sea que la app le
+ * contestaba un balance a una pregunta sobre lo que había escrito. La
+ * palabra "presupuestos" pesaba más que "anotaciones". De ahí los
+ * ejemplos con "anotaciones"/"apuntes" en el bullet de `buscador` y la
+ * línea que separa los dos: lo que Beno **escribió** es `buscador` aunque
+ * el tema sea de plata; `consultas` es solo cuando pide números.
+ *
+ * Ojo con qué palabras se ponen en esa línea. La primera versión usaba
+ * "pricing" como ejemplo de tema y eso subió el ancla documentada de
+ * "pricing" suelto de 0.3 a 0.8 — justo la ambigüedad que la regla
+ * mecánica está para bajar. Nombrar una palabra en el prompt la vuelve
+ * confiable en todos lados, no solo en el caso que estabas arreglando.
  */
 
 const SISTEMA = `Sos el recepcionista de Pepe, la app personal de Beno.
@@ -42,7 +58,8 @@ Los especialistas:
 - "consultas": preguntas sobre plata ya cargada. Ej: "cómo viene Proder",
   "cuánto gasté en herramientas este año", "cuál es mi balance".
 - "buscador": buscar algo que ya está escrito, lecciones o bitácora. Ej:
-  "tenía algo sobre backlogs", "qué había anotado de clientes".
+  "tenía algo sobre backlogs", "qué había anotado de clientes", "qué
+  anotaciones tengo sobre pricing", "qué apuntes tengo de contratos".
 - "estudio": qué estudiar o cómo viene el temario. Ej: "qué me toca hoy",
   "cómo voy con el track de PM", "qué estudio ahora".
 - "retro": cerrar un proyecto y hacer su retrospectiva. Ej: "cerrá Proder",
@@ -51,7 +68,15 @@ Los especialistas:
   lo que aprendí con clientes", "qué aprendí sobre pricing".
 - "suscripciones": gastos recurrentes que quizá no usa. Ej: "qué estoy
   pagando que no uso", "revisá mis suscripciones".
+- "vencimientos": gastos recurrentes que están por vencer o cobrarse
+  pronto. Ej: "tengo algún gasto recurrente próximo a vencer", "qué se me
+  viene este mes".
 - "desconocido": no encaja en ninguno.
+
+Si Beno pregunta por algo que ESCRIBIÓ (anotaciones, apuntes, notas,
+bitácora, lecciones), es "buscador" aunque el tema sea de plata:
+"presupuestos", "facturación" o "costos" son temas sobre los que se
+escribe. "consultas" es solo cuando pide NÚMEROS de movimientos cargados.
 
 En "argumento" poné el dato concreto sobre el que trabaja el especialista:
 el nombre del proyecto para "retro", el tema para "lecciones_tema", lo que
