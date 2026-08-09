@@ -2,6 +2,7 @@ import "server-only";
 
 import { resolverProyecto } from "@/lib/agentes/resolver";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
+import { formatDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
 import { generarRetro } from "@/lib/retro";
@@ -159,31 +160,53 @@ export async function despachar(
         return {
           clase: "aviso",
           titulo: "¿Qué querés buscar?",
-          cuerpo: "Decime un tema y te busco en las lecciones.",
+          cuerpo: "Decime un tema y te busco en las lecciones y en la bitácora.",
         };
       }
 
-      // Sin embedding: es el modo que la app declara válido cuando el
-      // embedding falla o tarda (regla 7), y con el corpus actual es el
-      // que mejor midió. `?? undefined` y no null: omitir el parámetro
-      // deja que Postgres aplique su default.
-      const { data, error } = await supabase.rpc("buscar_lecciones_hibrido", {
-        p_consulta: consulta,
-        p_embedding: undefined,
-        p_limite: 5,
-      });
+      // Beno pregunta por sus "anotaciones", no por sus "lecciones": lo
+      // que escribió puede estar en cualquiera de las dos tablas, así que
+      // se buscan las dos y se muestran juntas. Cada ítem dice de dónde
+      // salió, que es la única parte que no puede quedar implícita.
+      const [leccionesRes, bitacoraRes] = await Promise.all([
+        // Sin embedding: es el modo que la app declara válido cuando el
+        // embedding falla o tarda (regla 7), y con el corpus actual es el
+        // que mejor midió. `?? undefined` y no null: omitir el parámetro
+        // deja que Postgres aplique su default.
+        supabase.rpc("buscar_lecciones_hibrido", {
+          p_consulta: consulta,
+          p_embedding: undefined,
+          p_limite: 5,
+        }),
+        buscarEnBitacora(supabase, consulta),
+      ]);
 
-      if (error) {
-        return {
-          clase: "aviso",
-          titulo: "No pude buscar",
-          cuerpo: error.message,
-        };
-      }
+      const items = [
+        ...(leccionesRes.data ?? []).map((r) => ({
+          titulo: `Lección · ${r.titulo}`,
+          detalle: r.contenido,
+        })),
+        ...(bitacoraRes.data ?? []).map((d) => ({
+          titulo: `Bitácora · ${formatDate(d.fecha)}`,
+          detalle: d.contenido,
+        })),
+      ];
 
-      const resultados = data ?? [];
+      if (items.length === 0) {
+        // Que falle una de las dos no tapa lo que encontró la otra
+        // (mismo criterio que la regla 7: media búsqueda es búsqueda).
+        // Pero si no hay nada que mostrar y además hubo error, se dice,
+        // en vez de hacer pasar una falla por "no hay resultados".
+        const error = leccionesRes.error ?? bitacoraRes.error;
 
-      if (resultados.length === 0) {
+        if (error) {
+          return {
+            clase: "aviso",
+            titulo: "No pude buscar",
+            cuerpo: error.message,
+          };
+        }
+
         return {
           clase: "aviso",
           titulo: `No encontré nada sobre “${consulta}”`,
@@ -195,11 +218,8 @@ export async function despachar(
       return {
         clase: "lista",
         destino: "buscador",
-        titulo: `Encontré ${resultados.length} sobre “${consulta}”`,
-        items: resultados.map((r) => ({
-          titulo: r.titulo,
-          detalle: r.contenido,
-        })),
+        titulo: `Encontré ${items.length} sobre “${consulta}”`,
+        items,
       };
     }
 
@@ -330,6 +350,77 @@ export async function despachar(
           "Probá con algo como “cómo viene Proder”, “qué me toca hoy” o “qué estoy pagando que no uso”.",
       };
   }
+}
+
+/**
+ * Palabras que no aportan nada a un `ilike` y que, si se dejan, hacen que
+ * cualquier entrada de bitácora matchee. El full-text de lecciones las
+ * saca solo (las stopwords del diccionario `spanish`); acá hay que
+ * hacerlo a mano porque `ilike` no sabe de diccionarios.
+ */
+const PALABRAS_VACIAS = new Set([
+  "al", "algo", "ante", "como", "con", "cosa", "cual", "cuál", "de", "del",
+  "donde", "dónde", "el", "ella", "ellos", "en", "es", "esa", "ese", "esta",
+  "este", "esto", "fue", "hay", "la", "las", "le", "lo", "los", "me", "mi",
+  "mis", "más", "mas", "muy", "no", "para", "por", "que", "qué", "se", "ser",
+  "si", "su", "sus", "sobre", "también", "tengo", "un", "una", "unas", "uno",
+  "unos", "ya",
+]);
+
+/**
+ * Parte la consulta en palabras buscables.
+ *
+ * Se descartan las vacías y las de una sola letra, y se corta en ocho: el
+ * `or` de PostgREST viaja en la URL y una frase larga no aporta precisión,
+ * la diluye.
+ */
+function palabrasDeConsulta(consulta: string): string[] {
+  const palabras = consulta
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((p) => p.length >= 2 && !PALABRAS_VACIAS.has(p));
+
+  return [...new Set(palabras)].slice(0, 8);
+}
+
+/**
+ * Busca en la bitácora por texto plano.
+ *
+ * No hay RPC híbrido para `daily_log`: el índice de texto y el embedding
+ * viven solo en `lessons`. Acá la búsqueda es un `ilike` sobre
+ * `contenido`, que es bastante peor — y está bien que se note, porque la
+ * respuesta ya avisa que busca por texto y que las palabras exactas
+ * importan.
+ *
+ * Las palabras se unen con **OR y no con AND**, por el mismo motivo por
+ * el que el full-text de lecciones se cambió a OR: uno no se acuerda de
+ * la frase que escribió, se acuerda del tema. Con AND, "gestión de
+ * presupuestos" no encuentra la entrada que habla del presupuesto.
+ *
+ * **No se filtra `archivado_en`.** Es la regla 4 de AGENTS.md: lo
+ * archivado se excluye de las listas de la interfaz, pero sigue
+ * participando de la búsqueda. Un proyecto cerrado no tiene que ensuciar
+ * las pantallas, pero su conocimiento no se pierde — y acá Beno está
+ * pidiendo justamente que se busque. Mismo criterio que el RPC de
+ * lecciones, que tampoco lo filtra.
+ */
+async function buscarEnBitacora(supabase: SupabaseClient, consulta: string) {
+  const palabras = palabrasDeConsulta(consulta);
+
+  const base = supabase
+    .from("daily_log")
+    .select("fecha, contenido")
+    .order("fecha", { ascending: false })
+    .limit(5);
+
+  // Si no quedó ninguna palabra (una consulta de un caracter, o toda de
+  // palabras vacías) se busca la frase entera. `%` y `_` se sacan porque
+  // son comodines de LIKE y vendrían del texto del usuario.
+  if (palabras.length === 0) {
+    return await base.ilike("contenido", `%${consulta.replace(/[%_]/g, " ")}%`);
+  }
+
+  return await base.or(palabras.map((p) => `contenido.ilike.%${p}%`).join(","));
 }
 
 /**
