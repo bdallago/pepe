@@ -150,6 +150,57 @@ export async function despachar(
       };
     }
 
+    case "buscador": {
+      const consulta = decision.argumento?.trim();
+
+      if (!consulta) {
+        return {
+          clase: "aviso",
+          titulo: "¿Qué querés buscar?",
+          cuerpo: "Decime un tema y te busco en las lecciones.",
+        };
+      }
+
+      // Sin embedding: es el modo que la app declara válido cuando el
+      // embedding falla o tarda (regla 7), y con el corpus actual es el
+      // que mejor midió. `?? undefined` y no null: omitir el parámetro
+      // deja que Postgres aplique su default.
+      const { data, error } = await supabase.rpc("buscar_lecciones_hibrido", {
+        p_consulta: consulta,
+        p_embedding: undefined,
+        p_limite: 5,
+      });
+
+      if (error) {
+        return {
+          clase: "aviso",
+          titulo: "No pude buscar",
+          cuerpo: error.message,
+        };
+      }
+
+      const resultados = data ?? [];
+
+      if (resultados.length === 0) {
+        return {
+          clase: "aviso",
+          titulo: `No encontré nada sobre “${consulta}”`,
+          cuerpo:
+            "La búsqueda es por texto, así que si no te acordás de las palabras exactas puede no aparecer.",
+        };
+      }
+
+      return {
+        clase: "lista",
+        destino: "buscador",
+        titulo: `Encontré ${resultados.length} sobre “${consulta}”`,
+        items: resultados.map((r) => ({
+          titulo: r.titulo,
+          detalle: r.contenido,
+        })),
+      };
+    }
+
     default:
       return {
         clase: "aviso",
