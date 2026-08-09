@@ -59,7 +59,19 @@ export type RespuestaAgente =
       clase: "lista";
       destino: Destino;
       titulo: string;
-      items: { titulo: string; detalle: string }[];
+      items: {
+        titulo: string;
+        detalle: string;
+        /**
+         * El dato concreto que justifica el ítem, cuando lo hay. Nace en
+         * las sugerencias de estudio (6.4), donde es la salvaguarda
+         * contra el consejo genérico: va como campo aparte —y no pegado
+         * al detalle— para que la pantalla lo pueda destacar igual que
+         * la de Sugerencias. Si se mezcla con la prosa, deja de servir
+         * para descartar de un vistazo, que es todo su punto.
+         */
+        ancla?: string;
+      }[];
     }
   | {
       clase: "propuestas";

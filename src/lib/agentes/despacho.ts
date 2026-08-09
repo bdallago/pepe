@@ -162,6 +162,20 @@ export async function despachar(
         items: sugerencias.map((s) => ({
           titulo: s.titulo,
           detalle: s.motivo,
+          // El `ancla` es la salvaguarda de 6.4 contra el consejo
+          // genérico: el dato de Beno que justifica la sugerencia. Tirarlo
+          // acá debilitaba justo lo que la función está construida para
+          // garantizar — quedaba un motivo lindo sin nada que lo sostenga,
+          // que se lee igual que un consejo de manual.
+          //
+          // `consigna` NO entra, y es una decisión, no un olvido: la caja
+          // no tiene el botón de "convertir en sesión" —eso vive en la
+          // pantalla de Sugerencias—, así que el qué-hacer no se puede
+          // accionar desde acá. Y cuatro sugerencias con motivo + ancla +
+          // consigna convierten una caja de respuesta rápida en un muro de
+          // texto donde el ancla se pierde entre la prosa: el mismo daño
+          // que este cambio vino a arreglar.
+          ancla: s.ancla,
         })),
       };
     }

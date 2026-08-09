@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Quote, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -235,11 +235,27 @@ function Respuesta({
           <p className="text-sm font-semibold">{respuesta.titulo}</p>
           <ul className="space-y-3">
             {respuesta.items.map((i, n) => (
-              <li key={n}>
+              <li key={n} className="space-y-1">
                 <p className="text-sm font-medium">{i.titulo}</p>
                 <p className="text-muted-foreground text-sm whitespace-pre-line">
                   {i.detalle}
                 </p>
+                {/*
+                  El dato que lo justifica, separado y a la vista. Mismo
+                  tratamiento que en la pantalla de Sugerencias a propósito:
+                  es la misma información y tiene que leerse igual en las
+                  dos superficies. Citado y aparte, se descarta de un
+                  vistazo lo que no se apoya en nada.
+                */}
+                {i.ancla && (
+                  <p className="text-muted-foreground border-l-2 pl-3 text-xs">
+                    <Quote
+                      className="mr-1 inline size-3 align-[-1px]"
+                      aria-hidden="true"
+                    />
+                    {i.ancla}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
