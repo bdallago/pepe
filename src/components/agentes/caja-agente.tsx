@@ -226,6 +226,30 @@ function Respuesta({
           <pre className="cifra text-sm whitespace-pre-wrap">
             {respuesta.cuerpo}
           </pre>
+          {/*
+            Las observaciones van fuera del `pre`: son prosa y en
+            monoespaciada se leen mal. Cada una muestra el dato que la
+            sostiene citado y aparte, con el mismo tratamiento que el
+            `ancla` de una sugerencia — es la salvaguarda contra la
+            observación inventada, y solo sirve si se puede leer separada
+            del texto que justifica.
+          */}
+          {respuesta.observaciones && respuesta.observaciones.length > 0 && (
+            <ul className="space-y-3 border-t border-dashed pt-3">
+              {respuesta.observaciones.map((o, n) => (
+                <li key={n} className="space-y-1">
+                  <p className="text-sm">{o.texto}</p>
+                  <p className="text-muted-foreground border-l-2 pl-3 text-xs">
+                    <Quote
+                      className="mr-1 inline size-3 align-[-1px]"
+                      aria-hidden="true"
+                    />
+                    <span className="cifra">{o.dato}</span>
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
           <PieDeDestino destino={respuesta.destino} onElegir={onElegir} />
         </div>
       );

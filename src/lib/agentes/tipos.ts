@@ -50,6 +50,20 @@ export const decisionSchema = z.object({
   argumento: z.string().trim().max(300).nullable(),
   /** 0 a 1. Por debajo de UMBRAL_CONFIANZA se pregunta en vez de derivar. */
   confianza: z.number().min(0).max(1),
+  /**
+   * Si además de los datos pide interpretación ("analizame", "qué
+   * observaciones tenés", "qué ves"). Por ahora lo mira solo `consultas`,
+   * que con esto agrega dos o tres observaciones a los números.
+   *
+   * Lo decide el recepcionista y no un `includes` sobre la frase: el
+   * pedido de análisis se escribe de mil maneras y esa es justamente la
+   * clase de decisión para la que ya hay un modelo leyendo la frase.
+   *
+   * Es **opcional**, no `default(false)`: cuando Beno corrige el destino a
+   * mano, el handler arma la decisión sin pasar por el modelo y no hay
+   * análisis que pedir. Undefined y false valen lo mismo acá.
+   */
+  analizar: z.boolean().optional(),
 });
 
 export type Decision = z.infer<typeof decisionSchema>;
@@ -62,7 +76,24 @@ export const UMBRAL_CONFIANZA = 0.6;
  * componente no tenga que adivinar qué recibió.
  */
 export type RespuestaAgente =
-  | { clase: "texto"; destino: Destino; titulo: string; cuerpo: string }
+  | {
+      clase: "texto";
+      destino: Destino;
+      titulo: string;
+      cuerpo: string;
+      /**
+       * Interpretación de los números de `cuerpo`, cuando Beno la pidió.
+       *
+       * Va como campo aparte y no pegada al cuerpo por dos motivos. Uno:
+       * el cuerpo se renderiza con `cifra` (Fira Code tabular) porque ahí
+       * caen montos que tienen que alinear en vertical, y la prosa en
+       * monoespaciada se lee mal. Dos: el `dato` es la salvaguarda contra
+       * la observación inventada —el número que la sostiene— y funciona
+       * solo si se puede leer separado, igual que el `ancla` de las
+       * sugerencias de estudio.
+       */
+      observaciones?: { texto: string; dato: string }[];
+    }
   | {
       clase: "lista";
       destino: Destino;

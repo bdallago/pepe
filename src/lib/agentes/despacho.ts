@@ -1,5 +1,6 @@
 import "server-only";
 
+import { observarBalances } from "@/lib/agentes/observaciones";
 import { describirRango, resolverRango } from "@/lib/agentes/rango";
 import { resolverProyecto, resolverTrack } from "@/lib/agentes/resolver";
 import { computeToday, trackProgress } from "@/lib/aprendizaje";
@@ -7,11 +8,13 @@ import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
 import { addDays, compareISO, formatDate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
+import { mensajeDeErrorLLM } from "@/lib/llm";
 import { proximoVencimiento } from "@/lib/recurrences";
 import { generarRetro } from "@/lib/retro";
 import { crearSesionAlFinalDelTrack } from "@/lib/sesiones";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
+import type { Observacion } from "@/lib/agentes/observaciones";
 import type { Balances } from "@/lib/balances";
 import type { ItemDeHoy } from "@/lib/aprendizaje";
 import type { SupabaseClient } from "@/lib/supabase/server";
@@ -443,20 +446,46 @@ export async function despachar(
       const alcance = proyecto ? proyecto.nombre : "Balance general";
       const lineaRango = describirRango(rango);
 
+      const cuerpo = [
+        // Primero el rango y después los números, y no al revés: si el
+        // agente entendió otro período que el que Beno pidió, tiene que
+        // verlo antes de leer un solo monto.
+        lineaRango,
+        `Ingresos: ${formatMoney(balances.efectuado.ingresos, moneda)}`,
+        `Egresos: ${formatMoney(balances.efectuado.egresos, moneda)}`,
+        `Balance: ${formatMoney(balances.efectuado.balance, moneda)}`,
+        `Sobre ${balances.cantidadMovimientos} movimientos.`,
+      ];
+
+      // Las observaciones son un extra y no pueden tumbar la consulta
+      // (regla 7): si el modelo falla, los números salen igual y el aviso
+      // va discreto al pie. Sin movimientos no se gasta la llamada: no
+      // hay número contra el cual anclar nada.
+      let observaciones: Observacion[] | undefined;
+
+      if (decision.analizar && balances.cantidadMovimientos > 0) {
+        try {
+          observaciones = await observarBalances({
+            alcance,
+            rango: lineaRango,
+            moneda,
+            balances,
+            hoy,
+          });
+        } catch (error: unknown) {
+          console.warn("[agentes] observaciones:", error);
+          cuerpo.push(
+            `No pude sacar observaciones esta vez: ${mensajeDeErrorLLM(error)}`,
+          );
+        }
+      }
+
       return {
         clase: "texto",
         destino: "consultas",
         titulo: alcance,
-        cuerpo: [
-          // Primero el rango y después los números, y no al revés: si el
-          // agente entendió otro período que el que Beno pidió, tiene que
-          // verlo antes de leer un solo monto.
-          lineaRango,
-          `Ingresos: ${formatMoney(balances.efectuado.ingresos, moneda)}`,
-          `Egresos: ${formatMoney(balances.efectuado.egresos, moneda)}`,
-          `Balance: ${formatMoney(balances.efectuado.balance, moneda)}`,
-          `Sobre ${balances.cantidadMovimientos} movimientos.`,
-        ].join("\n"),
+        cuerpo: cuerpo.join("\n"),
+        observaciones,
       };
     }
 

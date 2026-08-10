@@ -85,6 +85,22 @@ import { decisionSchema, type Decision } from "@/lib/agentes/tipos";
  * hace falta nombrar la palabra: alcanza con diluir la regla mecánica.
  * Si tocás este prompt, **volvé a medir las cuatro ambiguas**, aunque lo
  * que hayas agregado no tenga nada que ver con ellas.
+ *
+ * **`analizar` se agregó con tres líneas y midiendo las dos puntas.** Es
+ * el campo que distingue "cuál es mi balance" de "analizame mis
+ * balances", y lo decide acá y no un `includes` sobre la frase: pedir
+ * interpretación se escribe de mil maneras. Medido el 2026-08-09, antes
+ * y después del agregado: los seis destinos siguen 6/6 y las cuatro
+ * ambiguas siguen en 0.3 las cuatro. Es lo mínimo que se podía agregar,
+ * y fue a propósito — por el párrafo de arriba.
+ *
+ * Un dato que salió de esa medición y del que depende el rango temporal:
+ * para "consultas" el modelo ya devuelve el período dentro del argumento
+ * ("mis balances según estos últimos 6 meses"), sin que haya que
+ * pedírselo. Por eso `rango.ts` lo lee de ahí y el prompt no dice una
+ * palabra sobre fechas. Si alguna vez el argumento vuelve recortado a
+ * "balances", el rango se pierde en silencio: es lo primero que hay que
+ * mirar si eso pasa.
  */
 
 const SISTEMA = `Sos el recepcionista de Pepe, la app personal de Beno.
@@ -148,6 +164,10 @@ el nombre del proyecto para "retro", el tema para "lecciones_tema", lo que
 busca para "buscador". Si el especialista no necesita ninguno, poné null.
 NO reformules ni traduzcas el argumento: copialo como lo escribió Beno.
 
+En "analizar" poné true SOLO si además de los datos pide que interpretes
+("analizame", "qué observaciones tenés", "qué ves"). Si pide un número o
+un dato y nada más, poné false.
+
 En "confianza" poné qué tan seguro estás, de 0 a 1. Si la frase podría ir
 a dos especialistas distintos, poné menos de 0.6 y elegí el más probable.
 
@@ -174,7 +194,7 @@ cerrarlo. Elegí el destino más probable igual, pero con confianza baja:
 Si la respuesta a alguna de las dos es sí, no aplica esta regla y la
 confianza puede ser alta.
 
-Respondé SOLO un objeto JSON con las claves: destino, argumento, confianza.`;
+Respondé SOLO un objeto JSON con las claves: destino, argumento, confianza, analizar.`;
 
 export async function decidirDestino(frase: string): Promise<Decision> {
   const { datos } = await completarJSON({
