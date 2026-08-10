@@ -24,6 +24,7 @@ import { formatDate, todayISO } from "@/lib/dates";
 import { convertir, round2, round4 } from "@/lib/fx";
 import { formatRate, parseAmount } from "@/lib/format";
 import { actualizarMovimiento, crearMovimiento } from "@/lib/actions/movements";
+import type { PrecargaMovimiento } from "@/lib/agentes/tipos";
 import type {
   EstadoMovimiento,
   Moneda,
@@ -86,9 +87,23 @@ interface Sugerencia {
  */
 const ESPERA_SUGERENCIA_MS = 600;
 
+/**
+ * De dónde salió cada campo cuando el formulario llegó precargado. Se apaga
+ * campo por campo apenas Beno lo toca.
+ */
+type Marcas = { [K in keyof PrecargaMovimiento["procedencia"]]: string | null };
+
 interface Props {
   /** Si viene, el formulario edita en vez de crear. */
   movimiento?: Movement;
+  /**
+   * Un movimiento dictado a la caja de agentes, ya leído y clasificado.
+   * Precarga los campos y muestra de dónde salió cada uno.
+   *
+   * Es excluyente con `movimiento`: uno edita algo que ya está guardado y
+   * el otro propone algo que todavía no existe.
+   */
+  precarga?: PrecargaMovimiento;
   /** Proyecto preseleccionado (vista por proyecto). */
   projectIdInicial?: string | null;
   onListo?: () => void;
@@ -99,6 +114,7 @@ interface Props {
 
 export function MovementForm({
   movimiento,
+  precarga,
   projectIdInicial,
   onListo,
   autoFocus,
@@ -123,19 +139,56 @@ export function MovementForm({
   // discutirle: pisarle lo que acaba de elegir sería peor que no sugerir.
   const decidioAMano = useRef(false);
 
-  const proyectoInicial =
-    movimiento?.project_id ??
-    (projectIdInicial !== undefined ? projectIdInicial : ultimoProyecto);
+  /*
+    Las marcas de dónde salió cada campo cuando el movimiento llegó
+    dictado. No es adorno: esto es un libro de cuentas, y si el modelo leyó
+    "15 mil" donde eran 15 y el formulario se ve igual que siempre, se
+    guarda sin mirar. Al tocar un campo, su marca se apaga — a partir de
+    ahí el valor es de Beno y decir de dónde vino sería mentir.
+  */
+  const [marcas, setMarcas] = useState<Marcas | null>(
+    () => precarga?.procedencia ?? null,
+  );
+
+  const apagarMarca = useCallback((campo: keyof Marcas) => {
+    setMarcas((previas) =>
+      previas && previas[campo] ? { ...previas, [campo]: null } : previas,
+    );
+  }, []);
+
+  /**
+   * La descripción que vino precargada. Ya se clasificó del lado del
+   * servidor con el mismo `sugerirClasificacion`, así que el efecto de
+   * abajo no vuelve a pedirla: sería la misma respuesta y una llamada de
+   * más mientras Beno mira el formulario.
+   */
+  const descripcionPrecargada = useRef(precarga?.descripcion ?? null);
+
+  const proyectoInicial = movimiento
+    ? movimiento.project_id
+    : precarga
+      ? // `null` es compartido y es una decisión, no un "sin dato": si el
+        // dictado no nombró ningún proyecto, va compartido y no al último
+        // usado.
+        precarga.projectId
+      : projectIdInicial !== undefined
+        ? projectIdInicial
+        : ultimoProyecto;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      fecha: movimiento?.fecha ?? todayISO(),
-      descripcion: movimiento?.descripcion ?? "",
-      tipo: movimiento?.tipo ?? "egreso",
+      // La fecha va en los valores iniciales y no en un `setValue` de
+      // después por una razón concreta: de ella sale la tasa con la que se
+      // convierte el monto. Si el formulario naciera en hoy y la fecha se
+      // corrigiera en un efecto, el par ARS/USD se armaría con la
+      // cotización de hoy para un gasto de la semana pasada (regla 1).
+      fecha: movimiento?.fecha ?? precarga?.fecha ?? todayISO(),
+      descripcion: movimiento?.descripcion ?? precarga?.descripcion ?? "",
+      tipo: movimiento?.tipo ?? precarga?.tipo ?? "egreso",
       estado: movimiento?.estado ?? "efectuado",
       project_id: proyectoInicial ?? "compartido",
-      category_id: movimiento?.category_id ?? "",
+      category_id: movimiento?.category_id ?? precarga?.categoryId ?? "",
       monto_ars: movimiento ? String(movimiento.monto_ars) : "",
       monto_usd: movimiento ? String(movimiento.monto_usd) : "",
       moneda_origen: movimiento?.moneda_origen ?? "ARS",
@@ -183,6 +236,10 @@ export function MovementForm({
       setSugerencia(null);
       return;
     }
+
+    // Lo que llegó dictado ya pasó por el histórico y, si hizo falta, por
+    // el modelo. Su marca de procedencia está en `marcas.categoria`.
+    if (texto === descripcionPrecargada.current) return;
 
     const controlador = new AbortController();
     const temporizador = setTimeout(async () => {
@@ -294,6 +351,26 @@ export function MovementForm({
     sincronizar(origen, valor, tasaEfectiva?.valor);
   }
 
+  /*
+    El monto dictado entra **por `escribirMonto`**, igual que si lo tipeara.
+    Setear `monto_ars` / `monto_usd` a mano dejaría el par inconsistente: el
+    efecto de arriba excluye a propósito esos dos campos de sus
+    dependencias (regla 3), así que nadie calcularía el derivado y el
+    formulario mostraría un importe en una moneda y nada en la otra.
+
+    Corre una sola vez, al montar. Puede hacerlo desde un efecto sin
+    arriesgar la tasa porque la fecha llegó en los valores iniciales: ya en
+    el primer render `tasaEfectiva` es la de la fecha del movimiento, no la
+    de hoy.
+  */
+  useEffect(() => {
+    if (!precarga) return;
+    escribirMonto(precarga.moneda, String(precarga.monto));
+    // Sin dependencias a propósito: es una precarga, no una sincronización.
+    // Volver a correrlo pisaría lo que Beno esté escribiendo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function onSubmit(values: FormValues) {
     const montoOrigen = parseAmount(
       values.moneda_origen === "ARS" ? values.monto_ars : values.monto_usd,
@@ -355,6 +432,7 @@ export function MovementForm({
 
   const proyectosDisponibles = editando ? projects : proyectosActivos;
   const descripcionRegister = register("descripcion");
+  const fechaRegister = register("fecha");
 
   return (
     <form
@@ -363,10 +441,17 @@ export function MovementForm({
       className="space-y-4"
     >
       <div className="space-y-2">
-        <Label htmlFor="descripcion">Descripción</Label>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="descripcion">Descripción</Label>
+          <Marca texto={marcas?.descripcion} />
+        </div>
         <Input
           id="descripcion"
           {...descripcionRegister}
+          onChange={(e) => {
+            apagarMarca("descripcion");
+            return descripcionRegister.onChange(e);
+          }}
           ref={(el) => {
             descripcionRegister.ref(el);
             descripcionRef.current = el;
@@ -384,11 +469,15 @@ export function MovementForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="tipo">Tipo</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="tipo">Tipo</Label>
+            <Marca texto={marcas?.tipo} />
+          </div>
           <Select
             value={tipo}
             onValueChange={(v) => {
               elegirAMano();
+              apagarMarca("tipo");
               setValue("tipo", v as TipoMovimiento);
             }}
           >
@@ -403,8 +492,19 @@ export function MovementForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="fecha">Fecha</Label>
-          <Input id="fecha" type="date" {...register("fecha")} />
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="fecha">Fecha</Label>
+            <Marca texto={marcas?.fecha} />
+          </div>
+          <Input
+            id="fecha"
+            type="date"
+            {...fechaRegister}
+            onChange={(e) => {
+              apagarMarca("fecha");
+              return fechaRegister.onChange(e);
+            }}
+          />
         </div>
       </div>
 
@@ -418,12 +518,16 @@ export function MovementForm({
                 importe real
               </span>
             ) : null}
+            {monedaOrigen === "ARS" ? <Marca texto={marcas?.monto} /> : null}
           </Label>
           <Input
             id="monto-ars"
             inputMode="decimal"
             value={montoArs}
-            onChange={(e) => escribirMonto("ARS", e.target.value)}
+            onChange={(e) => {
+              apagarMarca("monto");
+              escribirMonto("ARS", e.target.value);
+            }}
             placeholder="0"
             className={cn(
               "cifra",
@@ -440,12 +544,16 @@ export function MovementForm({
                 importe real
               </span>
             ) : null}
+            {monedaOrigen === "USD" ? <Marca texto={marcas?.monto} /> : null}
           </Label>
           <Input
             id="monto-usd"
             inputMode="decimal"
             value={montoUsd}
-            onChange={(e) => escribirMonto("USD", e.target.value)}
+            onChange={(e) => {
+              apagarMarca("monto");
+              escribirMonto("USD", e.target.value);
+            }}
             placeholder="0,00"
             className={cn(
               "cifra",
@@ -503,10 +611,16 @@ export function MovementForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="proyecto">Proyecto</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="proyecto">Proyecto</Label>
+            <Marca texto={marcas?.proyecto} />
+          </div>
           <Select
             value={watch("project_id")}
-            onValueChange={(v) => setValue("project_id", v)}
+            onValueChange={(v) => {
+              apagarMarca("proyecto");
+              setValue("project_id", v);
+            }}
           >
             <SelectTrigger id="proyecto" className="w-full">
               <SelectValue />
@@ -558,12 +672,18 @@ export function MovementForm({
                   </>
                 )}
               </span>
-            ) : null}
+            ) : (
+              // La misma información para el camino dictado: ahí la
+              // clasificación ya la resolvió el servidor y su procedencia
+              // llega redactada en `marcas`.
+              <Marca texto={marcas?.categoria} />
+            )}
           </div>
           <Select
             value={categoryId}
             onValueChange={(v) => {
               elegirAMano();
+              apagarMarca("categoria");
               setValue("category_id", v);
             }}
           >
@@ -625,5 +745,23 @@ export function MovementForm({
         ) : null}
       </div>
     </form>
+  );
+}
+
+/**
+ * De dónde salió un campo precargado.
+ *
+ * Discreta a propósito: tiene que poder leerse de un vistazo antes de
+ * apretar Enter, sin competir con el valor. Cuando el campo se toca,
+ * `apagarMarca` la borra y esto no dibuja nada.
+ */
+function Marca({ texto }: { texto?: string | null }) {
+  if (!texto) return null;
+
+  return (
+    <span className="text-muted-foreground inline-flex items-center gap-1 text-[10px]">
+      <span aria-hidden="true">●</span>
+      {texto}
+    </span>
   );
 }

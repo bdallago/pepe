@@ -4,9 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { Loader2, Quote, Sparkles } from "lucide-react";
 
+import { MovementDialog } from "@/components/movimientos/movement-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Destino, RespuestaAgente } from "@/lib/agentes/tipos";
+import type {
+  Destino,
+  RespuestaAgente,
+  RespuestaSimple,
+} from "@/lib/agentes/tipos";
 
 /**
  * La caja donde Beno escribe en castellano.
@@ -131,6 +136,125 @@ export function CajaAgente({
           )
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Falta un dato y hay que **escribirlo**.
+ *
+ * Es la contracara de `pregunta`: ahí se elige entre opciones que la app ya
+ * conoce, acá el valor lo trae Beno y no hay botón posible —un monto tiene
+ * infinitos valores—. Lo que escribe se mete en el hueco de `plantilla` y
+ * vuelve como la frase completa, así que **no tiene que retipear nada de lo
+ * que ya dijo**, que es la única razón por la que preguntar vale la pena en
+ * vez de abrirle el formulario vacío.
+ *
+ * Los atajos de arriba (hoy / ayer para la fecha) son la misma plantilla
+ * con el valor ya puesto: un click, y la caja no vuelve al modelo.
+ */
+function Completar({
+  respuesta,
+  onElegir,
+}: {
+  respuesta: Extract<RespuestaSimple, { clase: "completar" }>;
+  onElegir: (destino: Destino, argumento?: string | null) => void;
+}) {
+  const [valor, setValor] = useState("");
+
+  function completar(texto: string) {
+    const limpio = texto.trim();
+    if (!limpio) return;
+    onElegir(respuesta.destino, respuesta.plantilla.replace("{}", limpio));
+  }
+
+  return (
+    <div className={TARJETA}>
+      <p className="text-sm font-semibold">{respuesta.titulo}</p>
+      <p className="text-muted-foreground text-sm">{respuesta.cuerpo}</p>
+
+      {respuesta.opciones && respuesta.opciones.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {respuesta.opciones.map((o) => (
+            <Button
+              key={o.etiqueta}
+              variant="secondary"
+              size="sm"
+              onClick={() => completar(o.valor)}
+            >
+              {o.etiqueta}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          completar(valor);
+        }}
+        className="flex gap-2"
+      >
+        <Input
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          placeholder={`Ej: ${respuesta.ejemplo}`}
+          aria-label={respuesta.titulo}
+          autoFocus
+          className="cifra"
+        />
+        <Button type="submit" disabled={valor.trim().length === 0}>
+          Listo
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Un movimiento entendido, con de dónde salió cada campo.
+ *
+ * **Acá no se guardó nada todavía.** El botón abre el formulario de
+ * siempre, precargado: ese formulario es el panel de confirmación que pide
+ * la sección 6 del spec, y es también el único lugar donde se arma el par
+ * ARS/USD con la cotización de la fecha (regla 1).
+ */
+function Movimiento({
+  respuesta,
+  onElegir,
+  onCerrar,
+}: {
+  respuesta: Extract<RespuestaSimple, { clase: "movimiento" }>;
+  onElegir: (destino: Destino, argumento?: string | null) => void;
+  onCerrar?: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+
+  return (
+    <div className={TARJETA}>
+      <p className="text-sm font-semibold">{respuesta.titulo}</p>
+      {/* `cifra` porque acá hay un monto y una fecha. */}
+      <pre className="cifra text-sm whitespace-pre-wrap">{respuesta.cuerpo}</pre>
+      <p className="text-muted-foreground text-sm">
+        Todavía no se guardó nada: se carga desde el formulario, y ahí podés
+        corregir lo que haga falta.
+      </p>
+
+      <Button variant="outline" onClick={() => setAbierto(true)}>
+        Revisar y cargar
+      </Button>
+
+      <MovementDialog
+        precarga={respuesta.precarga}
+        open={abierto}
+        onOpenChange={setAbierto}
+        // Cerrar la caja solo cuando el movimiento entró de verdad:
+        // arrepentirse en el formulario tiene que devolverte a la respuesta,
+        // no dejarte sin nada.
+        onListo={onCerrar}
+      />
+
+      <PieDeDestino destino={respuesta.destino} onElegir={onElegir} />
     </div>
   );
 }
@@ -324,6 +448,18 @@ function Respuesta({
             ))}
           </div>
         </div>
+      );
+
+    case "completar":
+      return <Completar respuesta={respuesta} onElegir={onElegir} />;
+
+    case "movimiento":
+      return (
+        <Movimiento
+          respuesta={respuesta}
+          onElegir={onElegir}
+          onCerrar={onCerrar}
+        />
       );
 
     case "aviso":
