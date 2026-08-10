@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { decidirDestino } from "@/lib/agentes/recepcionista";
-import { despachar } from "@/lib/agentes/despacho";
-import { DESTINOS, UMBRAL_CONFIANZA, type RespuestaAgente } from "@/lib/agentes/tipos";
+import { decidirDestinos } from "@/lib/agentes/recepcionista";
+import { ejecutarCadena } from "@/lib/agentes/cadena";
+import { DESTINOS, type RespuestaAgente } from "@/lib/agentes/tipos";
 import { hayModeloConfigurado, mensajeDeErrorLLM } from "@/lib/llm";
 import { createClient, getUser } from "@/lib/supabase/server";
 
@@ -51,24 +51,17 @@ export async function POST(request: NextRequest) {
 
   try {
     // Si viene destino, es porque Beno eligió una opción: no se vuelve a
-    // preguntar ni se gasta otra llamada.
-    const decision = destino
-      ? { destino, argumento: argumento ?? null, confianza: 1 }
-      : await decidirDestino(frase);
+    // preguntar ni se gasta otra llamada. Con `confianza: 1` no vuelve a
+    // caer en la pregunta de confianza baja, y al ser una sola acción la
+    // cadena devuelve la respuesta pelada: este camino se comporta igual
+    // que antes de que existieran las cadenas.
+    const decisiones = destino
+      ? [{ destino, argumento: argumento ?? null, confianza: 1 }]
+      : await decidirDestinos(frase);
 
-    if (decision.confianza < UMBRAL_CONFIANZA) {
-      return NextResponse.json({
-        clase: "pregunta",
-        titulo: `No estoy seguro de qué querés hacer con “${frase}”`,
-        opciones: [
-          { etiqueta: "Anotar un gasto", destino: "movimientos", argumento: frase },
-          { etiqueta: "Buscar algo que anoté", destino: "buscador", argumento: frase },
-          { etiqueta: "Ver números", destino: "consultas", argumento: frase },
-        ],
-      } satisfies RespuestaAgente);
-    }
-
-    const respuesta = await despachar(supabase, user.id, decision);
+    // Una frase puede pedir varias cosas. Se ejecutan en orden y las
+    // fallas no se contagian; el porqué está en `cadena.ts`.
+    const respuesta = await ejecutarCadena(supabase, user.id, frase, decisiones);
     return NextResponse.json(respuesta);
   } catch (error: unknown) {
     console.error("[agentes] falló:", error);

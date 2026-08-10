@@ -19,7 +19,7 @@ import type { Balances } from "@/lib/balances";
 import type { ItemDeHoy } from "@/lib/aprendizaje";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { Recurrence, StudySession } from "@/lib/supabase/database.types";
-import type { Decision, RespuestaAgente } from "@/lib/agentes/tipos";
+import type { Decision, RespuestaSimple } from "@/lib/agentes/tipos";
 
 /**
  * Qué tan lejos mira el agente de vencimientos.
@@ -36,12 +36,17 @@ const DIAS_DE_VENCIMIENTO_PROXIMO = 30;
  * Cada rama es una cáscara sobre una función de dominio que ya existe y
  * ya está probada. **No metas reglas de negocio acá**: si necesitás una,
  * va en el módulo de `lib/` que ya la tiene.
+ *
+ * Recibe **una** decisión y devuelve **una** respuesta, incluso cuando la
+ * frase pedía varias cosas: encadenarlas es trabajo de `cadena.ts`. Por
+ * eso el retorno es `RespuestaSimple` y no `RespuestaAgente` — de acá no
+ * sale nunca una cadena.
  */
 export async function despachar(
   supabase: SupabaseClient,
   userId: string,
   decision: Decision,
-): Promise<RespuestaAgente> {
+): Promise<RespuestaSimple> {
   switch (decision.destino) {
     case "roadmap": {
       // "Qué me toca hoy" NO es "qué me sugerís estudiar". Esto es lectura

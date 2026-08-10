@@ -1,10 +1,10 @@
 import "server-only";
 
 import { completarJSON, MODELO_CHICO } from "@/lib/llm";
-import { decisionSchema, type Decision } from "@/lib/agentes/tipos";
+import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
 
 /**
- * Decide a qué especialista va una frase.
+ * Decide a qué especialista —o a qué especialistas— va una frase.
  *
  * Usa `MODELO_CHICO`: es una clasificación entre un puñado de opciones
  * con salida de decenas de tokens. Pagar razonamiento acá sería tirar
@@ -94,6 +94,36 @@ import { decisionSchema, type Decision } from "@/lib/agentes/tipos";
  * ambiguas siguen en 0.3 las cuatro. Es lo mínimo que se podía agregar,
  * y fue a propósito — por el párrafo de arriba.
  *
+ * **La lista de acciones se agregó con cuatro líneas, y el riesgo era el
+ * de siempre.** Beno escribió "lo anotes en la bitácora y que me generes
+ * lecciones sobre eso, tenelo documentado para relevarlo en la retro":
+ * tres pedidos, y la app se quedaba con uno y tiraba los otros dos sin
+ * decirlo. Ahora la salida es una lista ordenada.
+ *
+ * El peligro acá no es que no parta las frases múltiples —eso salió a la
+ * primera— sino que **empiece a partir las simples**, que son casi todas.
+ * Una frase de una sola cosa contestada en dos tarjetas es peor que el
+ * problema original. Por eso las cuatro líneas dicen primero que la lista
+ * normalmente tiene un elemento, y recién después cuándo tiene más; y por
+ * eso el disparador es **léxico** ("y que", "y también", "y de paso"), no
+ * semántico: la misma clase de regla mecánica que sostiene la confianza.
+ *
+ * Medido el 2026-08-09, antes y después del agregado, con las mismas
+ * frases: las cuatro ambiguas siguen en 0.3 las cuatro, las seis simples
+ * siguen dando una sola acción y el mismo destino que antes, y las dos
+ * múltiples pasaron de una acción a dos y tres.
+ *
+ * **Y la trampa mordió por tercera vez, ahora por dónde estaba parado el
+ * párrafo.** El primer intento lo puso al final, después de la línea del
+ * JSON: mismas palabras, y "Proder" suelto se fue de 0.3 a 0.8. La regla
+ * mecánica de la confianza y sus cuatro ejemplos habían dejado de ser lo
+ * último que lee el modelo. Movido acá arriba —al lado de la instrucción
+ * del argumento, que es de lo que habla— las cuatro volvieron a 0.3 sin
+ * cambiar una palabra. O sea: en este prompt **la posición pesa tanto
+ * como el texto**, y el bloque de confianza tiene que quedar pegado al
+ * final. Si tocás esto, **volvé a medir las cuatro ambiguas** aunque lo
+ * que hayas agregado no tenga nada que ver con ellas.
+ *
  * Un dato que salió de esa medición y del que depende el rango temporal:
  * para "consultas" el modelo ya devuelve el período dentro del argumento
  * ("mis balances según estos últimos 6 meses"), sin que haya que
@@ -164,6 +194,12 @@ el nombre del proyecto para "retro", el tema para "lecciones_tema", lo que
 busca para "buscador". Si el especialista no necesita ninguno, poné null.
 NO reformules ni traduzcas el argumento: copialo como lo escribió Beno.
 
+Casi todas las frases piden UNA sola cosa, y entonces la lista lleva UN
+solo elemento. Poné más de uno SOLO si la frase pide cosas distintas y lo
+dice con todas las letras ("y que", "y también", "y de paso"): ahí va una
+acción por pedido, en el orden en que él los escribió. Nunca partas en dos
+una frase que pide una sola cosa.
+
 En "analizar" poné true SOLO si además de los datos pide que interpretes
 ("analizame", "qué observaciones tenés", "qué ves"). Si pide un número o
 un dato y nada más, poné false.
@@ -194,20 +230,31 @@ cerrarlo. Elegí el destino más probable igual, pero con confianza baja:
 Si la respuesta a alguna de las dos es sí, no aplica esta regla y la
 confianza puede ser alta.
 
-Respondé SOLO un objeto JSON con las claves: destino, argumento, confianza, analizar.`;
+Respondé SOLO un objeto JSON con la clave "acciones": una lista de objetos
+con las claves destino, argumento, confianza, analizar.`;
 
-export async function decidirDestino(frase: string): Promise<Decision> {
+/**
+ * Devuelve las acciones de una frase, **en orden**.
+ *
+ * Casi siempre es un array de uno. Se recorta a `MAX_ACCIONES` acá y no
+ * en el esquema: una lista de más no es un error del que haya que
+ * recuperarse tirando la llamada, alcanza con quedarse con las primeras.
+ */
+export async function decidirDestinos(frase: string): Promise<Decision[]> {
   const { datos } = await completarJSON({
     modelo: MODELO_CHICO,
     sistema: SISTEMA,
     usuario: frase,
-    esquema: decisionSchema,
+    esquema: planSchema,
     // Consistencia, no creatividad: la misma frase tiene que ir siempre
     // al mismo lado.
     temperatura: 0,
-    maxTokens: 120,
+    // Alcanzaba 120 para una decisión sola; tres entran justo en 300.
+    // Quedarse corto no degrada la respuesta: la trunca, no valida contra
+    // el esquema y se pierde la llamada entera.
+    maxTokens: 300,
     etiqueta: "recepcionista",
   });
 
-  return datos;
+  return datos.acciones.slice(0, MAX_ACCIONES);
 }

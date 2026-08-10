@@ -332,5 +332,48 @@ function Respuesta({
           <p className="text-muted-foreground text-sm">{respuesta.cuerpo}</p>
         </div>
       );
+
+    /*
+      Una frase que pidió varias cosas. Cada paso se dibuja con este mismo
+      componente —son respuestas normales, con su pie de destino y sus
+      botones— y quedan una abajo de otra en el orden en que Beno las
+      escribió. El título de arriba dice cuántas salieron: sin eso habría
+      que contar tarjetas para saber si se hizo todo.
+    */
+    case "cadena":
+      return (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold">{respuesta.titulo}</p>
+
+          {respuesta.pasos.map((paso, n) => (
+            <Respuesta
+              key={n}
+              respuesta={paso.respuesta}
+              onElegir={onElegir}
+              onCerrar={onCerrar}
+            />
+          ))}
+
+          {/*
+            Lo que no se hizo se dice, no se omite: media docena de las
+            acciones de Pepe dejan algo escrito, así que "esto no lo
+            toqué" es información. Se descartan a propósito (ver
+            `cadena.ts`), y por eso el texto dice que las vuelva a pedir.
+          */}
+          {respuesta.pendientes.length > 0 && (
+            <div className={TARJETA}>
+              <p className="text-sm font-semibold">Esto no lo hice</p>
+              <p className="text-muted-foreground text-sm">
+                Me quedó sin hacer{" "}
+                {respuesta.pendientes
+                  .map((p) => ETIQUETA_DESTINO[p.destino])
+                  .join(", ")}
+                . Contestame lo de arriba y, si lo seguís queriendo, pedímelo
+                de nuevo.
+              </p>
+            </div>
+          )}
+        </div>
+      );
   }
 }

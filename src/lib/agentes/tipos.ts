@@ -68,14 +68,60 @@ export const decisionSchema = z.object({
 
 export type Decision = z.infer<typeof decisionSchema>;
 
+/**
+ * Cuántas acciones como mucho se sacan de una sola frase.
+ *
+ * Tres, y el número sale de tres cosas distintas:
+ *
+ * 1. **La frase más larga que Beno escribió de verdad pide tres cosas**
+ *    ("anotalo en la bitácora, generame lecciones sobre eso, y tenelo
+ *    para la retro"). Cuatro sería un tope que nada real toca.
+ * 2. **Cada acción puede costar una llamada al modelo**, y dos de ellas
+ *    al razonador (`retro`, `lecciones_tema`), que son las más lentas y
+ *    las más caras en tokens de toda la app. Tres encadenadas ya son
+ *    minutos de espera y buena parte del techo por minuto de Groq.
+ * 3. Sin tope, **una frase mal leída se abre en ocho llamadas**, cada una
+ *    dejando propuestas en la bandeja. Escribir de más es barato para el
+ *    modelo y caro de limpiar para Beno.
+ *
+ * El tope se aplica **recortando** la lista, no rechazándola: ver
+ * `planSchema`.
+ */
+export const MAX_ACCIONES = 3;
+
+/**
+ * Lo que devuelve el recepcionista: una lista **ordenada** de decisiones.
+ *
+ * Es una lista y no una decisión sola porque una frase puede pedir varias
+ * cosas ("anotalo en la bitácora y generame lecciones sobre eso"), y
+ * quedarse con una sola era descartar el resto en silencio. Igual, la
+ * abrumadora mayoría de las frases trae **un solo elemento**, y el
+ * despachador sigue recibiendo una `Decision` por vez.
+ *
+ * El tope de `MAX_ACCIONES` **no** está acá adentro a propósito. Un
+ * `.max()` convertiría una lista de cuatro en un error de esquema, o sea
+ * en una llamada perdida entera; recortar en el borde deja las tres
+ * primeras, que son las que Beno escribió primero. Se recorta en
+ * `decidirDestinos()`.
+ */
+export const planSchema = z.object({
+  acciones: z.array(decisionSchema).min(1),
+});
+
+export type Plan = z.infer<typeof planSchema>;
+
 /** Debajo de esto el recepcionista pregunta en vez de adivinar. */
 export const UMBRAL_CONFIANZA = 0.6;
 
 /**
- * Lo que la caja termina mostrando. Unión discriminada para que el
+ * Lo que contesta **una** acción. Unión discriminada para que el
  * componente no tenga que adivinar qué recibió.
+ *
+ * Es lo que devuelve `despachar()`, y es lo que va adentro de cada paso
+ * de una cadena. Que no incluya `cadena` no es un olvido: una cadena de
+ * cadenas no significa nada y el tipo lo impide.
  */
-export type RespuestaAgente =
+export type RespuestaSimple =
   | {
       clase: "texto";
       destino: Destino;
@@ -126,3 +172,29 @@ export type RespuestaAgente =
       opciones: { etiqueta: string; destino: Destino; argumento: string | null }[];
     }
   | { clase: "aviso"; titulo: string; cuerpo: string };
+
+/**
+ * Lo que la caja termina mostrando: una respuesta sola, o la cadena de
+ * varias cuando la frase pedía varias cosas.
+ *
+ * Con una sola acción —el caso normal— se devuelve la `RespuestaSimple`
+ * pelada y la pantalla se ve exactamente igual que antes. La variante
+ * `cadena` aparece **solo** cuando hubo más de una acción.
+ */
+export type RespuestaAgente =
+  | RespuestaSimple
+  | {
+      clase: "cadena";
+      /** Dice de entrada cuántas se hicieron y cuántas no. */
+      titulo: string;
+      /** En el mismo orden en que Beno las escribió. */
+      pasos: { destino: Destino; respuesta: RespuestaSimple }[];
+      /**
+       * Lo que quedó sin ejecutar porque la cadena frenó en una pregunta.
+       *
+       * Va explícito y se muestra: la mitad de las acciones de Pepe
+       * escriben algo (propuestas en la bandeja, o una sesión), así que
+       * "esto no lo hice" es información, no relleno.
+       */
+      pendientes: { destino: Destino; argumento: string | null }[];
+    };
