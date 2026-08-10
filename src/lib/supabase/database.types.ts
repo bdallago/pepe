@@ -476,6 +476,75 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_references: {
+        Row: {
+          clave: string
+          fecha: string
+          fuente: string
+          id: string
+          monto_ars: number
+          segmento: Database["public"]["Enums"]["tipo_cliente"] | null
+          unidad: string
+        }
+        Insert: {
+          clave: string
+          fecha: string
+          fuente: string
+          id?: string
+          monto_ars: number
+          segmento?: Database["public"]["Enums"]["tipo_cliente"] | null
+          unidad: string
+        }
+        Update: {
+          clave?: string
+          fecha?: string
+          fuente?: string
+          id?: string
+          monto_ars?: number
+          segmento?: Database["public"]["Enums"]["tipo_cliente"] | null
+          unidad?: string
+        }
+        Relationships: []
+      }
+      rate_runs: {
+        Row: {
+          corrido_en: string
+          crudo: Json | null
+          estado: string
+          fecha: string
+          filas: number | null
+          fuente: string
+          huella: string | null
+          id: string
+          marca_origen: string | null
+          motivo: string | null
+        }
+        Insert: {
+          corrido_en?: string
+          crudo?: Json | null
+          estado: string
+          fecha: string
+          filas?: number | null
+          fuente: string
+          huella?: string | null
+          id?: string
+          marca_origen?: string | null
+          motivo?: string | null
+        }
+        Update: {
+          corrido_en?: string
+          crudo?: Json | null
+          estado?: string
+          fecha?: string
+          filas?: number | null
+          fuente?: string
+          huella?: string | null
+          id?: string
+          marca_origen?: string | null
+          motivo?: string | null
+        }
+        Relationships: []
+      }
       recurrences: {
         Row: {
           activa: boolean
@@ -857,6 +926,7 @@ export type Database = {
         | "leccion_sugerida"
         | "leccion_extraida"
         | "retro"
+      tipo_cliente: "particular" | "pyme" | "empresa"
       tipo_movimiento: "ingreso" | "egreso"
     }
     CompositeTypes: {
@@ -1011,6 +1081,7 @@ export const Constants = {
         "leccion_extraida",
         "retro",
       ],
+      tipo_cliente: ["particular", "pyme", "empresa"],
       tipo_movimiento: ["ingreso", "egreso"],
     },
   },
