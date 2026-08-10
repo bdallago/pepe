@@ -49,7 +49,7 @@ export const DESTINOS = [
 export type Destino = (typeof DESTINOS)[number];
 
 /** Lo que devuelve el recepcionista. Se valida contra la salida del modelo. */
-export const decisionSchema = z.object({
+const decisionBase = z.object({
   destino: z.enum(DESTINOS),
   /**
    * El dato concreto sobre el que trabaja el especialista: el nombre del
@@ -75,6 +75,59 @@ export const decisionSchema = z.object({
    */
   analizar: z.boolean().optional(),
 });
+
+/**
+ * Nombres con los que el modelo chico escribe, a veces, la clave
+ * `confianza`.
+ *
+ * **Esto se arregla acá y no en el prompt, a propósito.** El prompt del
+ * recepcionista es de vidrio (ver el bloque largo de `recepcionista.ts`):
+ * hay cuatro incidentes medidos en los que agregarle texto rompió casos
+ * que ni siquiera nombraba —dos anclas ambiguas que se fueron de 0.3 a
+ * 0.8, y el argumento de una frase telegráfica que volvió reescrito y sin
+ * la fecha—. Uno de esos tres intentos descartados fue **exactamente**
+ * aclararle en la línea del JSON cómo se escriben las cuatro claves: no
+ * arregló el `"confianca"` y sí rompió el argumento literal. Está
+ * revertido.
+ *
+ * El caso medido el 2026-08-10 con "mirá, te paso capturas para que veas
+ * esto que me contestó un cliente": el modelo **elige bien** (destino
+ * `desconocido`, confianza baja) y lo único que sale mal es cómo escribe
+ * la clave. Se reprodujo en tres corridas con temperatura 0. Tirar una
+ * decisión correcta por una letra es el peor cambio posible por el precio
+ * más caro posible.
+ *
+ * Entonces: el esquema tolera el nombre de la clave, y **nada más**. Si
+ * la confianza no viene, sigue fallando igual que antes — lo que se
+ * perdona es la ortografía, no la ausencia del dato con el que se decide
+ * si preguntar o derivar.
+ */
+const ALIAS_CONFIANZA = ["confianca", "confiança", "confidence"] as const;
+
+/**
+ * Renombra el alias a `confianza` antes de validar. Si ya viene bien, o
+ * si no viene de ninguna forma, devuelve el objeto tal cual y decide el
+ * esquema.
+ */
+function normalizarClavesDecision(valor: unknown): unknown {
+  if (typeof valor !== "object" || valor === null || Array.isArray(valor)) {
+    return valor;
+  }
+
+  const objeto = valor as Record<string, unknown>;
+  if (objeto.confianza !== undefined) return objeto;
+
+  const alias = ALIAS_CONFIANZA.find((clave) => objeto[clave] !== undefined);
+  if (!alias) return objeto;
+
+  const { [alias]: confianza, ...resto } = objeto;
+  return { ...resto, confianza };
+}
+
+export const decisionSchema = z.preprocess(
+  normalizarClavesDecision,
+  decisionBase,
+);
 
 export type Decision = z.infer<typeof decisionSchema>;
 
