@@ -41,6 +41,22 @@ export function cronSecret(): string {
 }
 
 /**
+ * El id de Supabase del único usuario que puede obtener un token del
+ * conector MCP.
+ *
+ * **Es la única que no lanza si falta**, y es a propósito: la usa
+ * `/oauth/authorize`, que corre en un browser al que Claude acaba de
+ * mandar. Un 500 ahí se ve como "el conector está roto" y no dice nada;
+ * devolviendo null, la pantalla puede explicar que falta configurarlo.
+ *
+ * Falta = no autoriza a nadie. Que el modo de falla sea "no entra
+ * ninguno" y no "entra cualquiera" es el punto entero de esta variable.
+ */
+export function mcpUsuarioPermitido(): string | null {
+  return process.env.MCP_USUARIO_PERMITIDO || null;
+}
+
+/**
  * Key de Groq. Solo server-side: nunca puede viajar al browser.
  *
  * Lanza si falta, igual que las demás. Quien no quiera que falte de forma
