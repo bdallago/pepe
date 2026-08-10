@@ -42,18 +42,29 @@ export const SLUG_PROYECTO_BITACORA = "gentius";
 /**
  * A qué proyecto va una entrada cuando no se eligió ninguno.
  *
- * El estudio primero y, si no está, el primero activo de la lista (que
- * llega ordenada por nombre). Devuelve `null` solo si no hay ningún
- * proyecto activo, caso en el que no hay nada que elegir y quien llama
- * tiene que decirlo: `daily_log.project_id` es NOT NULL.
+ * El de estudio primero, **esté activo o no**, y recién si no existe, el
+ * primero de la lista (que llega ordenada por nombre). Devuelve `null`
+ * solo si no hay ningún proyecto, caso en el que no hay nada que elegir y
+ * quien llama tiene que decirlo: `daily_log.project_id` es NOT NULL.
+ *
+ * ⚠ **No filtres por `activo` acá.** Es tentador y está mal: `activo`
+ * decide si un proyecto **participa del prorrateo de los gastos
+ * compartidos** (regla 2), no si se puede escribir sobre él. Gentius está
+ * inactivo **a propósito**, justamente para no mover los balances
+ * históricos al crearse — y es, al mismo tiempo, donde va todo el estudio.
+ * Filtrando por activo, las anotaciones de estudio caen en el primer
+ * proyecto de finanzas que aparezca por orden alfabético, en silencio.
+ *
+ * Pasó: al extraer esta función del formulario se agregó el filtro y el
+ * selector dejó de arrancar en Gentius sin que nada lo avisara.
  */
 export function proyectoPorDefectoDeBitacora(
   proyectos: Project[],
 ): Project | null {
-  const activos = proyectos.filter((p) => p.activo);
-
   return (
-    activos.find((p) => p.slug === SLUG_PROYECTO_BITACORA) ?? activos[0] ?? null
+    proyectos.find((p) => p.slug === SLUG_PROYECTO_BITACORA) ??
+    proyectos[0] ??
+    null
   );
 }
 
