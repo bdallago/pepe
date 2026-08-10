@@ -22,6 +22,20 @@ El 2026-08-07 absorbió una segunda app de estudio que vivía aparte
 `projects` es la **entidad raíz de toda la app**, no solo de finanzas: las
 lecciones y la bitácora también cuelgan de un proyecto.
 
+## Por dónde empezar
+
+Este archivo dice **por qué** las cosas son como son y qué no hay que
+romper. Es largo y no es un mapa.
+
+Si venís a tocar algo y no sabés dónde está, entrá primero por
+**`docs/dev/manual-agentico.md`**: una tabla por área con la funcionalidad,
+sus entrypoints, qué estado toca y sus trampas. Después volvé acá por el
+porqué de lo que vayas a mover, y si la feature tiene spec, leelo
+(`docs/superpowers/specs/`). El índice de toda la documentación está en
+`docs/README.md`.
+
+Si contradice algo de acá, gana este archivo.
+
 ## Comandos
 
 ```bash
