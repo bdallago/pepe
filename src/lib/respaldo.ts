@@ -36,8 +36,20 @@ import type { SupabaseClient } from "@/lib/supabase/server";
  * `version < 2` avisa y sigue, con `version >= 2` la falta de inventario
  * es un error. Así el respaldo no se rompe entre que se mergea esto y se
  * despliega, pero tampoco queda un agujero permanente.
+ *
+ * 3 — agrega la tabla `attachments` y el inventario del bucket
+ * `adjuntos`. Los dos son **claves nuevas al lado de las que ya estaban**,
+ * a propósito: el workflow que hay hoy sigue andando sin tocar una línea
+ * y sigue bajando los comprobantes igual.
+ *
+ * ⚠ **Pero hasta que el workflow lea `adjuntos`, los bytes de los
+ * adjuntos no se están copiando a ningún lado.** El inventario viaja y
+ * las URLs firmadas salen por `/api/cron/comprobantes`, así que del lado
+ * de la app está todo; falta el `for` del otro lado, que es un cambio de
+ * cinco líneas. Está anotado en `AGENTS.md` para que no se pierda: un
+ * respaldo que uno cree tener y no tiene es peor que no tenerlo.
  */
-export const VERSION_RESPALDO = 2;
+export const VERSION_RESPALDO = 3;
 
 /**
  * Las tablas del respaldo, en orden de dependencia: si algún día esto se
@@ -55,6 +67,11 @@ const TABLAS = [
   "daily_log",
   "lessons",
   "retros",
+  // `attachments` va antes de `inbox` porque las filas de la bandeja que
+  // salieron de un archivo apuntan a él por `entidad_id`. No hay FK
+  // declarada, pero el orden de esta lista es lo que hace reimportable el
+  // respaldo y conviene que siga siendo cierto.
+  "attachments",
   "inbox",
   "settings",
   "fx_rates",
@@ -75,6 +92,17 @@ export interface Respaldo {
    * pertenece cada uno. Los bytes no están acá: ver `listarComprobantes()`.
    */
   comprobantes: InventarioComprobantes;
+  /**
+   * Lo mismo para el bucket `adjuntos`: los archivos que Beno pega en la
+   * caja de agentes.
+   *
+   * Va como clave aparte y no mezclado con `comprobantes` porque son dos
+   * buckets distintos y un archivo suelto sin saber de qué bucket salió
+   * no se puede restaurar. Y porque las dos relaciones son distintas: un
+   * comprobante cuelga de un movimiento, un adjunto de una fila de
+   * `attachments`.
+   */
+  adjuntos: InventarioAdjuntos;
 }
 
 /** Cuántas filas se piden por página. Supabase corta en 1000 por defecto. */
@@ -100,6 +128,7 @@ export async function armarRespaldo(supabase: SupabaseClient): Promise<Respaldo>
     conteos,
     datos,
     comprobantes: await listarComprobantes(supabase),
+    adjuntos: await listarAdjuntos(supabase),
   };
 }
 
@@ -180,6 +209,7 @@ async function leerTodo(
  * que uno cree tener el comprobante y no lo tiene.
  */
 const BUCKET_COMPROBANTES = "comprobantes";
+const BUCKET_ADJUNTOS = "adjuntos";
 
 /** Cuántos objetos se piden por página al storage. */
 const PAGINA_STORAGE = 1000;
@@ -250,7 +280,7 @@ interface MovimientoConComprobante {
 export async function listarComprobantes(
   supabase: SupabaseClient,
 ): Promise<InventarioComprobantes> {
-  const objetos = await listarObjetos(supabase, "");
+  const objetos = await listarObjetos(supabase, BUCKET_COMPROBANTES, "");
 
   const { data: movimientos, error } = await supabase
     .from("movements")
@@ -313,6 +343,7 @@ export async function listarComprobantes(
 /** Recorre el bucket entero, paginando igual que las tablas. */
 async function listarObjetos(
   supabase: SupabaseClient,
+  bucket: string,
   prefijo: string,
   profundidad = 0,
 ): Promise<(ObjetoStorage & { path: string })[]> {
@@ -322,7 +353,7 @@ async function listarObjetos(
 
   for (let desde = 0; ; desde += PAGINA_STORAGE) {
     const { data, error } = await supabase.storage
-      .from(BUCKET_COMPROBANTES)
+      .from(bucket)
       .list(prefijo, {
         limit: PAGINA_STORAGE,
         offset: desde,
@@ -333,7 +364,7 @@ async function listarObjetos(
       // Igual que con las tablas: mejor un 500 que un respaldo a medias
       // que nadie mira hasta que lo necesita.
       throw new Error(
-        `No se pudo listar el storage${prefijo ? ` (${prefijo})` : ""}: ${error.message}`,
+        `No se pudo listar ${bucket}${prefijo ? ` (${prefijo})` : ""}: ${error.message}`,
       );
     }
 
@@ -344,7 +375,9 @@ async function listarObjetos(
 
       if (entrada.id === null) {
         // Carpeta: `list()` no es recursivo, hay que bajar un nivel.
-        encontrados.push(...(await listarObjetos(supabase, path, profundidad + 1)));
+        encontrados.push(
+          ...(await listarObjetos(supabase, bucket, path, profundidad + 1)),
+        );
       } else {
         encontrados.push({ ...entrada, path });
       }
@@ -354,6 +387,120 @@ async function listarObjetos(
   }
 
   return encontrados;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Adjuntos
+ * ──────────────────────────────────────────────────────────── */
+
+/**
+ * El inventario del bucket `adjuntos`, con el mismo criterio que el de
+ * comprobantes: los bytes van al lado del JSON, acá viaja la relación.
+ *
+ * Lo que se guarda de cada archivo es más que el path porque un adjunto
+ * dice bastante de sí mismo: `estado` cuenta si el pase llegó a leerlo, y
+ * `texto_extraido` —que viaja en la tabla, no acá— es lo caro de
+ * reconstruir. Los bytes se pueden volver a leer; los tokens gastados
+ * en leerlos, no.
+ */
+export interface ArchivoAdjunto {
+  path: string;
+  /** A qué fila de `attachments` pertenece. `null` = huérfano. */
+  attachment_id: string | null;
+  nombre_original: string | null;
+  tipo: string | null;
+  estado: string | null;
+  tamano: number | null;
+  mime: string | null;
+  actualizado_en: string | null;
+}
+
+/** Una fila de `attachments` cuyo archivo ya no está en el storage. */
+export interface AdjuntoFaltante {
+  attachment_id: string;
+  path: string;
+  nombre_original: string | null;
+}
+
+export interface InventarioAdjuntos {
+  total: number;
+  bytes: number;
+  huerfanos: number;
+  archivos: ArchivoAdjunto[];
+  faltantes: AdjuntoFaltante[];
+}
+
+interface FilaAdjuntoRespaldo {
+  id: string;
+  storage_path: string;
+  nombre_original: string | null;
+  tipo: string | null;
+  estado: string | null;
+}
+
+/**
+ * Cruza el bucket `adjuntos` con la tabla `attachments`.
+ *
+ * Las dos direcciones importan por lo mismo que en comprobantes:
+ * **huérfano** es un archivo que se subió y cuyo registro no llegó a
+ * escribirse (se respalda igual, los bytes son de Beno); **faltante** es
+ * una fila que apunta a un archivo que ya no está, y eso hay que
+ * gritarlo aunque no se pueda arreglar.
+ */
+export async function listarAdjuntos(
+  supabase: SupabaseClient,
+): Promise<InventarioAdjuntos> {
+  const objetos = await listarObjetos(supabase, BUCKET_ADJUNTOS, "");
+
+  const { data: filas, error } = await supabase
+    .from("attachments")
+    .select("id, storage_path, nombre_original, tipo, estado");
+
+  if (error) {
+    throw new Error(`No se pudo leer attachments: ${error.message}`);
+  }
+
+  const porPath = new Map<string, FilaAdjuntoRespaldo>();
+  for (const fila of (filas ?? []) as FilaAdjuntoRespaldo[]) {
+    if (fila.storage_path) porPath.set(fila.storage_path, fila);
+  }
+
+  const archivos: ArchivoAdjunto[] = objetos.map((objeto) => {
+    const fila = porPath.get(objeto.path);
+    return {
+      path: objeto.path,
+      attachment_id: fila?.id ?? null,
+      nombre_original: fila?.nombre_original ?? null,
+      tipo: fila?.tipo ?? null,
+      estado: fila?.estado ?? null,
+      tamano: objeto.metadata?.size ?? null,
+      mime: objeto.metadata?.mimetype ?? null,
+      actualizado_en: objeto.updated_at,
+    };
+  });
+
+  const enStorage = new Set(objetos.map((objeto) => objeto.path));
+  const faltantes: AdjuntoFaltante[] = [];
+  for (const [path, fila] of porPath) {
+    if (!enStorage.has(path)) {
+      faltantes.push({
+        attachment_id: fila.id,
+        path,
+        nombre_original: fila.nombre_original,
+      });
+    }
+  }
+
+  archivos.sort((a, b) => a.path.localeCompare(b.path));
+  faltantes.sort((a, b) => a.path.localeCompare(b.path));
+
+  return {
+    total: archivos.length,
+    bytes: archivos.reduce((suma, archivo) => suma + (archivo.tamano ?? 0), 0),
+    huerfanos: archivos.filter((a) => a.attachment_id === null).length,
+    archivos,
+    faltantes,
+  };
 }
 
 /** Cuántas URLs se firman por llamada. */
@@ -374,20 +521,38 @@ export async function firmarComprobantes(
   inventario: InventarioComprobantes,
   segundos: number,
 ): Promise<(ArchivoComprobante & { url: string })[]> {
-  const firmados: (ArchivoComprobante & { url: string })[] = [];
+  return await firmar(supabase, BUCKET_COMPROBANTES, inventario.archivos, segundos);
+}
 
-  for (let i = 0; i < inventario.archivos.length; i += LOTE_FIRMAS) {
-    const lote = inventario.archivos.slice(i, i + LOTE_FIRMAS);
+/** Lo mismo para el bucket `adjuntos`. */
+export async function firmarAdjuntos(
+  supabase: SupabaseClient,
+  inventario: InventarioAdjuntos,
+  segundos: number,
+): Promise<(ArchivoAdjunto & { url: string })[]> {
+  return await firmar(supabase, BUCKET_ADJUNTOS, inventario.archivos, segundos);
+}
+
+async function firmar<T extends { path: string }>(
+  supabase: SupabaseClient,
+  bucket: string,
+  archivos: T[],
+  segundos: number,
+): Promise<(T & { url: string })[]> {
+  const firmados: (T & { url: string })[] = [];
+
+  for (let i = 0; i < archivos.length; i += LOTE_FIRMAS) {
+    const lote = archivos.slice(i, i + LOTE_FIRMAS);
 
     const { data, error } = await supabase.storage
-      .from(BUCKET_COMPROBANTES)
+      .from(bucket)
       .createSignedUrls(
         lote.map((archivo) => archivo.path),
         segundos,
       );
 
     if (error) {
-      throw new Error(`No se pudieron firmar los comprobantes: ${error.message}`);
+      throw new Error(`No se pudieron firmar los archivos de ${bucket}: ${error.message}`);
     }
 
     const porPath = new Map(

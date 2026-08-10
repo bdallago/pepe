@@ -1,17 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, Quote, Sparkles } from "lucide-react";
+import {
+  FileText,
+  ImageIcon,
+  Loader2,
+  Paperclip,
+  Quote,
+  Sparkles,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { MovementDialog } from "@/components/movimientos/movement-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { createClient } from "@/lib/supabase/client";
 import type {
+  AdjuntoSubido,
   Destino,
   RespuestaAgente,
   RespuestaSimple,
 } from "@/lib/agentes/tipos";
+
+/**
+ * Lo que acepta el bucket `adjuntos`, y nada más.
+ *
+ * `image/heic` queda afuera aunque `comprobantes` lo acepte: acá la
+ * imagen va a un modelo y no se midió que Groq decodifique HEIC. Fallar
+ * en la puerta con un mensaje claro es mejor que fallar tres minutos
+ * después adentro del pase.
+ */
+const TIPOS_ADJUNTO = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+];
+
+const MAX_BYTES_ADJUNTO = 10 * 1024 * 1024;
+
+/** El mismo tope que valida el handler (`MAX_ADJUNTOS`). */
+const MAX_ARCHIVOS = 6;
 
 /**
  * La caja donde Beno escribe en castellano.
@@ -35,10 +66,95 @@ export function CajaAgente({
   const [frase, setFrase] = useState("");
   const [cargando, setCargando] = useState(false);
   const [respuesta, setRespuesta] = useState<RespuestaAgente | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [subiendo, setSubiendo] = useState(false);
+
+  /**
+   * Suma archivos a la cola, filtrando lo que el bucket va a rechazar.
+   *
+   * **Varios por mensaje, a propósito.** Beno escribió "te paso capturas"
+   * en plural, y una sola captura no cubre el caso: son las tres o cuatro
+   * de una conversación. Con el techo de qwen entran tres por minuto, así
+   * que cuatro capturas son minuto y medio — y el pase es retomable, así
+   * que si la tercera falla las dos primeras ya están en la bandeja.
+   */
+  const sumarArchivos = useCallback((nuevos: File[]) => {
+    const buenos: File[] = [];
+
+    for (const archivo of nuevos) {
+      if (!TIPOS_ADJUNTO.includes(archivo.type)) {
+        toast.error(`${archivo.name}: solo acepto JPG, PNG, WebP o PDF.`);
+        continue;
+      }
+      if (archivo.size > MAX_BYTES_ADJUNTO) {
+        toast.error(`${archivo.name}: supera los 10 MB.`);
+        continue;
+      }
+      buenos.push(archivo);
+    }
+
+    if (buenos.length === 0) return;
+
+    setArchivos((previos) => {
+      const juntos = [...previos, ...buenos];
+      if (juntos.length > MAX_ARCHIVOS) {
+        toast.warning(`Me quedo con los primeros ${MAX_ARCHIVOS}.`);
+      }
+      return juntos.slice(0, MAX_ARCHIVOS);
+    });
+  }, []);
+
+  /**
+   * Sube los archivos **del browser directo a Supabase**, sin pasar por
+   * Next.
+   *
+   * Es el mismo camino que `comprobante-input.tsx`, y no es un detalle de
+   * implementación: como el archivo nunca atraviesa un route handler ni
+   * una Server Action, ninguna discusión sobre el tamaño máximo de un
+   * request aplica.
+   */
+  async function subirArchivos(): Promise<AdjuntoSubido[] | null> {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      toast.error("Se cerró tu sesión.");
+      return null;
+    }
+
+    const subidos: AdjuntoSubido[] = [];
+
+    for (const archivo of archivos) {
+      const extension = archivo.name.split(".").pop()?.toLowerCase() ?? "bin";
+      const path = `${user.id}/${crypto.randomUUID()}.${extension}`;
+
+      const { error } = await supabase.storage
+        .from("adjuntos")
+        .upload(path, archivo, { contentType: archivo.type, upsert: false });
+
+      if (error) {
+        toast.error(`No pude subir ${archivo.name}: ${error.message}`);
+        continue;
+      }
+
+      subidos.push({
+        path,
+        nombre: archivo.name,
+        mime: archivo.type,
+        bytes: archivo.size,
+      });
+    }
+
+    return subidos;
+  }
 
   async function enviar(destino?: Destino, argumento?: string | null) {
     const texto = frase.trim();
-    if (!texto || cargando) return;
+    // Con archivos la frase puede ir vacía: arrastrar un PDF y nada más
+    // es un pedido legítimo, y el handler lo acepta.
+    if ((!texto && archivos.length === 0) || cargando || subiendo) return;
 
     /*
       Sin argumento propio, el argumento es la frase. "¿No era esto?"
@@ -54,14 +170,43 @@ export function CajaAgente({
     */
     const dato = argumento === undefined ? texto.slice(0, 300) : argumento;
 
-    setCargando(true);
     setRespuesta(null);
+
+    // La subida va primero y aparte del "Pensando…": es la parte que
+    // depende de la conexión de Beno y no del modelo, y si falla el
+    // archivo no llegó a ningún lado.
+    let adjuntos: AdjuntoSubido[] | undefined;
+
+    if (archivos.length > 0 && !destino) {
+      setSubiendo(true);
+      try {
+        const subidos = await subirArchivos();
+        if (!subidos || subidos.length === 0) {
+          setRespuesta({
+            clase: "aviso",
+            titulo: "No pude subir los archivos",
+            cuerpo: "Probá de nuevo. No se registró nada.",
+          });
+          return;
+        }
+        adjuntos = subidos;
+      } finally {
+        setSubiendo(false);
+      }
+    }
+
+    setCargando(true);
 
     try {
       const r = await fetch("/api/agentes/interpretar", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ frase: texto, destino, argumento: dato }),
+        body: JSON.stringify({
+          frase: texto,
+          destino,
+          argumento: dato,
+          ...(adjuntos ? { adjuntos } : {}),
+        }),
       });
 
       // El handler contesta un `RespuestaAgente` incluso cuando el modelo
@@ -81,6 +226,8 @@ export function CajaAgente({
       }
 
       setRespuesta((await r.json()) as RespuestaAgente);
+      // Los archivos ya están del otro lado: la cola de la caja se vacía.
+      if (adjuntos) setArchivos([]);
     } catch {
       // Regla 7: si el modelo no está, la app sigue entera en modo manual.
       setRespuesta({
@@ -93,8 +240,18 @@ export function CajaAgente({
     }
   }
 
+  const ocupado = cargando || subiendo;
+
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length === 0) return;
+        e.preventDefault();
+        sumarArchivos(Array.from(e.dataTransfer.files));
+      }}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -105,20 +262,90 @@ export function CajaAgente({
         <Input
           value={frase}
           onChange={(e) => setFrase(e.target.value)}
+          /*
+            Pegar es el gesto real: Beno saca la captura y hace Ctrl+V.
+            Sin esto habría que guardarla a disco primero, que es
+            exactamente la fricción que hace que no se use.
+          */
+          onPaste={(e) => {
+            const pegados = Array.from(e.clipboardData.files);
+            if (pegados.length > 0) {
+              e.preventDefault();
+              sumarArchivos(pegados);
+            }
+          }}
           placeholder="¿Qué querés hacer?"
-          disabled={cargando}
+          disabled={ocupado}
           autoFocus={autoFocus}
           aria-label="Pedile algo a Pepe"
         />
-        <Button type="submit" disabled={cargando || frase.trim().length === 0}>
-          {cargando ? (
+
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          disabled={ocupado}
+          aria-label="Adjuntar un archivo"
+          onClick={() => document.getElementById("adjuntos-caja")?.click()}
+        >
+          <Paperclip className="size-4" aria-hidden="true" />
+        </Button>
+
+        <Button
+          type="submit"
+          disabled={
+            ocupado || (frase.trim().length === 0 && archivos.length === 0)
+          }
+        >
+          {ocupado ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           ) : (
             <Sparkles className="size-4" aria-hidden="true" />
           )}
-          {cargando ? "Pensando…" : "Dale"}
+          {subiendo ? "Subiendo…" : cargando ? "Pensando…" : "Dale"}
         </Button>
+
+        <input
+          id="adjuntos-caja"
+          type="file"
+          multiple
+          accept={TIPOS_ADJUNTO.join(",")}
+          className="hidden"
+          onChange={(e) => {
+            sumarArchivos(Array.from(e.target.files ?? []));
+            e.target.value = "";
+          }}
+        />
       </form>
+
+      {archivos.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {archivos.map((archivo, n) => (
+            <li
+              key={`${archivo.name}-${n}`}
+              className="bg-muted flex items-center gap-2 rounded-md px-2 py-1 text-xs"
+            >
+              {archivo.type === "application/pdf" ? (
+                <FileText className="size-3.5 shrink-0" aria-hidden="true" />
+              ) : (
+                <ImageIcon className="size-3.5 shrink-0" aria-hidden="true" />
+              )}
+              <span className="max-w-48 truncate">{archivo.name}</span>
+              <button
+                type="button"
+                aria-label={`Quitar ${archivo.name}`}
+                className="hover:text-foreground text-muted-foreground"
+                disabled={ocupado}
+                onClick={() =>
+                  setArchivos((previos) => previos.filter((_, i) => i !== n))
+                }
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div aria-live="polite">
         {respuesta ? (
@@ -131,7 +358,8 @@ export function CajaAgente({
           !cargando && (
             <p className="text-muted-foreground text-xs">
               Probá con “cómo viene Proder”, “qué me toca hoy” o “qué estoy
-              pagando que no uso”.
+              pagando que no uso”. También podés pegar o arrastrar capturas y
+              PDF acá.
             </p>
           )
         )}
@@ -257,6 +485,177 @@ function Movimiento({
       <PieDeDestino destino={respuesta.destino} onElegir={onElegir} />
     </div>
   );
+}
+
+/**
+ * Los archivos ya guardados, y el pase corriendo encima.
+ *
+ * **La caja no espera el pase adentro de la llamada, lo maneja acá.** Un
+ * PDF de 30 páginas son ~32 000 tokens contra un caño de 5500 por minuto:
+ * diez minutos, contra un `maxDuration` de 300 segundos. Así que el
+ * servidor procesa lo que entra en su presupuesto de tiempo, devuelve
+ * `restantes` y esta pantalla vuelve a llamar — el mismo mecanismo que ya
+ * usa el pase de extracción de la bandeja.
+ *
+ * Y por eso el corte por tiempo y el corte por falla se tratan distinto:
+ * al primero se le vuelve a llamar solo, al segundo se le ofrece un botón.
+ * Insistir en un bucle contra una cuota agotada es peor que esperar.
+ */
+function Adjuntos({
+  respuesta,
+  onCerrar,
+}: {
+  respuesta: Extract<RespuestaSimple, { clase: "adjuntos" }>;
+  onCerrar?: () => void;
+}) {
+  const [corriendo, setCorriendo] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [resumen, setResumen] = useState<{
+    propuestas: number;
+    notas: number;
+    noProcesables: number;
+    errores: number;
+  } | null>(null);
+
+  const ids = respuesta.items.map((i) => i.id);
+  // El efecto de abajo corre una sola vez por respuesta; sin esto,
+  // recrear el array de ids en cada render lo volvería a disparar.
+  const clave = ids.join(",");
+  const arrancado = useRef<string | null>(null);
+
+  const correr = useCallback(async () => {
+    setCorriendo(true);
+    setAviso(null);
+
+    const total = { propuestas: 0, notas: 0, noProcesables: 0, errores: 0 };
+    // Tope de vueltas: 60 páginas son ~20 minutos y cada corrida gasta 4,
+    // así que ocho vueltas cubren el peor caso con margen. Sin tope, un
+    // bug del servidor que devolviera siempre lo mismo sería un bucle
+    // infinito contra Groq.
+    const MAX_VUELTAS = 8;
+
+    try {
+      for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
+        const r = await fetch("/api/adjuntos/procesar", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ids: clave.split(",") }),
+        });
+
+        const resultado = (await r.json()) as
+          | { ok: true; data: ReporteAdjuntosCliente }
+          | { ok: false; error: string };
+
+        if (!resultado.ok) {
+          setAviso(resultado.error);
+          return;
+        }
+
+        const d = resultado.data;
+        total.propuestas += d.propuestas;
+        total.notas += d.notas;
+        total.noProcesables += d.noProcesables;
+        total.errores += d.errores;
+        setResumen({ ...total });
+
+        if (d.restantes === 0) return;
+
+        // Se cortó por una falla del modelo, no por tiempo: frenar y
+        // ofrecer el botón. Los archivos quedaron guardados.
+        if (!d.cortePorTiempo) {
+          setAviso(
+            `${d.interrumpidoPor ?? "Quedó a medias."} Lo que ya salió está en la bandeja.`,
+          );
+          return;
+        }
+      }
+
+      setAviso("Todavía queda archivo por leer. Dale de nuevo para seguir.");
+    } catch {
+      setAviso("Se cortó la conexión. Los archivos quedaron guardados.");
+    } finally {
+      setCorriendo(false);
+    }
+  }, [clave]);
+
+  useEffect(() => {
+    if (!respuesta.procesar) return;
+    if (arrancado.current === clave) return;
+    arrancado.current = clave;
+    void correr();
+  }, [clave, correr, respuesta.procesar]);
+
+  const salieron = (resumen?.propuestas ?? 0) + (resumen?.notas ?? 0);
+
+  return (
+    <div className={TARJETA}>
+      <p className="text-sm font-semibold">{respuesta.titulo}</p>
+      <p className="text-muted-foreground text-sm">{respuesta.cuerpo}</p>
+
+      <ul className="text-muted-foreground space-y-1 text-xs">
+        {respuesta.items.map((i) => (
+          <li key={i.id} className="flex items-center gap-2">
+            {i.tipo === "pdf" ? (
+              <FileText className="size-3.5 shrink-0" aria-hidden="true" />
+            ) : (
+              <ImageIcon className="size-3.5 shrink-0" aria-hidden="true" />
+            )}
+            <span className="truncate">{i.nombre}</span>
+          </li>
+        ))}
+      </ul>
+
+      {corriendo && (
+        <p className="text-muted-foreground flex items-center gap-2 text-sm">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          Leyendo… esto puede tardar unos minutos y podés seguir usando la app.
+        </p>
+      )}
+
+      {resumen && salieron > 0 && (
+        <Button asChild variant="outline" onClick={onCerrar}>
+          <Link href={respuesta.href}>
+            Ver las <span className="cifra">{salieron}</span> propuestas
+          </Link>
+        </Button>
+      )}
+
+      {resumen && !corriendo && salieron === 0 && (
+        <p className="text-muted-foreground text-sm">
+          {resumen.noProcesables > 0
+            ? "No pude leer lo que había adentro. El archivo quedó guardado igual."
+            : "No salió ninguna propuesta de ahí."}
+        </p>
+      )}
+
+      {aviso && (
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-sm">{aviso}</p>
+          <Button variant="outline" size="sm" onClick={() => void correr()}>
+            Seguir
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lo que devuelve `/api/adjuntos/procesar`.
+ *
+ * Se declara acá y no se importa de `lib/adjuntos.ts` porque ese módulo
+ * es `server-only`: importarlo desde un componente cliente rompería el
+ * build, que es justamente para lo que está esa marca.
+ */
+interface ReporteAdjuntosCliente {
+  terminados: number;
+  propuestas: number;
+  notas: number;
+  noProcesables: number;
+  errores: number;
+  restantes: number;
+  interrumpidoPor?: string;
+  cortePorTiempo: boolean;
 }
 
 /** Cómo se llama cada especialista en pantalla. */
@@ -461,6 +860,14 @@ function Respuesta({
           onCerrar={onCerrar}
         />
       );
+
+    /*
+      Archivos guardados. No lleva pie de "¿no era esto?": no hubo
+      derivación que corregir — el camino lo decidió la presencia del
+      archivo y el pase lo decidió el MIME, las dos cosas sin modelo.
+    */
+    case "adjuntos":
+      return <Adjuntos respuesta={respuesta} onCerrar={onCerrar} />;
 
     case "aviso":
       return (

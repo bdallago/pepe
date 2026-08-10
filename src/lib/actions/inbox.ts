@@ -10,6 +10,7 @@ import {
   requireSession,
   type ActionResult,
 } from "./shared";
+import { crearEntradaDeBitacora } from "@/lib/bitacora";
 import type {
   OrigenLeccion,
   TipoBandeja,
@@ -68,7 +69,19 @@ const payloadSchema = z.object({
     "personal",
   ]),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  project_id: uuid,
+  /**
+   * **Opcional acá, obligatorio en `lessons`.**
+   *
+   * Todas las propuestas que existían antes lo traen resuelto: heredan el
+   * proyecto de la entrada de bitácora, del tema pedido o de la retro. La
+   * que puede no traerlo es la que sale de un archivo pegado, porque al
+   * pegarlo puede no saberse a qué proyecto va. Cuando falta, lo trae la
+   * edición (ver `edicionSchema`) y la tarjeta de la bandeja lo pide antes
+   * de habilitar el botón.
+   */
+  project_id: uuid.optional(),
+  /** Solo en las que salieron de un adjunto. Cambia el `origen`. */
+  adjunto_id: uuid.optional(),
 });
 
 /**
@@ -88,6 +101,17 @@ const edicionSchema = z
       .min(1, "El contenido no puede quedar vacío.")
       .max(5000),
     categoria: payloadSchema.shape.categoria,
+    /**
+     * **Se usa solo si el payload no trae proyecto.**
+     *
+     * No es una excepción a la regla de arriba, es su complemento: la
+     * regla existe para que no se pueda mover una lección a un proyecto
+     * que no es el que la originó. Cuando el payload trae `project_id`,
+     * esto se ignora. Cuando no lo trae —el adjunto pegado sin nombrar
+     * proyecto— es el único lugar donde puede salir el dato, porque
+     * `lessons.project_id` es NOT NULL.
+     */
+    projectId: uuid,
   })
   .partial();
 
@@ -140,16 +164,27 @@ export async function aceptarLeccion(
     return fail("La propuesta guardada está incompleta. Rechazala.");
   }
 
+  const projectId = payload.data.project_id ?? edicionParseada.data.projectId;
+  if (!projectId) {
+    return fail("Elegí a qué proyecto va la lección.");
+  }
+
+  // Una lección que entró por un archivo no es ni `importada` (no la
+  // vivió) ni `generada` (no salió de un tema que él pidió): salió de
+  // material de un tercero. La lista de Lecciones tiene que poder
+  // distinguirlo, igual que distingue las hipótesis.
+  const origen = payload.data.adjunto_id ? "adjunto" : ORIGEN_POR_TIPO[item.tipo];
+
   const { data: leccion, error: errorLeccion } = await supabase
     .from("lessons")
     .insert({
       user_id: userId,
-      project_id: payload.data.project_id,
+      project_id: projectId,
       fecha: payload.data.fecha,
       titulo: edicionParseada.data.titulo ?? payload.data.titulo,
       contenido: edicionParseada.data.contenido ?? payload.data.contenido,
       categoria: edicionParseada.data.categoria ?? payload.data.categoria,
-      origen: ORIGEN_POR_TIPO[item.tipo],
+      origen,
     })
     .select("id")
     .single();
@@ -187,6 +222,121 @@ export async function aceptarLeccion(
 
   revalidatePath("/", "layout");
   return ok({ lessonId: leccion.id });
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Notas que salieron de una captura
+ * ──────────────────────────────────────────────────────────── */
+
+const payloadNotaSchema = z.object({
+  contenido: z.string().trim().min(1).max(6000),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  project_id: uuid.optional(),
+});
+
+const edicionNotaSchema = z
+  .object({
+    contenido: z
+      .string()
+      .trim()
+      .min(1, "La nota no puede quedar vacía.")
+      .max(6000),
+    projectId: uuid,
+  })
+  .partial();
+
+export type EdicionNota = z.infer<typeof edicionNotaSchema>;
+
+/**
+ * Acepta una nota que salió de una captura: crea la entrada de bitácora.
+ *
+ * Es una acción aparte de `aceptarLeccion()` porque escribe en otra tabla
+ * y con otro criterio, no por prolijidad. Y la distinción que la ordena
+ * está en la regla 6 de `AGENTS.md`: el agente de bitácora escribe
+ * directo porque **el texto es de Beno palabra por palabra**; acá el
+ * texto lo produjo un modelo mirando píxeles, así que pasa por la bandeja
+ * como cualquier otra producción de un modelo.
+ *
+ * Una vez que la entrada existe, el pase de extracción que ya está hecho
+ * la mira y, si tiene una lección adentro, la propone. Ese camino no hay
+ * que construirlo.
+ */
+export async function aceptarNotaDeAdjunto(
+  itemId: string,
+  edicion?: EdicionNota,
+): Promise<ActionResult<{ entradaId: string }>> {
+  const idParseado = uuid.safeParse(itemId);
+  if (!idParseado.success) return fail("Identificador inválido.");
+
+  const edicionParseada = edicionNotaSchema.safeParse(edicion ?? {});
+  if (!edicionParseada.success) {
+    return fail(edicionParseada.error.issues[0]?.message ?? "Datos inválidos.");
+  }
+
+  const { supabase, userId } = await requireSession();
+
+  const { data: item, error: errorLectura } = await supabase
+    .from("inbox")
+    .select("id, tipo, estado, payload")
+    .eq("id", idParseado.data)
+    .maybeSingle();
+
+  if (errorLectura) return fail(mensajeDeError(errorLectura));
+  if (!item) return fail("No encontré esa propuesta.");
+  if (item.tipo !== "nota_de_adjunto") {
+    return fail("Esa propuesta no es una nota de bitácora.");
+  }
+  if (item.estado !== "pendiente" && item.estado !== "pospuesto") {
+    return fail("Esa propuesta ya estaba resuelta.");
+  }
+
+  const payload = payloadNotaSchema.safeParse(item.payload);
+  if (!payload.success) {
+    return fail("La propuesta guardada está incompleta. Rechazala.");
+  }
+
+  // `daily_log.project_id` es NOT NULL y el adjunto puede haber llegado
+  // sin proyecto: la tarjeta lo pide antes de habilitar el botón.
+  const projectId = payload.data.project_id ?? edicionParseada.data.projectId;
+  if (!projectId) return fail("Elegí a qué proyecto va la nota.");
+
+  const { data: entrada, error: errorEntrada } = await crearEntradaDeBitacora(
+    supabase,
+    userId,
+    {
+      contenido: edicionParseada.data.contenido ?? payload.data.contenido,
+      fecha: payload.data.fecha,
+      projectId,
+    },
+  );
+
+  if (errorEntrada || !entrada) {
+    return fail(
+      errorEntrada ? mensajeDeError(errorEntrada) : "La nota no se guardó.",
+    );
+  }
+
+  const { error: errorCierre } = await supabase
+    .from("inbox")
+    .update({
+      estado: "aceptado",
+      resuelto_en: new Date().toISOString(),
+      // `entidad_tabla` / `entidad_id` siguen apuntando al adjunto, por el
+      // mismo motivo que en `aceptarLeccion()`: repuntarlos rompería la
+      // trazabilidad hacia el archivo del que salió. El vínculo hacia
+      // adelante va en el payload.
+      payload: {
+        ...(item.payload as Record<string, unknown>),
+        daily_log_id: entrada.id,
+      },
+      clave_dedupe: null,
+    })
+    .eq("id", idParseado.data);
+
+  if (errorCierre) return fail(mensajeDeError(errorCierre));
+
+  revalidatePath("/", "layout");
+  return ok({ entradaId: entrada.id });
 }
 
 /** Descarta la propuesta. La entrada de bitácora queda intacta. */

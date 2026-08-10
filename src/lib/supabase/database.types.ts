@@ -70,6 +70,80 @@ export type Database = {
           },
         ]
       }
+      attachments: {
+        Row: {
+          archivado_en: string | null
+          bytes: number
+          created_at: string
+          error_detalle: string | null
+          estado: Database["public"]["Enums"]["estado_adjunto"]
+          frase: string | null
+          id: string
+          mime: string
+          nombre_original: string
+          paginas: number | null
+          project_id: string | null
+          resumenes: Json
+          storage_path: string
+          texto_extraido: string | null
+          tipo: Database["public"]["Enums"]["tipo_adjunto"]
+          trozos_hechos: number
+          trozos_totales: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archivado_en?: string | null
+          bytes: number
+          created_at?: string
+          error_detalle?: string | null
+          estado?: Database["public"]["Enums"]["estado_adjunto"]
+          frase?: string | null
+          id?: string
+          mime: string
+          nombre_original: string
+          paginas?: number | null
+          project_id?: string | null
+          resumenes?: Json
+          storage_path: string
+          texto_extraido?: string | null
+          tipo: Database["public"]["Enums"]["tipo_adjunto"]
+          trozos_hechos?: number
+          trozos_totales?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archivado_en?: string | null
+          bytes?: number
+          created_at?: string
+          error_detalle?: string | null
+          estado?: Database["public"]["Enums"]["estado_adjunto"]
+          frase?: string | null
+          id?: string
+          mime?: string
+          nombre_original?: string
+          paginas?: number | null
+          project_id?: string | null
+          resumenes?: Json
+          storage_path?: string
+          texto_extraido?: string | null
+          tipo?: Database["public"]["Enums"]["tipo_adjunto"]
+          trozos_hechos?: number
+          trozos_totales?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blocks: {
         Row: {
           archivado_en: string | null
@@ -909,6 +983,12 @@ export type Database = {
         | "comercial"
         | "proceso"
         | "personal"
+      estado_adjunto:
+        | "pendiente"
+        | "procesando"
+        | "listo"
+        | "no_procesable"
+        | "error"
       estado_artefacto: "no_empezado" | "en_curso" | "completado"
       estado_bandeja:
         | "pendiente"
@@ -919,13 +999,20 @@ export type Database = {
       estado_movimiento: "efectuado" | "planificado"
       frecuencia_recurrencia: "mensual" | "anual"
       moneda: "ARS" | "USD"
-      origen_leccion: "manual" | "importada" | "generada" | "retro"
+      origen_leccion:
+        | "manual"
+        | "importada"
+        | "generada"
+        | "retro"
+        | "adjunto"
+      tipo_adjunto: "pdf" | "imagen"
       tipo_bandeja:
         | "categorizacion"
         | "zombie"
         | "leccion_sugerida"
         | "leccion_extraida"
         | "retro"
+        | "nota_de_adjunto"
       tipo_cliente: "particular" | "pyme" | "empresa"
       tipo_movimiento: "ingreso" | "egreso"
     }
@@ -1062,6 +1149,13 @@ export const Constants = {
         "proceso",
         "personal",
       ],
+      estado_adjunto: [
+        "pendiente",
+        "procesando",
+        "listo",
+        "no_procesable",
+        "error",
+      ],
       estado_artefacto: ["no_empezado", "en_curso", "completado"],
       estado_bandeja: [
         "pendiente",
@@ -1073,13 +1167,15 @@ export const Constants = {
       estado_movimiento: ["efectuado", "planificado"],
       frecuencia_recurrencia: ["mensual", "anual"],
       moneda: ["ARS", "USD"],
-      origen_leccion: ["manual", "importada", "generada", "retro"],
+      origen_leccion: ["manual", "importada", "generada", "retro", "adjunto"],
+      tipo_adjunto: ["pdf", "imagen"],
       tipo_bandeja: [
         "categorizacion",
         "zombie",
         "leccion_sugerida",
         "leccion_extraida",
         "retro",
+        "nota_de_adjunto",
       ],
       tipo_cliente: ["particular", "pyme", "empresa"],
       tipo_movimiento: ["ingreso", "egreso"],
@@ -1091,6 +1187,16 @@ export const Constants = {
 // ─────────────────────────────────────────────────────────────
 // Alias de conveniencia usados en toda la app.
 // Este bloque se escribe a mano: si regenerás el archivo, volvé a pegarlo.
+//
+// ⚠ Al 2026-08-10 hay algo MÁS escrito a mano acá arriba: la tabla
+// `attachments`, el enum `tipo_adjunto`, el enum `estado_adjunto` y los
+// valores `nota_de_adjunto` / `adjunto` que se le agregaron a
+// `tipo_bandeja` y `origen_leccion`. Sus migraciones
+// (`20260810001000_adjuntos_enums.sql` y `20260810001001_adjuntos.sql`)
+// están escritas pero **todavía no se aplicaron**: hacen falta el access
+// token de Supabase. Después del `db push`, regenerá el archivo y esto
+// se va a rellenar solo — momento en el que hay que volver a pegar solo
+// este bloque de alias y borrar esta advertencia.
 // ─────────────────────────────────────────────────────────────
 
 export type TipoMovimiento = Database["public"]["Enums"]["tipo_movimiento"];
@@ -1124,5 +1230,8 @@ export type Artifact = Database["public"]["Tables"]["artifacts"]["Row"];
 export type DailyLog = Database["public"]["Tables"]["daily_log"]["Row"];
 export type Lesson = Database["public"]["Tables"]["lessons"]["Row"];
 export type InboxItem = Database["public"]["Tables"]["inbox"]["Row"];
+export type Attachment = Database["public"]["Tables"]["attachments"]["Row"];
+export type TipoAdjunto = Database["public"]["Enums"]["tipo_adjunto"];
+export type EstadoAdjunto = Database["public"]["Enums"]["estado_adjunto"];
 export type Retro = Database["public"]["Tables"]["retros"]["Row"];
 export type Settings = Database["public"]["Tables"]["settings"]["Row"];

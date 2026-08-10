@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import type { Moneda, TipoMovimiento } from "@/lib/supabase/database.types";
+import type {
+  Moneda,
+  TipoAdjunto,
+  TipoMovimiento,
+} from "@/lib/supabase/database.types";
 
 /**
  * Los destinos posibles del recepcionista.
@@ -283,7 +287,57 @@ export type RespuestaSimple =
       cuerpo: string;
       precarga: PrecargaMovimiento;
     }
+  | {
+      /**
+       * Archivos guardados y listos para procesar.
+       *
+       * **No tiene `destino`, y no es un olvido.** Un adjunto no pasa por
+       * el recepcionista: el camino lo decide la presencia del archivo y
+       * el pase lo decide el MIME, las dos cosas en código y sin modelo
+       * (ver `agentes/adjuntos.ts`). Un pie de "¿no era esto?" ofrecería
+       * corregir una derivación que nunca hubo.
+       *
+       * Tampoco trae texto propuesto: cuando esto vuelve, **todavía no se
+       * llamó a ningún modelo**. Lo único que pasó es que los archivos
+       * quedaron guardados. La pantalla dispara el pase contra
+       * `/api/adjuntos/procesar` y lo repite mientras queden restantes,
+       * igual que el pase de extracción de la bandeja: un PDF mediano no
+       * entra en ningún `maxDuration`.
+       */
+      clase: "adjuntos";
+      titulo: string;
+      cuerpo: string;
+      items: { id: string; nombre: string; tipo: TipoAdjunto }[];
+      /** `false` cuando se guardó el archivo pero no hay pase que correr. */
+      procesar: boolean;
+      /** Adónde ir a confirmar lo que salga. */
+      href: string;
+    }
   | { clase: "aviso"; titulo: string; cuerpo: string };
+
+/**
+ * Un archivo que el browser **ya subió** a Storage, tal como llega al
+ * handler.
+ *
+ * La subida va del browser directo a Supabase, sin pasar por Next, igual
+ * que `comprobante-input.tsx`. Por eso acá viajan metadatos y no bytes: el
+ * archivo nunca atraviesa un route handler ni una Server Action, así que
+ * ninguna discusión sobre tamaño máximo de request aplica.
+ */
+export interface AdjuntoSubido {
+  /** `<user_id>/<uuid>.<ext>` dentro del bucket `adjuntos`. */
+  path: string;
+  nombre: string;
+  mime: string;
+  bytes: number;
+}
+
+export const adjuntoSubidoSchema = z.object({
+  path: z.string().trim().min(1).max(300),
+  nombre: z.string().trim().min(1).max(300),
+  mime: z.string().trim().min(1).max(120),
+  bytes: z.number().int().positive().max(10 * 1024 * 1024),
+});
 
 /**
  * Un movimiento leído de una frase, listo para precargar el formulario.

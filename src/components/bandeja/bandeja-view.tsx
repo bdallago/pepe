@@ -18,11 +18,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   aceptarLeccion,
+  aceptarNotaDeAdjunto,
   aceptarZombie,
   descartarErrorBandeja,
   posponerItemBandeja,
   rechazarItemBandeja,
 } from "@/lib/actions/inbox";
+import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import type { Json } from "@/lib/supabase/database.types";
@@ -69,7 +71,10 @@ const TIPO_LABEL: Record<TipoBandeja, string> = {
   leccion_sugerida: "Lección sugerida",
   leccion_extraida: "Lección de la bitácora",
   retro: "Retro de proyecto",
+  nota_de_adjunto: "Nota de una captura",
 };
+
+const BUCKET_ADJUNTOS = "adjuntos";
 
 /** Cuánto hay que arrastrar para que el swipe cuente como decisión. */
 const UMBRAL_SWIPE = 90;
@@ -89,11 +94,57 @@ interface Propuesta {
   contenido: string;
   categoria: CategoriaLeccion;
   fecha: string;
-  project_id: string;
+  /**
+   * Opcional solo para las que salieron de un archivo pegado: al pegarlo
+   * puede no saberse a qué proyecto va. Las demás lo heredan resuelto.
+   */
+  project_id?: string;
   /** Solo en las generadas: el pedido que las originó (spec 6.3). */
   tema?: string;
   /** Solo en las de retro: de qué cierre salieron (spec 6.5). */
   retro_titulo?: string;
+  /** Solo en las que salieron de un adjunto: de qué archivo. */
+  adjunto_nombre?: string;
+  /** Lo que Beno escribió al pegar el archivo. */
+  frase?: string;
+}
+
+/**
+ * Lo que propone una captura: una **entrada de bitácora**, no una
+ * lección.
+ *
+ * "Esto me contestó un cliente" es algo que pasó. Y una vez que la
+ * entrada existe, el pase de extracción que ya está hecho la mira y, si
+ * tiene una lección adentro, la propone.
+ */
+interface Nota {
+  contenido: string;
+  fecha: string;
+  project_id?: string;
+  de_que_es: string;
+  adjunto_nombre: string;
+  storage_path: string;
+  frase?: string;
+}
+
+function leerNota(payload: Json): Nota | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+  const p = payload as Record<string, unknown>;
+  if (typeof p.contenido !== "string" || typeof p.fecha !== "string") {
+    return null;
+  }
+  return {
+    contenido: p.contenido,
+    fecha: p.fecha,
+    project_id: typeof p.project_id === "string" ? p.project_id : undefined,
+    de_que_es: typeof p.de_que_es === "string" ? p.de_que_es : "Una imagen",
+    adjunto_nombre:
+      typeof p.adjunto_nombre === "string" ? p.adjunto_nombre : "la captura",
+    storage_path: typeof p.storage_path === "string" ? p.storage_path : "",
+    frase: typeof p.frase === "string" ? p.frase : undefined,
+  };
 }
 
 /** Lo que muestra un aviso de suscripción sin uso (spec 6.2). */
@@ -144,8 +195,7 @@ function leerPropuesta(payload: Json): Propuesta | null {
     typeof p.titulo !== "string" ||
     typeof p.contenido !== "string" ||
     typeof p.categoria !== "string" ||
-    typeof p.fecha !== "string" ||
-    typeof p.project_id !== "string"
+    typeof p.fecha !== "string"
   ) {
     return null;
   }
@@ -154,11 +204,66 @@ function leerPropuesta(payload: Json): Propuesta | null {
     contenido: p.contenido,
     categoria: p.categoria as CategoriaLeccion,
     fecha: p.fecha,
-    project_id: p.project_id,
+    project_id: typeof p.project_id === "string" ? p.project_id : undefined,
     tema: typeof p.tema === "string" ? p.tema : undefined,
     retro_titulo:
       typeof p.retro_titulo === "string" ? p.retro_titulo : undefined,
+    adjunto_nombre:
+      typeof p.adjunto_nombre === "string" ? p.adjunto_nombre : undefined,
+    frase: typeof p.frase === "string" ? p.frase : undefined,
   };
+}
+
+/**
+ * La imagen de la que salió la nota, al lado del texto propuesto.
+ *
+ * **No es decoración: es la salvaguarda contra lo inventado.** Es el mismo
+ * criterio que el `ancla` de las sugerencias de estudio y el `dato` de las
+ * observaciones — poder ver la fuente al lado es lo único que deja
+ * descartar de un vistazo una transcripción que no se parece a nada.
+ * Acá pesa más que en ningún otro lado, porque el texto propuesto se lee
+ * como si lo hubiera dicho un cliente.
+ *
+ * La URL se firma en el browser y dura una hora, igual que en
+ * `comprobante-input.tsx`. El bucket es privado y nunca hay URL pública.
+ */
+function MiniaturaAdjunto({ path, alt }: { path: string; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    if (!path) return;
+
+    void (async () => {
+      const { data } = await createClient()
+        .storage.from(BUCKET_ADJUNTOS)
+        .createSignedUrl(path, 60 * 60);
+      if (!cancelado) setUrl(data?.signedUrl ?? null);
+    })();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [path]);
+
+  if (!url) {
+    return (
+      <div className="bg-muted text-muted-foreground flex h-48 items-center justify-center rounded-md text-xs">
+        Cargando la imagen…
+      </div>
+    );
+  }
+
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="block">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={alt}
+        className="max-h-96 w-full rounded-md border object-contain"
+      />
+    </a>
+  );
 }
 
 function Atajo({ tecla, children }: { tecla: string; children: string }) {
@@ -183,6 +288,14 @@ export function BandejaView({
   const [items, setItems] = useState(itemsIniciales);
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState<Propuesta | null>(null);
+  const [borradorNota, setBorradorNota] = useState<string | null>(null);
+  /**
+   * Solo se usa cuando el payload **no trae proyecto**, que es el caso de
+   * lo que entró por un archivo pegado. Con proyecto en el payload, esto
+   * ni se muestra: mover una lección a otro proyecto sería inventar de
+   * dónde vino.
+   */
+  const [proyectoElegido, setProyectoElegido] = useState<string | null>(null);
   const [extrayendo, setExtrayendo] = useState(false);
   const [arrastre, setArrastre] = useState(0);
   const [, iniciarTransicion] = useTransition();
@@ -199,10 +312,21 @@ export function BandejaView({
 
   const actual = items[0] ?? null;
   const esZombie = actual?.tipo === "zombie";
+  const esNota = actual?.tipo === "nota_de_adjunto";
   const propuesta =
-    actual && !esZombie ? leerPropuesta(actual.payload) : null;
+    actual && !esZombie && !esNota ? leerPropuesta(actual.payload) : null;
   const zombie = actual && esZombie ? leerZombie(actual.payload) : null;
+  const nota = actual && esNota ? leerNota(actual.payload) : null;
   const esError = actual?.estado === "error";
+
+  // Falta el proyecto y hay que elegirlo. Pasa solo con lo que entró por
+  // un archivo pegado: `lessons.project_id` y `daily_log.project_id` son
+  // los dos NOT NULL, así que sin esto no hay nada que aceptar.
+  const proyectoDelPayload = esNota ? nota?.project_id : propuesta?.project_id;
+  const faltaProyecto =
+    !esError && !esZombie && (esNota ? Boolean(nota) : Boolean(propuesta)) &&
+    !proyectoDelPayload;
+  const projectId = proyectoDelPayload ?? proyectoElegido ?? null;
 
   const nombreProyecto = (id: string) =>
     projects.find((p) => p.id === id)?.nombre ?? "Proyecto archivado";
@@ -217,6 +341,8 @@ export function BandejaView({
       setItems((previos) => previos.filter((i) => i.id !== item.id));
       setEditando(false);
       setBorrador(null);
+      setBorradorNota(null);
+      setProyectoElegido(null);
       setArrastre(0);
 
       iniciarTransicion(async () => {
@@ -250,14 +376,38 @@ export function BandejaView({
       return;
     }
 
+    // Falta elegir el proyecto: el botón está apagado, pero la tecla A no
+    // pasa por el botón.
+    if (faltaProyecto && !proyectoElegido) return;
+
+    // Una captura propone una entrada de bitácora, no una lección: otra
+    // tabla y otra acción.
+    if (esNota) {
+      if (!nota) return;
+      const contenido = borradorNota ?? undefined;
+      resolver(
+        actual,
+        () =>
+          aceptarNotaDeAdjunto(actual.id, {
+            ...(contenido ? { contenido } : {}),
+            ...(nota.project_id ? {} : { projectId: proyectoElegido! }),
+          }),
+        "Nota guardada en la bitácora.",
+      );
+      return;
+    }
+
     if (!propuesta) return;
-    const edicion = borrador
-      ? {
-          titulo: borrador.titulo,
-          contenido: borrador.contenido,
-          categoria: borrador.categoria,
-        }
-      : undefined;
+    const edicion = {
+      ...(borrador
+        ? {
+            titulo: borrador.titulo,
+            contenido: borrador.contenido,
+            categoria: borrador.categoria,
+          }
+        : {}),
+      ...(propuesta.project_id ? {} : { projectId: proyectoElegido! }),
+    };
 
     resolver(
       actual,
@@ -278,7 +428,19 @@ export function BandejaView({
       },
       "Lección guardada.",
     );
-  }, [actual, borrador, esError, esZombie, propuesta, resolver]);
+  }, [
+    actual,
+    borrador,
+    borradorNota,
+    esError,
+    esNota,
+    esZombie,
+    faltaProyecto,
+    nota,
+    propuesta,
+    proyectoElegido,
+    resolver,
+  ]);
 
   const rechazar = useCallback(() => {
     if (!actual) return;
@@ -293,10 +455,17 @@ export function BandejaView({
   }, [actual, esError, resolver]);
 
   const editar = useCallback(() => {
-    if (!actual || esError || !propuesta) return;
+    if (!actual || esError) return;
+    if (esNota) {
+      if (!nota) return;
+      setBorradorNota(borradorNota ?? nota.contenido);
+      setEditando(true);
+      return;
+    }
+    if (!propuesta) return;
     setBorrador(borrador ?? propuesta);
     setEditando(true);
-  }, [actual, borrador, esError, propuesta]);
+  }, [actual, borrador, borradorNota, esError, esNota, nota, propuesta]);
 
   // --- Teclado ------------------------------------------------
   //
@@ -315,6 +484,7 @@ export function BandejaView({
         if (evento.key === "Escape") {
           setEditando(false);
           setBorrador(null);
+          setBorradorNota(null);
           contenedor.current?.focus();
         }
         // Ctrl/⌘+Enter guarda desde adentro del campo: es el gesto que ya
@@ -568,6 +738,68 @@ export function BandejaView({
               Este aviso quedó incompleto. Rechazalo.
             </p>
           )
+        ) : esNota ? (
+          nota ? (
+            <div className="grid gap-6 md:grid-cols-2">
+              {/*
+                La fuente a la izquierda, siempre. Una transcripción que
+                se lee como si la hubiera dicho un cliente no se puede
+                juzgar sin tener la imagen al lado.
+              */}
+              <section className="space-y-2">
+                <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  Lo que pegaste
+                </h2>
+                <p className="text-sm">{nota.de_que_es}</p>
+                <MiniaturaAdjunto
+                  path={nota.storage_path}
+                  alt={`Captura ${nota.adjunto_nombre}`}
+                />
+                {nota.frase && (
+                  <p className="text-muted-foreground text-xs">
+                    Escribiste: “{nota.frase}”
+                  </p>
+                )}
+              </section>
+
+              <section className="space-y-3 md:border-l md:pl-6">
+                <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  Entrada de bitácora propuesta
+                </h2>
+
+                {editando && borradorNota !== null ? (
+                  <Textarea
+                    autoFocus
+                    rows={12}
+                    value={borradorNota}
+                    onChange={(e) => setBorradorNota(e.target.value)}
+                    aria-label="Contenido de la nota"
+                  />
+                ) : (
+                  <p className="max-h-96 overflow-y-auto text-sm whitespace-pre-line">
+                    {borradorNota ?? nota.contenido}
+                  </p>
+                )}
+
+                <p className="text-muted-foreground text-xs">
+                  Lo transcribió un modelo mirando la imagen, así que{" "}
+                  <strong>no es tuyo palabra por palabra</strong>. Corregilo
+                  antes de aceptar si hace falta. Una vez guardado, el pase de
+                  la bandeja lo mira y, si tiene una lección adentro, te la
+                  propone.
+                </p>
+
+                <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+                  <span className="cifra">{formatDate(nota.fecha)}</span>
+                  {nota.project_id && <span>{nombreProyecto(nota.project_id)}</span>}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Esta nota quedó incompleta y no se puede aceptar. Rechazala.
+            </p>
+          )
         ) : !mostrada ? (
           <p className="text-muted-foreground text-sm">
             Esta propuesta quedó incompleta y no se puede aceptar. Rechazala.
@@ -587,10 +819,29 @@ export function BandejaView({
                   ? "Lo que escribiste"
                   : actual.tipo === "retro"
                     ? "De qué retro salió"
-                    : "Lo que pediste"}
+                    : mostrada.adjunto_nombre
+                      ? "De qué archivo salió"
+                      : "Lo que pediste"}
               </h2>
 
-              {actual.tipo === "leccion_extraida" ? (
+              {mostrada.adjunto_nombre ? (
+                <div className="space-y-3">
+                  <p className="text-sm break-words">
+                    {mostrada.adjunto_nombre}
+                  </p>
+                  {mostrada.frase && (
+                    <p className="text-muted-foreground text-xs">
+                      Escribiste: “{mostrada.frase}”
+                    </p>
+                  )}
+                  <p className="text-muted-foreground text-xs">
+                    Salió de un <strong>archivo que pegaste</strong>, no de algo
+                    que hayas vivido ni de un tema que hayas pedido. El modelo
+                    leyó el documento y propuso esto; si la aceptás, queda
+                    marcada así en la lista de Lecciones.
+                  </p>
+                </div>
+              ) : actual.tipo === "leccion_extraida" ? (
                 actual.entrada ? (
                   <>
                     <p className="text-muted-foreground cifra text-xs">
@@ -690,7 +941,9 @@ export function BandejaView({
                       {CATEGORIAS.find((c) => c.valor === mostrada.categoria)
                         ?.label ?? mostrada.categoria}
                     </Badge>
-                    <span>{nombreProyecto(mostrada.project_id)}</span>
+                    {mostrada.project_id && (
+                      <span>{nombreProyecto(mostrada.project_id)}</span>
+                    )}
                     <span className="cifra">{formatDate(mostrada.fecha)}</span>
                   </div>
                 </div>
@@ -700,12 +953,44 @@ export function BandejaView({
         )}
       </div>
 
+      {/*
+        Falta el proyecto y hay que elegirlo antes de poder aceptar.
+        Pasa solo con lo que entró por un archivo pegado: al pegarlo puede
+        no saberse a qué proyecto va, y `lessons.project_id` /
+        `daily_log.project_id` son los dos NOT NULL. Es el mismo patrón
+        que usa la caja cuando le falta un dato, y elegir entre tres
+        proyectos es un click.
+      */}
+      {faltaProyecto && (
+        <div className="bg-muted/50 flex flex-wrap items-center gap-3 rounded-md border border-dashed p-3">
+          <p className="text-sm">¿A qué proyecto va?</p>
+          <Select
+            value={proyectoElegido ?? ""}
+            onValueChange={(valor) => setProyectoElegido(valor)}
+          >
+            <SelectTrigger aria-label="Proyecto" className="w-56">
+              <SelectValue placeholder="Elegí uno" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Los mismos gestos, para el mouse y para el que recién llega. */}
       <div className="flex flex-wrap items-center gap-2">
         {!esError && (
           <Button
             onClick={aceptar}
-            disabled={esZombie ? !zombie : !mostrada}
+            disabled={
+              (esZombie ? !zombie : esNota ? !nota : !mostrada) ||
+              (faltaProyecto && !projectId)
+            }
             className="gap-1.5"
           >
             <Check className="size-4" aria-hidden="true" />
@@ -731,7 +1016,7 @@ export function BandejaView({
               <Button
                 onClick={editar}
                 variant="ghost"
-                disabled={!mostrada || editando}
+                disabled={(esNota ? !nota : !mostrada) || editando}
                 className="gap-1.5"
               >
                 <Pencil className="size-4" aria-hidden="true" />

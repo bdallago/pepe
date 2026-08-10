@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import {
   VERSION_RESPALDO,
+  firmarAdjuntos,
   firmarComprobantes,
+  listarAdjuntos,
   listarComprobantes,
 } from "@/lib/respaldo";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -55,6 +57,23 @@ export async function GET(request: NextRequest) {
     const inventario = await listarComprobantes(admin);
     const archivos = await firmarComprobantes(admin, inventario, VIGENCIA_FIRMA);
 
+    // Los adjuntos de la caja viven en otro bucket y viajan como clave
+    // aparte. Aparte y no mezclados con `archivos` por dos razones: un
+    // archivo suelto sin saber de qué bucket salió no se puede restaurar,
+    // y —la que decide— el workflow que hay hoy itera `archivos` y no
+    // sabe nada de esto. Mezclarlos le cambiaría el significado a una
+    // clave que ya usa; agregar una nueva no le rompe nada.
+    //
+    // ⚠ Hasta que el workflow de `bdallago/pepe-respaldos` recorra
+    // también `adjuntos`, **estos bytes no se están guardando en ningún
+    // lado**. Del lado de la app está todo listo.
+    const inventarioAdjuntos = await listarAdjuntos(admin);
+    const adjuntos = await firmarAdjuntos(
+      admin,
+      inventarioAdjuntos,
+      VIGENCIA_FIRMA,
+    );
+
     return new NextResponse(
       JSON.stringify(
         {
@@ -68,6 +87,13 @@ export async function GET(request: NextRequest) {
           vigencia_segundos: VIGENCIA_FIRMA,
           archivos,
           faltantes: inventario.faltantes,
+          adjuntos: {
+            total: inventarioAdjuntos.total,
+            bytes: inventarioAdjuntos.bytes,
+            huerfanos: inventarioAdjuntos.huerfanos,
+            archivos: adjuntos,
+            faltantes: inventarioAdjuntos.faltantes,
+          },
         },
         null,
         2,

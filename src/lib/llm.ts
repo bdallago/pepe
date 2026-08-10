@@ -73,6 +73,39 @@ export const MODELO_GRANDE = "llama-3.3-70b-versatile";
 export const MODELO_RAZONADOR = "openai/gpt-oss-120b";
 
 /**
+ * El único modelo de la cuenta que **ve imágenes**.
+ *
+ * Medido el 2026-08-10 disparando contra la API real, no leyendo
+ * documentación: `MODELO_CHICO`, `MODELO_GRANDE` y `MODELO_RAZONADOR`
+ * contestan los tres **HTTP 400 con el mismo mensaje literal**
+ * (`messages[0].content must be a string`) apenas les llega el array
+ * multimodal. No es que vean mal: el endpoint rechaza la forma del
+ * pedido. Qwen, en la misma corrida, contestó otra cosa —`invalid image
+ * data`, porque el PNG de prueba estaba mal armado— y con un PNG válido
+ * describió bien el color. Lee.
+ *
+ * Y lee **con `response_format: json_object`**, que es lo que
+ * `completarJSON` manda siempre y sin lo cual no serviría de nada acá.
+ *
+ * ⚠ Ojo con el docstring de `MODELO_RAZONADOR`: ahí dice que qwen "no
+ * devolvió JSON válido". Eso era **con el prompt de 6.3** y sigue siendo
+ * cierto de esa medición; lo que no es cierto es leerlo como una
+ * propiedad del modelo. Se lo descartó para **redactar lecciones**, que
+ * es otra tarea. Para transcribir lo que se ve, se midió que anda y —lo
+ * más importante— que **no alucina cuando no puede leer**: a un damero
+ * en blanco y negro contestó `legible: false` y describió lo que había,
+ * en vez de inventar una conversación con un cliente. Sin esa propiedad,
+ * el caso de las capturas no sería viable.
+ *
+ * Costo medido: entre 780 y 1810 `prompt_tokens` por imagen, **sin
+ * correlación con los bytes** (ver `TOKENS_POR_IMAGEN`), y entre 1220 y
+ * 1670 tokens el pase completo de una captura. Contra el techo del
+ * minuto entran **tres por minuto**, no cinco: Groq reserva
+ * `prompt + max_tokens`, igual que el limitador de acá.
+ */
+export const MODELO_VISION = "qwen/qwen3.6-27b";
+
+/**
  * Cuánto piensa antes de contestar un modelo de razonamiento.
  *
  * Los tokens de razonamiento **cuentan dentro de `max_tokens`** y dentro
@@ -111,17 +144,16 @@ const TOKENS_POR_MINUTO: Readonly<Record<string, number>> = {
   [MODELO_CHICO]: 5_500,
   [MODELO_GRANDE]: 11_000,
   [MODELO_RAZONADOR]: 7_300,
-  // El único modelo de la cuenta que lee imágenes. Todavía no lo usa
-  // ninguna feature —el diseño está en
-  // `docs/superpowers/specs/2026-08-10-adjuntos-design.md`— pero entra
-  // igual a la tabla: sin la fila cae al default conservador de 5500
-  // teniendo 8000 de techo real (leído de `x-ratelimit-limit-tokens` el
-  // 2026-08-10, misma liga que el razonador). Un modelo que no está acá
-  // no se rompe, se frena de más, y eso no se ve en ningún error.
+  // El único modelo de la cuenta que lee imágenes; lo usa el pase de
+  // capturas de `lib/adjuntos.ts`. Sin la fila caería al default
+  // conservador de 5500 teniendo 8000 de techo real (leído de
+  // `x-ratelimit-limit-tokens` el 2026-08-10, misma liga que el
+  // razonador). Un modelo que no está acá no se rompe: se frena de más,
+  // y eso no se ve en ningún error.
   // 7300 y no 8000: el techo real medido es 8000, pero todas las filas de
   // esta tabla van un poco por debajo del techo porque la reserva se hace
   // estimando y se corrige recién con el `usage` de la respuesta.
-  "qwen/qwen3.6-27b": 7_300,
+  [MODELO_VISION]: 7_300,
 };
 
 /** Para un modelo que no esté en la tabla, el techo más conservador. */
