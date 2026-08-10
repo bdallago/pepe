@@ -10,6 +10,11 @@
 -- arranca con los valores ya visibles.
 --
 -- Diseño en `docs/superpowers/specs/2026-08-10-adjuntos-design.md`.
+--
+-- ⚠ Si el `db push` llegara a fallar con "unsafe use of new value of enum
+-- type", es que la CLI metió los dos archivos en una sola transacción:
+-- aplicá este primero y solo (`--include-all` hasta esta versión) y
+-- después el otro. Nada de acá depende de nada de allá.
 -- ============================================================
 
 -- Qué pase le toca al archivo. Lo decide el MIME, en código y sin modelo:
