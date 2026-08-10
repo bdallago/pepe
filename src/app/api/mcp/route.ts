@@ -101,12 +101,23 @@ const handler = createMcpHandler(
       {
         title: "Listar proyectos",
         // La descripción es lo único que tiene el modelo para elegir bien
-        // sin adivinar, así que dice qué devuelve y qué NO.
+        // sin adivinar.
+        //
+        // ⚠ **No nombres tools que no existen.** La primera versión
+        // cerraba con "para eso están las tools de plata", y cuando Beno
+        // preguntó cuánto había gastado, el modelo no inventó un número
+        // —bien— pero le dijo que esas tools "no aparecen entre las
+        // disponibles" y lo mandó a revisar si estaban deshabilitadas en
+        // la configuración del conector. No estaban deshabilitadas: no
+        // existían. Una descripción que promete hermanas manda a
+        // diagnosticar un problema inventado.
         description:
           "Los proyectos de Pepe, con su slug y si están activos. `projects` " +
           "es la entidad raíz de la app: los movimientos, las lecciones y la " +
-          "bitácora cuelgan de un proyecto. No devuelve balances ni " +
-          "movimientos: para eso están las tools de plata.",
+          "bitácora cuelgan de un proyecto. Devuelve el listado y nada más: " +
+          "no trae balances, montos ni movimientos. Si te piden plata y esta " +
+          "es la única tool disponible, decilo — el conector todavía no la " +
+          "expone.",
         inputSchema: z.object({
           pagina: z
             .number()
