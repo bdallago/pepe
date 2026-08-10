@@ -5,13 +5,40 @@
  * porque Next las inlinea en el bundle del cliente en tiempo de build.
  */
 
+/**
+ * ⚠ **Todo se recorta.** Ninguna variable de Pepe —ni una key, ni una
+ * URL, ni un uuid— lleva espacios alrededor, así que recortar no puede
+ * cambiar un valor legítimo; y cargarlas desde la consola sí les pega
+ * basura invisible. Ya pasó dos veces, con las dos formas que tiene
+ * PowerShell de ensuciar un valor:
+ *
+ * - Un **salto de línea** al final, de pasar el valor por un pipe. Le
+ *   tocó a `MCP_USUARIO_PERMITIDO`: la comparación fallaba con el uuid
+ *   correcto adentro y la pantalla decía "esta cuenta no puede conectar",
+ *   mandando a revisar la cuenta de Google, que no tenía nada que ver.
+ * - Un **BOM** (U+FEFF) al principio, de escribir el valor a un archivo
+ *   con `Out-File`/`Set-Content`. Le tocó a `GROQ_API_KEY`, y ahí el
+ *   síntoma fue todavía peor: un BOM no entra en un header HTTP, así que
+ *   `fetch` tiraba *"Cannot convert argument to a ByteString"* antes de
+ *   salir a la red, `lib/llm.ts` lo clasificaba como error de red y —por
+ *   la regla 7, que dice que ninguna feature de LLM puede ser
+ *   bloqueante— la app seguía andando y no se quejaba de nada. Todas las
+ *   llamadas a Groq en producción estuvieron caídas 16 horas sin que se
+ *   notara.
+ *
+ * `trim()` cubre los dos: U+FEFF cuenta como espacio en blanco para la
+ * spec de JavaScript. Se recorta **antes** de decidir si falta, para que
+ * una variable cargada con un solo espacio se reporte como faltante en
+ * vez de romper más adelante.
+ */
 function required(value: string | undefined, name: string): string {
-  if (!value) {
+  const limpio = value?.trim();
+  if (!limpio) {
     throw new Error(
       `Falta la variable de entorno ${name}. Copiá .env.example a .env.local y completala.`,
     );
   }
-  return value;
+  return limpio;
 }
 
 export function supabaseUrl(): string {
@@ -53,13 +80,10 @@ export function cronSecret(): string {
  * ninguno" y no "entra cualquiera" es el punto entero de esta variable.
  */
 export function mcpUsuarioPermitido(): string | null {
-  // ⚠ El `trim()` no es decorativo. Un uuid nunca lleva espacios
-  // alrededor, así que recortarlo no puede cambiar un valor legítimo —
-  // pero cargar la variable con un pipe (`$id | vercel env add`) le pega
-  // un salto de línea, y entonces la comparación falla con el uuid
-  // correcto adentro. El síntoma es el peor posible: la pantalla dice
-  // "esta cuenta no puede conectar" y manda a revisar la cuenta de
-  // Google, que no tiene nada que ver.
+  // El `trim()` está por el mismo motivo que el de `required` —ver el
+  // comentario de arriba: esta fue la variable a la que un pipe de
+  // PowerShell le pegó el salto de línea—. No se usa `required` porque
+  // esta es la única que no lanza si falta.
   return process.env.MCP_USUARIO_PERMITIDO?.trim() || null;
 }
 
