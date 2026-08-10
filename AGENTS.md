@@ -402,6 +402,88 @@ Aceptar un zombie **desactiva la recurrencia declarada si existe**; si
 no existe —el caso de hoy— no da de baja nada y la pantalla lo dice, en
 vez de fingir que hizo algo.
 
+### 6.g Los adjuntos entran sin pasar por el recepcionista
+
+Tres de las quince frases reales de Beno empiezan pegando un archivo. El
+diseño está en `docs/superpowers/specs/2026-08-10-adjuntos-design.md`; lo
+que hay que saber para no romperlo es esto.
+
+**Con adjunto no se llama al recepcionista, y ese es el punto.** Que haya
+un archivo es un **hecho**, no una interpretación, y qué pase le toca lo
+dice el MIME. Así el prompt de vidrio de §9 **no se toca ni hay que
+volver a medirlo**. Si alguna vez aparece la tentación de agregarle al
+prompt una línea sobre archivos, la respuesta es que no hace falta: las
+líneas léxicas que hoy mandan "pdf" / "capturas" / "te paso" a
+`desconocido` siguen sirviendo para el caso distinto y real de nombrar un
+archivo **sin** pegarlo.
+
+Es además la contención de la inyección por prompt, que acá pesa más que
+en el MCP (§8) porque un PDF bajado de internet sí es material de
+terceros: nada del contenido llega al recepcionista, **este camino no
+tiene rama de movimientos** y todo termina en `inbox` como `pendiente`.
+El peor caso posible sigue siendo una propuesta basura.
+
+**`attachments` es una antesala, no una tabla de dominio.** Que exista
+una fila no cambia ni un peso de un balance, ni una lección, ni una
+entrada de bitácora. Y adentro de `texto_extraido` conviven dos cosas de
+naturaleza distinta: de un PDF es **extracción mecánica**, de una imagen
+es **producción de un modelo**. Por eso una captura no escribe nunca
+directo en `daily_log`, aunque se parezca a lo que hace
+`agentes/bitacora.ts`: ahí el texto es de Beno palabra por palabra y acá
+no.
+
+**Varios archivos por mensaje, y el pase es retomable por adjunto.** Beno
+escribió "te paso capturas", en plural. Cada adjunto es su propia unidad
+de trabajo y su propio estado, así que **si la tercera falla, las dos
+primeras ya están en la bandeja**. Adentro de un PDF vale lo mismo por
+trozo: `trozos_hechos` y `resumenes` se persisten llamada a llamada, o
+"retomable" sería mentira —una corrida cortada volvería a pagar las
+quince llamadas que ya hizo—. `resumenes` no estaba en el spec y es lo
+que sostiene esa propiedad.
+
+Y los dos cortes se tratan distinto, que es lo que hace que la pantalla
+no entre en un bucle: **por tiempo** vuelve a llamar sola, **por falla
+del modelo** frena y ofrece un botón. Lo dice `cortePorTiempo` en el
+reporte, no el texto del mensaje.
+
+| Falla | Qué pasa |
+|---|---|
+| La salida no valida contra el esquema | Ese adjunto queda en `error` con el detalle, se deja una fila de `inbox` en `error` y **el pase sigue** con los demás |
+| Cuota, red o timeout | El adjunto vuelve a `pendiente` y el pase corta. El archivo ya está guardado |
+| PDF sin capa de texto | `no_procesable`, **cero llamadas al modelo** |
+| Captura ilegible | El modelo contesta `legible: false`. `no_procesable`, y no se propone nada |
+
+**Medido el 2026-08-10 contra Groq, corriendo el pase real:**
+
+| Caso | Resultado |
+|---|---|
+| Captura de WhatsApp en español (1170×1600) | **2198 + ~670 tokens**, ~3 s. Transcripción fiel: nombres, orden y el "340 legajos" |
+| Tres capturas seguidas | **62 s**, con el limitador esperando 31 s antes de la tercera. **Sin un solo 429** |
+| Ruido puro | `legible: false` y describió lo que había. **No inventó ninguna conversación** |
+| PDF de 4 páginas | 1 trozo con el chico + 1 síntesis con el razonador, 3 s, 4 lecciones propuestas |
+| PDF sin capa de texto | `no_procesable` en 0 s, sin tocar el modelo |
+
+Ojo con el número que cambia respecto del spec: son **~2 capturas por
+minuto, no 3**. El spec midió con un prompt más corto; con el real la
+reserva es de ~3570 tokens contra un techo de 7300. Seis capturas son
+unos dos minutos y medio, que sigue entrando en el presupuesto de 240 s
+de una corrida.
+
+**La vara del PDF es la de 6.3, no la del extractor de bitácora.** La
+vara baja de §6 existe porque el extractor reescribe lo que Beno vivió y
+escribió. Un PDF de un tercero no es eso: es material ajeno del que el
+modelo **produce** afirmaciones, y ahí el falso positivo cuesta lo mismo
+que en 6.3. Las reglas de título de `lib/adjuntos.ts` y las de
+`lib/generacion.ts` están escritas dos veces a propósito —el contexto es
+distinto— pero **son la misma vara**: si se afloja una, hay que aflojar
+la otra.
+
+**El caso C del spec (presupuestos) no entra, y se contesta con la
+verdad.** Un test sobre un string en `agentes/adjuntos.ts` detecta la
+palabra, guarda el archivo igual y dice que la app todavía no sabe hacer
+presupuestos. Cero tokens. Va en código y no en el prompt por lo que dice
+§9.
+
 ### 7. Ninguna feature de LLM puede ser bloqueante
 
 Si Groq está caído o se acabó la cuota, **la app sigue funcionando entera
@@ -604,6 +686,22 @@ GitHub llega lo mismo.
 `version < 2` avisa y saltea el paso (la app todavía no se desplegó), con
 `version >= 2` la falta de inventario es un error. Así no hay ventana
 rota entre el merge y el deploy, ni un agujero permanente después.
+
+### ⚠ El bucket `adjuntos` todavía no lo baja nadie
+
+Con la etapa de adjuntos apareció un **segundo bucket privado**
+(`adjuntos`, los archivos que Beno pega en la caja). Del lado de la app
+está todo hecho: `VERSION_RESPALDO` pasó a **3**, `attachments` está en
+`TABLAS`, `respaldo.json` trae `.adjuntos` con el inventario y
+`/api/cron/comprobantes` devuelve las URLs firmadas bajo una clave
+`adjuntos` **nueva y al lado de `archivos`**, para no cambiarle el
+significado a una clave que el workflow ya usa.
+
+**Falta el `for` del otro lado.** Hasta que el workflow de
+`bdallago/pepe-respaldos` recorra también `adjuntos`, esos bytes no se
+están guardando en ningún lado. Es un cambio de cinco líneas, calcado del
+que ya hace con los comprobantes, y hay que hacerlo: un respaldo que uno
+cree tener y no tiene es peor que no tenerlo.
 
 ## Búsqueda de lecciones
 
