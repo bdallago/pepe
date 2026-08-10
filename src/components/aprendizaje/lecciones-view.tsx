@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, Sparkles } from "lucide-react";
+import { Archive, FileText, Sparkles } from "lucide-react";
 
 import {
   BuscadorLecciones,
@@ -24,7 +24,11 @@ import type { CategoriaLeccion, Lesson } from "@/lib/supabase/database.types";
  *   pierde. Cuando aparecen, van marcadas.
  * - Las de origen `generada` son **hipótesis propuestas por un modelo**, no
  *   experiencia vivida. Se distinguen siempre: borde punteado, marca propia
- *   y la aclaración escrita.
+ *   y la aclaración escrita. Lo mismo vale para las de origen `adjunto`,
+ *   que salieron de un archivo que Beno pegó: son todavía **menos** suyas
+ *   que una hipótesis sobre sus datos, porque el material es de un
+ *   tercero. Si se vieran iguales que las vividas, la distinción que pide
+ *   el spec se perdería justo donde más importa.
  */
 
 const CATEGORIA_LABEL: Record<CategoriaLeccion, string> = {
@@ -59,12 +63,14 @@ function TarjetaLeccion({
   similitud?: number | null;
 }) {
   const generada = leccion.origen === "generada";
+  const deAdjunto = leccion.origen === "adjunto";
+  const noVivida = generada || deAdjunto;
   const archivada = leccion.archivado_en !== null;
 
   return (
     <li
       className={
-        generada
+        noVivida
           ? "bg-card space-y-2 rounded-lg border border-dashed border-border p-4"
           : "bg-card space-y-2 rounded-lg border border-border p-4"
       }
@@ -72,10 +78,14 @@ function TarjetaLeccion({
       <div className="flex flex-wrap items-start gap-2">
         <p className="min-w-0 flex-1 text-sm font-semibold">{leccion.titulo}</p>
 
-        {generada && (
+        {noVivida && (
           <Badge variant="outline" className="text-muted-foreground">
-            <Sparkles aria-hidden="true" />
-            Hipótesis generada
+            {deAdjunto ? (
+              <FileText aria-hidden="true" />
+            ) : (
+              <Sparkles aria-hidden="true" />
+            )}
+            {deAdjunto ? "Leída de un archivo" : "Hipótesis generada"}
           </Badge>
         )}
         {archivada && (
@@ -89,10 +99,11 @@ function TarjetaLeccion({
 
       <p className="text-sm whitespace-pre-line">{leccion.contenido}</p>
 
-      {generada && (
+      {noVivida && (
         <p className="text-muted-foreground text-xs">
-          Propuesta por un modelo a partir de tus datos. No es experiencia
-          vivida: revisala antes de darla por buena.
+          {deAdjunto
+            ? "Salió de un archivo que pegaste, no de algo que hayas vivido. La escribió un modelo leyendo material de otro: revisala antes de darla por buena."
+            : "Propuesta por un modelo a partir de tus datos. No es experiencia vivida: revisala antes de darla por buena."}
         </p>
       )}
 
