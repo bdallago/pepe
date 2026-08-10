@@ -75,6 +75,13 @@ const TABLAS = [
   "inbox",
   "settings",
   "fx_rates",
+  // Las tarifas de referencia del mercado. No son datos de Beno —las trae
+  // un cron de fuentes públicas— pero se respaldan igual por el mismo
+  // motivo que `fx_rates`: reconstruirlas es imposible hacia atrás. Una
+  // fuente puede caerse o rediseñarse, y el histórico de cómo se movió la
+  // referencia es justamente lo que dice cuándo hay que subir la tarifa.
+  "rate_runs",
+  "rate_references",
 ] as const;
 
 type Tabla = (typeof TABLAS)[number];

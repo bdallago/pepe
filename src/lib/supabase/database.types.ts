@@ -999,12 +999,7 @@ export type Database = {
       estado_movimiento: "efectuado" | "planificado"
       frecuencia_recurrencia: "mensual" | "anual"
       moneda: "ARS" | "USD"
-      origen_leccion:
-        | "manual"
-        | "importada"
-        | "generada"
-        | "retro"
-        | "adjunto"
+      origen_leccion: "manual" | "importada" | "generada" | "retro" | "adjunto"
       tipo_adjunto: "pdf" | "imagen"
       tipo_bandeja:
         | "categorizacion"
