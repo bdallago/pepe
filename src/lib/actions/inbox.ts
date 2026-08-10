@@ -11,6 +11,8 @@ import {
   type ActionResult,
 } from "./shared";
 import { crearEntradaDeBitacora } from "@/lib/bitacora";
+import { congelarMontos } from "@/lib/fx";
+import { getTasaParaFecha } from "@/lib/fx-server";
 import type {
   OrigenLeccion,
   TipoBandeja,
@@ -36,18 +38,25 @@ import type {
 const uuid = z.string().uuid("Identificador inválido.");
 
 /**
- * Los tres tipos de bandeja que terminan en una fila de `lessons`, y con
- * qué `origen` nace cada uno.
+ * Los cuatro tipos de bandeja que terminan en una fila de `lessons`, y
+ * con qué `origen` nace cada uno.
  *
  * El origen no es decorativo: `generada` sale de una hipótesis del modelo
  * sobre un tema y la lista de Lecciones la muestra distinta (borde
  * punteado, "Hipótesis generada"). `importada` salió de algo que Beno
  * escribió y vivió; `retro`, del cierre de un proyecto. Perder esa
  * distinción sería perder de dónde viene cada cosa que uno cree saber.
+ *
+ * `leccion_dictada` es la que llega por el conector MCP y nace
+ * **`manual`**, como si la hubiera escrito en el formulario: es suya. Que
+ * pase por la bandeja no la convierte en producción de un modelo — pasa
+ * porque del otro lado hay uno redactando y no hay garantía mecánica de
+ * que no haya reformulado, no porque la idea sea de él en menor medida.
  */
 const ORIGEN_POR_TIPO = {
   leccion_extraida: "importada",
   leccion_sugerida: "generada",
+  leccion_dictada: "manual",
   retro: "retro",
 } as const satisfies Partial<Record<TipoBandeja, OrigenLeccion>>;
 
@@ -337,6 +346,191 @@ export async function aceptarNotaDeAdjunto(
 
   revalidatePath("/", "layout");
   return ok({ entradaId: entrada.id });
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Movimientos dictados por el conector MCP
+ * ──────────────────────────────────────────────────────────── */
+
+/**
+ * Lo que dejó `registrar_movimiento`.
+ *
+ * `project_id` y `category_id` son opcionales y no por descuido: el
+ * conector no inventa ninguno de los dos. Si Claude no supo a qué
+ * proyecto va, o si el histórico no tenía con qué sugerir una categoría
+ * y el modelo estaba caído, la propuesta entra igual y la tarjeta los
+ * pide antes de habilitar el botón. Es el mismo patrón que ya usa lo que
+ * entra por un archivo pegado.
+ *
+ * `compartido: true` es distinto de "no vino `project_id`": el primero
+ * es una decisión —el gasto se reparte entre los proyectos activos— y el
+ * segundo es una pregunta sin responder. En la base los dos terminan en
+ * `project_id = null`, así que si se confundieran, "no sé de quién es"
+ * se guardaría como "es de todos" sin que nadie lo note.
+ */
+const payloadMovimientoSchema = z.object({
+  descripcion: z.string().trim().min(1).max(200),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  monto_origen: z.number().positive().max(1e12),
+  moneda_origen: z.enum(["ARS", "USD"]),
+  estado: z.enum(["efectuado", "planificado"]),
+  project_id: uuid.optional(),
+  compartido: z.boolean().optional(),
+  category_id: uuid.optional(),
+  categoria_nombre: z.string().optional(),
+  sugerencia: z.string().optional(),
+});
+
+/**
+ * Lo que la tarjeta puede cambiar antes de aceptar: **el proyecto y la
+ * categoría, nada más**.
+ *
+ * No es una limitación técnica, es dónde está la línea. El monto, la
+ * fecha y la descripción son lo que Beno dictó: si alguno está mal, la
+ * propuesta está mal y el gesto correcto es rechazarla, no corregirla a
+ * mano en un triage que tiene que ser de una tecla. El proyecto y la
+ * categoría, en cambio, son cosas que el conector **no puede saber** y
+ * que se eligen de una lista.
+ *
+ * `projectId: null` significa compartido, y por eso el nullable: acá
+ * tampoco pueden colapsar "compartido" y "sin decidir".
+ */
+const edicionMovimientoSchema = z
+  .object({
+    categoryId: uuid,
+    projectId: uuid.nullable(),
+  })
+  .partial();
+
+export type EdicionMovimiento = z.infer<typeof edicionMovimientoSchema>;
+
+/**
+ * Acepta un movimiento dictado: lo crea de verdad y resuelve el ítem.
+ *
+ * Es el botón que pide la regla 6 para todo lo que entra por el conector
+ * MCP. Hasta acá no había ni un peso cargado: solo una fila en `inbox`.
+ */
+export async function aceptarMovimientoDictado(
+  itemId: string,
+  edicion?: EdicionMovimiento,
+): Promise<ActionResult<{ movementId: string }>> {
+  const idParseado = uuid.safeParse(itemId);
+  if (!idParseado.success) return fail("Identificador inválido.");
+
+  const edicionParseada = edicionMovimientoSchema.safeParse(edicion ?? {});
+  if (!edicionParseada.success) {
+    return fail(edicionParseada.error.issues[0]?.message ?? "Datos inválidos.");
+  }
+
+  const { supabase, userId } = await requireSession();
+
+  const { data: item, error: errorLectura } = await supabase
+    .from("inbox")
+    .select("id, tipo, estado, payload")
+    .eq("id", idParseado.data)
+    .maybeSingle();
+
+  if (errorLectura) return fail(mensajeDeError(errorLectura));
+  if (!item) return fail("No encontré esa propuesta.");
+  if (item.tipo !== "movimiento_dictado") {
+    return fail("Esa propuesta no es un movimiento.");
+  }
+  if (item.estado !== "pendiente" && item.estado !== "pospuesto") {
+    return fail("Esa propuesta ya estaba resuelta.");
+  }
+
+  const payload = payloadMovimientoSchema.safeParse(item.payload);
+  if (!payload.success) {
+    return fail("La propuesta guardada está incompleta. Rechazala.");
+  }
+
+  const categoryId = edicionParseada.data.categoryId ?? payload.data.category_id;
+  if (!categoryId) return fail("Elegí una categoría.");
+
+  // `"projectId" in …` y no `??`: el valor válido `null` significa
+  // compartido y con `??` se confundiría con "no eligió nada".
+  const projectId =
+    "projectId" in edicionParseada.data
+      ? (edicionParseada.data.projectId ?? null)
+      : payload.data.compartido
+        ? null
+        : (payload.data.project_id ?? undefined);
+
+  if (projectId === undefined) {
+    return fail("Elegí a qué proyecto va, o marcalo como compartido.");
+  }
+
+  // El tipo sale de la categoría y no del payload, así que no pueden
+  // contradecirse: una categoría de egreso jamás va a crear un ingreso.
+  const { data: categoria, error: errorCategoria } = await supabase
+    .from("categories")
+    .select("id, tipo")
+    .eq("id", categoryId)
+    .maybeSingle();
+
+  if (errorCategoria) return fail(mensajeDeError(errorCategoria));
+  if (!categoria) return fail("Esa categoría ya no existe. Elegí otra.");
+
+  // ⚠ **Acá se congela el par ARS/USD, y recién acá.** La propuesta no
+  // trae cotización: la tasa aplicable se resuelve contra la fecha del
+  // movimiento en el momento en que el movimiento pasa a existir. Es la
+  // regla 1 —"la tasa de esa fecha o la última anterior"— y congelarla
+  // al proponer habría fijado la del día en que se dictó, que puede ser
+  // otro, o incluso una anterior a la que ya cargó el cron.
+  const tasa = await getTasaParaFecha(payload.data.fecha);
+  if (!tasa) {
+    return fail(
+      "No hay ninguna cotización cargada, así que no puedo congelar el par ARS/USD. Actualizá la cotización en Ajustes y volvé a intentar.",
+    );
+  }
+
+  const montos = congelarMontos(
+    payload.data.monto_origen,
+    payload.data.moneda_origen,
+    tasa,
+  );
+
+  const { data: movimiento, error: errorMovimiento } = await supabase
+    .from("movements")
+    .insert({
+      user_id: userId,
+      project_id: projectId,
+      category_id: categoria.id,
+      fecha: payload.data.fecha,
+      descripcion: payload.data.descripcion,
+      tipo: categoria.tipo,
+      monto_origen: payload.data.monto_origen,
+      moneda_origen: payload.data.moneda_origen,
+      estado: payload.data.estado,
+      ...montos,
+    })
+    .select("id")
+    .single();
+
+  if (errorMovimiento) return fail(mensajeDeError(errorMovimiento));
+
+  const { error: errorCierre } = await supabase
+    .from("inbox")
+    .update({
+      estado: "aceptado",
+      resuelto_en: new Date().toISOString(),
+      // El vínculo hacia adelante va en el payload, igual que en
+      // `aceptarLeccion()`. Acá `entidad_tabla`/`entidad_id` vienen en
+      // null —la propuesta no salió de ninguna fila de la app, salió de
+      // una frase— así que no hay nada que preservar; se deja igual por
+      // consistencia y para no darle a nadie la idea de repuntarlos.
+      payload: {
+        ...(item.payload as Record<string, unknown>),
+        movement_id: movimiento.id,
+      },
+      clave_dedupe: null,
+    })
+    .eq("id", idParseado.data);
+
+  if (errorCierre) return fail(mensajeDeError(errorCierre));
+
+  revalidatePath("/", "layout");
+  return ok({ movementId: movimiento.id });
 }
 
 /** Descarta la propuesta. La entrada de bitácora queda intacta. */

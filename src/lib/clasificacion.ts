@@ -26,6 +26,25 @@ import type { Category, TipoMovimiento } from "@/lib/supabase/database.types";
  * La sugerencia **nunca decide nada**: llega precargada al formulario y
  * Beno confirma o cambia. Ese formulario es el panel de confirmación que
  * pide la sección 6 del spec; por eso esto no pasa por `inbox`.
+ *
+ * ## El `userId` opcional, y por qué existe
+ *
+ * Los dos call sites de siempre —el formulario y la caja— hablan con la
+ * base con la identidad de Beno, así que **RLS ya acota todo** y pasarlo
+ * sería redundante. El conector MCP remoto no: sus tools presentan un
+ * token propio de Pepe y del otro lado hay un cliente con la service
+ * role key, que saltea RLS (el desarrollo está en `lib/mcp/datos.ts`).
+ * Sin el filtro explícito, el histórico que le contesta al conector
+ * sería el de todos los usuarios.
+ *
+ * Hoy hay un solo usuario y las filas serían las mismas. Se filtra
+ * igual: la regla que ordena el módulo de datos del MCP es que ninguna
+ * consulta salga sin acotar, y el día que la premisa cambie nadie va a
+ * acordarse de venir a mirar acá.
+ *
+ * `?? undefined` y no `null` al llamar al RPC: omitir el argumento deja
+ * que Postgres aplique su `default null`, que es "no filtres acá". Los
+ * tipos generados no aceptan `null` en un argumento con default.
  */
 
 /** Cuántos ejemplos se le muestran al modelo. */
@@ -79,9 +98,11 @@ export async function buscarEnHistorico(
   supabase: SupabaseClient,
   descripcion: string,
   categorias: Category[],
+  userId?: string,
 ): Promise<Sugerencia | null> {
   const { data, error } = await supabase.rpc("sugerir_categoria_historico", {
     p_descripcion: descripcion,
+    p_user_id: userId ?? undefined,
   });
 
   if (error || !data || data.length === 0) return null;
@@ -138,15 +159,20 @@ export async function sugerirConModelo(
   supabase: SupabaseClient,
   descripcion: string,
   categorias: Category[],
+  userId?: string,
 ): Promise<Sugerencia | null> {
   const vigentes = categorias.filter((c) => !c.archivada);
   if (vigentes.length === 0) return null;
 
-  const { data: previos } = await supabase
+  let consultaPrevios = supabase
     .from("movements")
     .select("descripcion, tipo, category_id")
     .order("fecha", { ascending: false })
     .limit(EJEMPLOS_PARA_MODELO);
+
+  if (userId) consultaPrevios = consultaPrevios.eq("user_id", userId);
+
+  const { data: previos } = await consultaPrevios;
 
   const nombrePorId = new Map(categorias.map((c) => [c.id, c.nombre]));
 
@@ -220,16 +246,21 @@ export async function sugerirConModelo(
 export async function sugerirClasificacion(
   supabase: SupabaseClient,
   descripcion: string,
+  userId?: string,
 ): Promise<Sugerencia | null> {
-  const { data: categorias } = await supabase.from("categories").select("*");
+  let consultaCategorias = supabase.from("categories").select("*");
+  if (userId) consultaCategorias = consultaCategorias.eq("user_id", userId);
+
+  const { data: categorias } = await consultaCategorias;
   if (!categorias || categorias.length === 0) return null;
 
   const delHistorico = await buscarEnHistorico(
     supabase,
     descripcion,
     categorias,
+    userId,
   );
   if (delHistorico) return delHistorico;
 
-  return sugerirConModelo(supabase, descripcion, categorias);
+  return sugerirConModelo(supabase, descripcion, categorias, userId);
 }

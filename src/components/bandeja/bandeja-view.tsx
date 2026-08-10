@@ -18,11 +18,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   aceptarLeccion,
+  aceptarMovimientoDictado,
   aceptarNotaDeAdjunto,
   aceptarZombie,
   descartarErrorBandeja,
   posponerItemBandeja,
   rechazarItemBandeja,
+  type EdicionMovimiento,
 } from "@/lib/actions/inbox";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/dates";
@@ -72,7 +74,14 @@ const TIPO_LABEL: Record<TipoBandeja, string> = {
   leccion_extraida: "Lección de la bitácora",
   retro: "Retro de proyecto",
   nota_de_adjunto: "Nota de una captura",
+  // Los dos que entran por el conector MCP. "Dictado" y no "de Claude":
+  // lo que importa no es qué programa lo mandó, es que lo dijo él.
+  movimiento_dictado: "Movimiento dictado",
+  leccion_dictada: "Lección dictada",
 };
+
+/** El valor del selector de proyecto que significa "gasto compartido". */
+const COMPARTIDO = "compartido";
 
 const BUCKET_ADJUNTOS = "adjuntos";
 
@@ -185,6 +194,56 @@ function leerZombie(payload: Json): Zombie | null {
   };
 }
 
+/**
+ * Lo que propone `registrar_movimiento` del conector MCP.
+ *
+ * `compartido` y "no vino `project_id`" son dos cosas distintas y por eso
+ * son dos campos: el primero es una decisión —se reparte entre los
+ * proyectos activos— y el segundo es que Claude no supo a cuál va. En la
+ * base los dos terminan en `project_id = null`, así que confundirlos
+ * guardaría "no sé de quién es" como "es de todos", en silencio.
+ */
+interface Movimiento {
+  descripcion: string;
+  fecha: string;
+  monto_origen: number;
+  moneda_origen: "ARS" | "USD";
+  estado: "efectuado" | "planificado";
+  project_id?: string;
+  compartido?: boolean;
+  category_id?: string;
+  categoria_nombre?: string;
+  /** Cómo salió la categoría propuesta, en castellano. */
+  sugerencia?: string;
+}
+
+function leerMovimiento(payload: Json): Movimiento | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+  const p = payload as Record<string, unknown>;
+  if (
+    typeof p.descripcion !== "string" ||
+    typeof p.fecha !== "string" ||
+    typeof p.monto_origen !== "number"
+  ) {
+    return null;
+  }
+  return {
+    descripcion: p.descripcion,
+    fecha: p.fecha,
+    monto_origen: p.monto_origen,
+    moneda_origen: p.moneda_origen === "USD" ? "USD" : "ARS",
+    estado: p.estado === "planificado" ? "planificado" : "efectuado",
+    project_id: typeof p.project_id === "string" ? p.project_id : undefined,
+    compartido: p.compartido === true,
+    category_id: typeof p.category_id === "string" ? p.category_id : undefined,
+    categoria_nombre:
+      typeof p.categoria_nombre === "string" ? p.categoria_nombre : undefined,
+    sugerencia: typeof p.sugerencia === "string" ? p.sugerencia : undefined,
+  };
+}
+
 /** Lee el payload jsonb con desconfianza: la base no garantiza su forma. */
 function leerPropuesta(payload: Json): Propuesta | null {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
@@ -284,7 +343,7 @@ export function BandejaView({
   items: ItemBandeja[];
   hayModelo: boolean;
 }) {
-  const { projects } = useAppData();
+  const { projects, categoriasVigentes } = useAppData();
   const [items, setItems] = useState(itemsIniciales);
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState<Propuesta | null>(null);
@@ -296,6 +355,20 @@ export function BandejaView({
    * dónde vino.
    */
   const [proyectoElegido, setProyectoElegido] = useState<string | null>(null);
+  /**
+   * Los dos selectores de un movimiento dictado.
+   *
+   * Van aparte de `proyectoElegido` porque acá el selector de proyecto
+   * tiene una opción que allá no existe —"compartido"— y porque siempre
+   * está a la vista: no aparece solo cuando falta el dato, sino que
+   * muestra lo propuesto y deja corregirlo.
+   */
+  const [categoriaMovimiento, setCategoriaMovimiento] = useState<string | null>(
+    null,
+  );
+  const [proyectoMovimiento, setProyectoMovimiento] = useState<string | null>(
+    null,
+  );
   const [extrayendo, setExtrayendo] = useState(false);
   const [arrastre, setArrastre] = useState(0);
   const [, iniciarTransicion] = useTransition();
@@ -313,20 +386,50 @@ export function BandejaView({
   const actual = items[0] ?? null;
   const esZombie = actual?.tipo === "zombie";
   const esNota = actual?.tipo === "nota_de_adjunto";
+  const esMovimiento = actual?.tipo === "movimiento_dictado";
   const propuesta =
-    actual && !esZombie && !esNota ? leerPropuesta(actual.payload) : null;
+    actual && !esZombie && !esNota && !esMovimiento
+      ? leerPropuesta(actual.payload)
+      : null;
   const zombie = actual && esZombie ? leerZombie(actual.payload) : null;
   const nota = actual && esNota ? leerNota(actual.payload) : null;
+  const movimiento =
+    actual && esMovimiento ? leerMovimiento(actual.payload) : null;
   const esError = actual?.estado === "error";
 
   // Falta el proyecto y hay que elegirlo. Pasa solo con lo que entró por
   // un archivo pegado: `lessons.project_id` y `daily_log.project_id` son
-  // los dos NOT NULL, así que sin esto no hay nada que aceptar.
+  // los dos NOT NULL, así que sin esto no hay nada que aceptar. Un
+  // movimiento no pasa por acá: tiene su propio selector, siempre a la
+  // vista y con la opción "compartido" que este no tiene.
   const proyectoDelPayload = esNota ? nota?.project_id : propuesta?.project_id;
   const faltaProyecto =
-    !esError && !esZombie && (esNota ? Boolean(nota) : Boolean(propuesta)) &&
+    !esError &&
+    !esZombie &&
+    !esMovimiento &&
+    (esNota ? Boolean(nota) : Boolean(propuesta)) &&
     !proyectoDelPayload;
   const projectId = proyectoDelPayload ?? proyectoElegido ?? null;
+
+  // Lo que muestran los selectores del movimiento: lo elegido a mano si
+  // lo hay, y si no lo que vino propuesto. "" = todavía no hay nada.
+  const categoriaActual =
+    categoriaMovimiento ?? movimiento?.category_id ?? "";
+  const proyectoActual =
+    proyectoMovimiento ??
+    (movimiento?.compartido ? COMPARTIDO : movimiento?.project_id) ??
+    "";
+  const movimientoCompleto = Boolean(categoriaActual && proyectoActual);
+  /**
+   * El signo del monto sale de la categoría elegida, no del payload.
+   *
+   * Es la misma regla que aplica la action al aceptar —el tipo lo define
+   * la categoría— y por eso el número cambia de signo en pantalla apenas
+   * se cambia el selector: lo que se ve es lo que se va a guardar.
+   */
+  const tipoElegido = categoriasVigentes.find(
+    (c) => c.id === categoriaActual,
+  )?.tipo;
 
   const nombreProyecto = (id: string) =>
     projects.find((p) => p.id === id)?.nombre ?? "Proyecto archivado";
@@ -343,6 +446,8 @@ export function BandejaView({
       setBorrador(null);
       setBorradorNota(null);
       setProyectoElegido(null);
+      setCategoriaMovimiento(null);
+      setProyectoMovimiento(null);
       setArrastre(0);
 
       iniciarTransicion(async () => {
@@ -373,6 +478,25 @@ export function BandejaView({
         }
         return resultado;
       });
+      return;
+    }
+
+    // Un movimiento dictado: hasta acá no hay ni un peso cargado, la
+    // propuesta es una fila de `inbox` y nada más. Esto es el botón que
+    // pide la regla 6.
+    if (esMovimiento) {
+      if (!movimiento || !movimientoCompleto) return;
+
+      const edicion: EdicionMovimiento = {
+        categoryId: categoriaActual,
+        projectId: proyectoActual === COMPARTIDO ? null : proyectoActual,
+      };
+
+      resolver(
+        actual,
+        () => aceptarMovimientoDictado(actual.id, edicion),
+        "Movimiento cargado.",
+      );
       return;
     }
 
@@ -432,12 +556,17 @@ export function BandejaView({
     actual,
     borrador,
     borradorNota,
+    categoriaActual,
     esError,
+    esMovimiento,
     esNota,
     esZombie,
     faltaProyecto,
+    movimiento,
+    movimientoCompleto,
     nota,
     propuesta,
+    proyectoActual,
     proyectoElegido,
     resolver,
   ]);
@@ -738,6 +867,108 @@ export function BandejaView({
               Este aviso quedó incompleto. Rechazalo.
             </p>
           )
+        ) : esMovimiento ? (
+          movimiento ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className="text-sm font-semibold">{movimiento.descripcion}</p>
+                <span
+                  className={`cifra text-sm ${
+                    tipoElegido === "ingreso"
+                      ? "text-chart-ingreso"
+                      : "text-chart-egreso"
+                  }`}
+                >
+                  {tipoElegido === "ingreso" ? "+" : "−"}
+                  {formatMoney(movimiento.monto_origen, movimiento.moneda_origen)}
+                </span>
+                <span className="text-muted-foreground cifra text-xs">
+                  {formatDate(movimiento.fecha)}
+                </span>
+                {movimiento.estado === "planificado" && (
+                  <Badge variant="outline">Planificado</Badge>
+                )}
+              </div>
+
+              {/*
+                Los dos selectores están siempre a la vista, no detrás de
+                "Editar". Son justo lo que el conector NO puede saber
+                —a qué proyecto va, con qué categoría— y verlos al lado
+                del monto es lo que deja decidir de un vistazo.
+              */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-muted-foreground text-xs font-medium">
+                    Categoría
+                  </span>
+                  <Select
+                    value={categoriaActual}
+                    onValueChange={setCategoriaMovimiento}
+                  >
+                    <SelectTrigger aria-label="Categoría">
+                      <SelectValue placeholder="Elegí una" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoriasVigentes.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nombre} ({c.tipo})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+
+                <label className="space-y-1.5">
+                  <span className="text-muted-foreground text-xs font-medium">
+                    Proyecto
+                  </span>
+                  <Select
+                    value={proyectoActual}
+                    onValueChange={setProyectoMovimiento}
+                  >
+                    <SelectTrigger aria-label="Proyecto">
+                      <SelectValue placeholder="Elegí uno" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/*
+                        "Compartido" no es un proyecto: es project_id
+                        null, el gasto que se reparte entre los activos.
+                        Va primero porque es lo que son casi todas las
+                        suscripciones.
+                      */}
+                      <SelectItem value={COMPARTIDO}>
+                        Compartido (entre los activos)
+                      </SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+
+              {movimiento.sugerencia && (
+                <p className="text-muted-foreground text-xs">
+                  La categoría vino propuesta porque{" "}
+                  <strong>{movimiento.sugerencia}</strong>.
+                </p>
+              )}
+
+              <p className="text-muted-foreground border-t border-dashed pt-3 text-xs">
+                Aceptar <strong>lo carga de verdad</strong> en Finanzas, y
+                recién ahí se congela la cotización contra la fecha del
+                movimiento. El monto, la fecha y la descripción son lo que
+                dictaste y no se editan acá: si alguno está mal, rechazalo y
+                cargalo desde Finanzas.
+              </p>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Esta propuesta quedó incompleta y no se puede aceptar. Rechazala.
+            </p>
+          )
         ) : esNota ? (
           nota ? (
             <div className="grid gap-6 md:grid-cols-2">
@@ -819,9 +1050,11 @@ export function BandejaView({
                   ? "Lo que escribiste"
                   : actual.tipo === "retro"
                     ? "De qué retro salió"
-                    : mostrada.adjunto_nombre
-                      ? "De qué archivo salió"
-                      : "Lo que pediste"}
+                    : actual.tipo === "leccion_dictada"
+                      ? "De dónde salió"
+                      : mostrada.adjunto_nombre
+                        ? "De qué archivo salió"
+                        : "Lo que pediste"}
               </h2>
 
               {mostrada.adjunto_nombre ? (
@@ -839,6 +1072,23 @@ export function BandejaView({
                     que hayas vivido ni de un tema que hayas pedido. El modelo
                     leyó el documento y propuso esto; si la aceptás, queda
                     marcada así en la lista de Lecciones.
+                  </p>
+                </div>
+              ) : actual.tipo === "leccion_dictada" ? (
+                <div className="space-y-3">
+                  <p className="text-sm">La dictaste vos, desde Claude.</p>
+                  {/*
+                    Pasa por la bandeja aunque el contenido sea suyo, y
+                    conviene decir por qué: del otro lado hay un modelo
+                    redactando y no hay garantía de que no haya
+                    reformulado. Si algo suena a "mejorado", la tecla E
+                    está justo al lado. Nace como `manual`, igual que si
+                    la hubiera escrito en el formulario.
+                  */}
+                  <p className="text-muted-foreground text-xs">
+                    Tendría que estar con <strong>tus palabras</strong>, no
+                    reformulada. Si te suena a resumen o le falta el dato
+                    concreto que dijiste, editala antes de aceptar.
                   </p>
                 </div>
               ) : actual.tipo === "leccion_extraida" ? (
@@ -988,13 +1238,18 @@ export function BandejaView({
           <Button
             onClick={aceptar}
             disabled={
-              (esZombie ? !zombie : esNota ? !nota : !mostrada) ||
-              (faltaProyecto && !projectId)
+              (esZombie
+                ? !zombie
+                : esNota
+                  ? !nota
+                  : esMovimiento
+                    ? !movimiento || !movimientoCompleto
+                    : !mostrada) || (faltaProyecto && !projectId)
             }
             className="gap-1.5"
           >
             <Check className="size-4" aria-hidden="true" />
-            {esZombie ? "La doy de baja" : "Aceptar"}
+            {esZombie ? "La doy de baja" : esMovimiento ? "Cargarlo" : "Aceptar"}
           </Button>
         )}
         <Button onClick={rechazar} variant="outline" className="gap-1.5">
@@ -1011,8 +1266,13 @@ export function BandejaView({
               <Clock className="size-4" aria-hidden="true" />
               Después
             </Button>
-            {/* Un zombie no se edita: no hay texto propuesto que corregir. */}
-            {!esZombie && (
+            {/*
+              Ni un zombie ni un movimiento se editan acá. El zombie no
+              tiene texto propuesto que corregir; el movimiento tiene sus
+              dos selectores siempre a la vista y el resto son datos que
+              dictó Beno, no una redacción de un modelo.
+            */}
+            {!esZombie && !esMovimiento && (
               <Button
                 onClick={editar}
                 variant="ghost"
@@ -1033,7 +1293,7 @@ export function BandejaView({
         {!esError && (
           <>
             <Atajo tecla="P">posponer</Atajo>
-            {!esZombie && <Atajo tecla="E">editar</Atajo>}
+            {!esZombie && !esMovimiento && <Atajo tecla="E">editar</Atajo>}
           </>
         )}
         <span className="text-muted-foreground text-xs sm:hidden">

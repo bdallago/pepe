@@ -1,0 +1,42 @@
+-- ============================================================
+-- Dos tipos de bandeja nuevos: lo que entra por el conector MCP.
+--
+-- Las tools `registrar_movimiento` y `registrar_leccion` del conector
+-- remoto no escriben en las tablas de dominio: dejan una propuesta en
+-- `inbox` y Beno la acepta en la bandeja de siempre. Es lo que dice la
+-- regla 8 de AGENTS.md — "un tool de MCP que escriba en una tabla de
+-- dominio sin pasar por `inbox` es una violación de la regla 6, no un
+-- atajo"— y por eso cada uno necesita su propio valor de `tipo_bandeja`.
+--
+-- ## Por qué valores nuevos y no los que ya había
+--
+-- Para los movimientos existía `categorizacion`, un valor **que nada
+-- produce**: quedó del spec original, de cuando el clasificador iba a
+-- confirmarse en la bandeja en vez de en el formulario. Tentaba
+-- reusarlo y no alcanza: un ítem del conector no trae una categoría a
+-- confirmar, trae un movimiento entero —descripción, monto, moneda,
+-- fecha, proyecto— del que la categoría es un campo más. Aceptarlo
+-- **crea la fila**; `categorizacion` prometía menos que eso.
+--
+-- Para las lecciones el reuso era peor. `leccion_sugerida` nace con
+-- `origen = 'generada'`, que la lista de Lecciones muestra con borde
+-- punteado y el rótulo "Hipótesis generada". Una lección que dictó Beno
+-- no es una hipótesis de un modelo, y confundirlas rompe justo la
+-- distinción que el origen existe para sostener: de dónde viene cada
+-- cosa que uno cree saber. `leccion_dictada` nace con `origen =
+-- 'manual'`, que es lo que es.
+--
+-- `categorizacion` queda donde estaba: sin producir, y ahora también
+-- sin candidatos a reusarlo.
+--
+-- ## Por qué esta migración está sola
+--
+-- Un valor de enum agregado con `alter type ... add value` **no se
+-- puede usar en la misma transacción que lo agregó**. Nada acá lo usa,
+-- pero mezclarlo con DDL que sí lo use es la forma de descubrirlo en el
+-- peor momento. Mismo criterio que `20260810001000_adjuntos_enums.sql`,
+-- que también entró separado de la tabla que lo estrenaba.
+-- ============================================================
+
+alter type public.tipo_bandeja add value if not exists 'movimiento_dictado';
+alter type public.tipo_bandeja add value if not exists 'leccion_dictada';

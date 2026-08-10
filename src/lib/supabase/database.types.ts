@@ -1364,7 +1364,7 @@ export type Database = {
         Returns: undefined
       }
       sugerir_categoria_historico: {
-        Args: { p_descripcion: string }
+        Args: { p_descripcion: string; p_user_id?: string }
         Returns: {
           category_id: string
           exacto: boolean
@@ -1412,6 +1412,8 @@ export type Database = {
         | "leccion_extraida"
         | "retro"
         | "nota_de_adjunto"
+        | "movimiento_dictado"
+        | "leccion_dictada"
       tipo_cliente: "particular" | "pyme" | "empresa"
       tipo_movimiento: "ingreso" | "egreso"
     }
@@ -1582,6 +1584,8 @@ export const Constants = {
         "leccion_extraida",
         "retro",
         "nota_de_adjunto",
+        "movimiento_dictado",
+        "leccion_dictada",
       ],
       tipo_cliente: ["particular", "pyme", "empresa"],
       tipo_movimiento: ["ingreso", "egreso"],
@@ -1594,15 +1598,11 @@ export const Constants = {
 // Alias de conveniencia usados en toda la app.
 // Este bloque se escribe a mano: si regenerás el archivo, volvé a pegarlo.
 //
-// ⚠ Al 2026-08-10 hay algo MÁS escrito a mano acá arriba: la tabla
-// `attachments`, el enum `tipo_adjunto`, el enum `estado_adjunto` y los
-// valores `nota_de_adjunto` / `adjunto` que se le agregaron a
-// `tipo_bandeja` y `origen_leccion`. Sus migraciones
-// (`20260810001000_adjuntos_enums.sql` y `20260810001001_adjuntos.sql`)
-// están escritas pero **todavía no se aplicaron**: hacen falta el access
-// token de Supabase. Después del `db push`, regenerá el archivo y esto
-// se va a rellenar solo — momento en el que hay que volver a pegar solo
-// este bloque de alias y borrar esta advertencia.
+// Todo lo de arriba sale del generador. Al 2026-08-11 no queda nada
+// escrito a mano ahí: las migraciones de adjuntos que faltaban aplicar
+// ya están aplicadas, igual que las dos de hoy
+// (`20260811000000_bandeja_conector.sql` y
+// `20260811000001_historico_por_usuario.sql`).
 // ─────────────────────────────────────────────────────────────
 
 export type TipoMovimiento = Database["public"]["Enums"]["tipo_movimiento"];
