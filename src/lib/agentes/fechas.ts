@@ -225,6 +225,82 @@ export function leerFecha(texto: string, hoy: string): FechaLeida {
   return { fecha: hoy, etiqueta: "hoy", explicita: false };
 }
 
+/**
+ * Cuántas palabras del final se prueban como fecha. Seis es lo que ocupa
+ * la expresión más larga que reconocen las reglas: "el 5 de agosto de 2026".
+ */
+const MAX_PALABRAS_DE_FECHA = 6;
+
+/**
+ * Las mismas expresiones de arriba, pero **ancladas**: matchean solo si el
+ * texto es una fecha y nada más. Se arman de las mismas listas de meses y
+ * días para que no se puedan separar de las reglas.
+ */
+const SOLO_FECHA = new RegExp(
+  "^(?:" +
+    [
+      "\\d{4}-\\d{1,2}-\\d{1,2}",
+      "\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?",
+      `(?:el\\s+)?\\d{1,2}\\s+de\\s+(?:${NOMBRE_DE_MES})(?:\\s+de\\s+\\d{4})?`,
+      `(?:el\\s+)?(?:${NOMBRE_DE_DIA})(?:\\s+pasado)?`,
+      "anteayer",
+      "antes\\s+de\\s+ayer",
+      "ayer",
+      "hoy",
+      "hace\\s+(?:\\d{1,3}|un|una|dos|tres|cuatro|cinco|seis)\\s+(?:dias?|semanas?)",
+      "(?:la\\s+)?semana\\s+pasada",
+    ].join("|") +
+    ")$",
+);
+
+/**
+ * Parte un texto que **termina** en una fecha: devuelve lo que queda y la
+ * fecha leída.
+ *
+ * Es lo que necesita el estilo telegráfico de Beno, donde la fecha va
+ * pegada al final y el resto es la descripción del gasto:
+ * `-20usd Claude Code 06/08` → `"Claude Code"` + el 6 de agosto.
+ *
+ * Se prueba **de la cola más larga a la más corta** y cada candidata tiene
+ * que matchear la expresión anclada: así "Claude Code 06/08" no se lleva
+ * puesto "Code" y una descripción que simplemente termina en una palabra
+ * cualquiera no se confunde con una fecha. Si no hay ninguna, devuelve el
+ * texto entero y `null` — que es distinto de devolver hoy: quien llama
+ * necesita saber que Beno **no dijo** la fecha para poder preguntársela.
+ *
+ * Se compara por palabras y no con índices sobre el texto crudo a
+ * propósito: sacarle las tildes cambia el largo del string y cualquier
+ * `slice()` calculado sobre el normalizado cortaría corrido en
+ * "el miércoles".
+ */
+export function partirFechaFinal(
+  texto: string,
+  hoy: string,
+): { texto: string; fecha: FechaLeida | null } {
+  const palabras = texto.trim().split(/\s+/).filter(Boolean);
+
+  for (
+    let n = Math.min(MAX_PALABRAS_DE_FECHA, palabras.length);
+    n >= 1;
+    n--
+  ) {
+    const cola = palabras.slice(palabras.length - n).join(" ");
+    if (!SOLO_FECHA.test(normalizarConservandoFechas(cola))) continue;
+
+    const leida = leerFecha(cola, hoy);
+    // Una cola que matchea la forma pero no arma una fecha válida —"31/02"—
+    // no es una fecha: vuelve a ser parte de la descripción.
+    if (!leida.explicita) continue;
+
+    return {
+      texto: palabras.slice(0, palabras.length - n).join(" "),
+      fecha: leida,
+    };
+  }
+
+  return { texto: texto.trim(), fecha: null };
+}
+
 /** Arma "YYYY-MM-DD" validando que el día exista de verdad (nada de 31/02). */
 function armarISO(anio: number, mes: number, dia: number): string | null {
   if (anio < 2000 || anio > 2100) return null;
