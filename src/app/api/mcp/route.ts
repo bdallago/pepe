@@ -1,13 +1,41 @@
 import type { AuthInfo } from "@modelcontextprotocol/server";
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
-import { z } from "zod";
 
-import { datosDelUsuario } from "@/lib/mcp/datos";
+import { registrarBalance } from "@/lib/mcp/tools/balance";
+import { registrarBitacora } from "@/lib/mcp/tools/bitacora";
+import { registrarLecciones } from "@/lib/mcp/tools/lecciones";
+import { registrarMovimientos } from "@/lib/mcp/tools/movimientos";
+import { registrarProyectos } from "@/lib/mcp/tools/proyectos";
 import { verificarAccessToken } from "@/lib/oauth/almacen";
 import { RUTA_MCP } from "@/lib/oauth/protocolo";
 
 /**
  * Servidor MCP de Pepe, expuesto como conector remoto de Claude.ai.
+ *
+ * Este archivo es **solo la puerta**: autenticación, cableado y nada
+ * más. Las tools viven en `lib/mcp/tools/`, una familia por archivo, y
+ * el único acceso a la base es `lib/mcp/datos.ts`.
+ *
+ * ## Las ocho tools, y el corte que las ordena
+ *
+ * El corte no es por tema, es por **quién termina escribiendo en la
+ * base** (AGENTS.md §8):
+ *
+ * | Tool | Qué hace |
+ * |---|---|
+ * | `listar_proyectos`, `listar_movimientos`, `balance`, `buscar_lecciones`, `leer_bitacora` | leen |
+ * | `registrar_movimiento`, `registrar_leccion` | dejan una propuesta en `inbox` |
+ * | `escribir_bitacora` | escribe directo |
+ *
+ * Las dos del medio **no violan la regla 6**: sigue siendo Beno el que
+ * aprieta el botón, en la misma bandeja de siempre. No hizo falta
+ * inventar un mecanismo de confirmación nuevo porque ya existía. La
+ * última puede escribir porque no hay producción de un modelo: el texto
+ * es suyo (el desarrollo está en `lib/mcp/tools/bitacora.ts`).
+ *
+ * Lo que queda para más adelante, con uso encima, es la escritura
+ * directa de movimientos y lecciones —si alguna vez se quiere— y
+ * absorber 6.3, 6.4 y 6.5.
  *
  * ## Lo que hay que saber del protocolo
  *
@@ -24,16 +52,15 @@ import { RUTA_MCP } from "@/lib/oauth/protocolo";
  * ## Límites medidos, de la documentación de conectores
  *
  * - Resultado de una tool en Claude.ai: **~150.000 caracteres**. Por eso
- *   todo listado pagina y nada devuelve un volcado completo. Con los
- *   proyectos de Beno sobra de lejos; la paginación está desde el
- *   principio para no tener que agregarla cuando ya moleste.
- * - Timeout: **300 segundos**, de ahí el `maxDuration`.
+ *   todo listado pagina y nada devuelve un volcado completo. La única
+ *   que no pagina es `balance`, y no puede: un total parcial no es un
+ *   número incompleto, es un número equivocado.
+ * - Timeout: **300 segundos**, de ahí el `maxDuration`. Sobra: la única
+ *   tool que puede llamar a un modelo es `registrar_movimiento`, y
+ *   solamente cuando el histórico no encontró nada.
  */
 
 export const maxDuration = 300;
-
-/** Cuántos proyectos entran en una página. Ver el límite de arriba. */
-const POR_PAGINA = 25;
 
 /**
  * De dónde sale el `resource_metadata` del `WWW-Authenticate`.
@@ -70,149 +97,24 @@ async function verificarBearer(
     expiresAt: acceso.vence_en,
     // `extra` es el único lugar de `AuthInfo` donde entra algo propio, y
     // acá viaja lo que de verdad importa: **de quién** son los datos que
-    // la tool tiene permitido tocar.
+    // la tool tiene permitido tocar. Lo lee `lib/mcp/contexto.ts`.
     extra: { userId: acceso.user_id },
   };
 }
 
-/**
- * El usuario del token, o un error ruidoso.
- *
- * `withMcpAuth` con `required: true` ya garantiza que hay `authInfo`, así
- * que esto no debería disparar nunca. Está igual porque el precio de
- * equivocarse es leer datos de otra persona: si algún día el contexto
- * llega vacío por un cambio de la librería, la tool tiene que romper, no
- * seguir con un `user_id` vacío.
- */
-function usuarioDelToken(ctx: { http?: { authInfo?: AuthInfo } }): string {
-  const userId = ctx.http?.authInfo?.extra?.userId;
-
-  if (typeof userId !== "string" || userId.length === 0) {
-    throw new Error("El token no identifica a ningún usuario.");
-  }
-
-  return userId;
-}
-
 const handler = createMcpHandler(
   (server) => {
-    server.registerTool(
-      "listar_proyectos",
-      {
-        title: "Listar proyectos",
-        // La descripción es lo único que tiene el modelo para elegir bien
-        // sin adivinar.
-        //
-        // ⚠ **No nombres tools que no existen.** La primera versión
-        // cerraba con "para eso están las tools de plata", y cuando Beno
-        // preguntó cuánto había gastado, el modelo no inventó un número
-        // —bien— pero le dijo que esas tools "no aparecen entre las
-        // disponibles" y lo mandó a revisar si estaban deshabilitadas en
-        // la configuración del conector. No estaban deshabilitadas: no
-        // existían. Una descripción que promete hermanas manda a
-        // diagnosticar un problema inventado.
-        description:
-          "Los proyectos de Pepe, con su slug y si están activos. `projects` " +
-          "es la entidad raíz de la app: los movimientos, las lecciones y la " +
-          "bitácora cuelgan de un proyecto. Devuelve el listado y nada más: " +
-          "no trae balances, montos ni movimientos. Si te piden plata y esta " +
-          "es la única tool disponible, decilo — el conector todavía no la " +
-          "expone.",
-        inputSchema: z.object({
-          pagina: z
-            .number()
-            .int()
-            .min(1)
-            .default(1)
-            .describe("Página, empezando en 1."),
-        }),
-        annotations: {
-          readOnlyHint: true,
-          destructiveHint: false,
-          idempotentHint: true,
-          openWorldHint: false,
-        },
-      },
-      async ({ pagina }, ctx) => {
-        // El único origen del usuario es el token. No hay ningún argumento
-        // de la tool que pueda cambiarlo.
-        const datos = datosDelUsuario(usuarioDelToken(ctx));
-
-        const desde = (pagina - 1) * POR_PAGINA;
-
-        // ⚠ **Sin filtrar `archivado_en` y ordenados por nombre**, que es
-        // exactamente lo que hace `app/(app)/layout.tsx`. Ojo con
-        // "mejorarlo" escondiendo los archivados: el MCP y la pantalla
-        // tienen que contestar lo mismo, y un proyecto de menos acá
-        // después se convierte en un balance que no cierra allá.
-        const { data, count, error } = await datos
-          .de("projects", { count: "exact" })
-          .order("nombre")
-          .range(desde, desde + POR_PAGINA - 1);
-
-        // ⚠ Pedir una página más allá del final **no es un error**, pero
-        // PostgREST contesta 416 `PGRST103` igual. Que el modelo reciba
-        // "Requested range not satisfiable" cuando lo único que pasó es
-        // que se pasó de página lo manda a reintentar o a inventarse una
-        // explicación; decirle cuántos hay lo deja seguir solo.
-        const seFueDeRango = error?.code === "PGRST103";
-
-        if (error && !seFueDeRango) {
-          throw new Error(`No se pudieron leer los proyectos: ${error.message}`);
-        }
-
-        const proyectos = seFueDeRango ? [] : (data ?? []);
-
-        if (proyectos.length === 0) {
-          // La respuesta de error no trae el conteo, así que se pide
-          // aparte. Es la única rama que necesita una segunda consulta, y
-          // es la rara: la del camino normal ya vino con el listado.
-          const total = seFueDeRango
-            ? ((await datos.de("projects", { count: "exact", head: true }))
-                .count ?? 0)
-            : (count ?? 0);
-
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text:
-                  total === 0
-                    ? "No hay ningún proyecto cargado."
-                    : `La página ${pagina} está vacía: hay ${total} proyectos en total y entran ${POR_PAGINA} por página.`,
-              },
-            ],
-          };
-        }
-
-        const total = count ?? proyectos.length;
-        const hayMas = desde + proyectos.length < total;
-
-        const lineas = proyectos.map((p) => {
-          const estado = p.activo ? "activo" : "inactivo";
-          const archivado = p.archivado_en ? ", archivado" : "";
-          return `- ${p.nombre} (slug: ${p.slug}) — ${estado}${archivado}`;
-        });
-
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: [
-                `${total} proyectos (página ${pagina}${hayMas ? `, pedí la ${pagina + 1} para el resto` : ""}):`,
-                ...lineas,
-              ].join("\n"),
-            },
-          ],
-        };
-      },
-    );
+    registrarProyectos(server);
+    registrarMovimientos(server);
+    registrarBalance(server);
+    registrarLecciones(server);
+    registrarBitacora(server);
   },
   {
     // Sin esto el servidor se presenta como "mcp-typescript server on
     // vercel", el default del paquete. Es el nombre que Claude muestra al
     // conectar.
-    serverInfo: { name: "Pepe", version: "0.1.0" },
+    serverInfo: { name: "Pepe", version: "0.2.0" },
   },
 );
 

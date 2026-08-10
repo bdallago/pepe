@@ -1,5 +1,7 @@
 import "server-only";
 
+import { crearEntradaDeBitacora, type EntradaNueva } from "@/lib/bitacora";
+import { sugerirClasificacion, type Sugerencia } from "@/lib/clasificacion";
 import type { Database } from "@/lib/supabase/database.types";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -45,6 +47,23 @@ import { createAdminClient } from "@/lib/supabase/server";
  * las tablas que tienen columna `user_id`**. Pedir `fx_rates` —global,
  * sin dueño— no compila, en vez de compilar y devolver un `.eq()` sobre
  * una columna que no existe, que es un error de runtime.
+ *
+ * ## Lo que no es una consulta suelta
+ *
+ * Algunas cosas que necesitan las tools no son un `select`: una entrada
+ * de bitácora tiene reglas de dominio propias (`lib/bitacora.ts`), la
+ * clasificación de un movimiento tiene un orden que no es negociable
+ * (`lib/clasificacion.ts`) y la búsqueda de lecciones vive en un RPC.
+ *
+ * Para esas hay **métodos con nombre**, no un escape hatch que devuelva
+ * el cliente. La regla de arriba se mantiene —el cliente crudo no sale
+ * de este archivo— y las reglas siguen teniendo un solo lugar donde
+ * viven: acá no se reimplementa ninguna, se las llama pasándoles el
+ * cliente que este módulo ya tiene y el `user_id` que ya conoce.
+ *
+ * Si mañana una tool necesita algo que no está acá, el trabajo es
+ * agregarle un método a este objeto. Ese es el punto: aparece en el
+ * diff.
  */
 
 type Tablas = Database["public"]["Tables"];
@@ -102,6 +121,99 @@ export function datosDelUsuario(user_id: string) {
           // y se sigue encadenando con autocompletado.
           .eq("user_id" as never, user_id)
       );
+    },
+
+    /**
+     * Inserta una fila **con el dueño puesto por este módulo**.
+     *
+     * `user_id` no está en el tipo del parámetro: no es que se ignore si
+     * lo mandás, es que no se puede mandar. Es la misma idea que `de()`,
+     * del lado de la escritura.
+     *
+     * Lo único que se escribe por acá es `inbox`, y eso no es casual:
+     * un tool del conector que escriba en una tabla de dominio sin pasar
+     * por la bandeja viola la regla 6 de AGENTS.md. La excepción con
+     * nombre y razón es `escribirBitacora()`, abajo.
+     */
+    crear<T extends TablaDelUsuario>(
+      tabla: T,
+      fila: Omit<Tablas[T]["Insert"], "user_id">,
+    ) {
+      return admin
+        .from(tabla)
+        .insert({ ...fila, user_id } as never)
+        .select()
+        .single();
+    },
+
+    /**
+     * Tipo y categoría sugeridos para una descripción (spec 6.1).
+     *
+     * No reimplementa nada: llama a `lib/clasificacion.ts`, que mantiene
+     * el orden que no es negociable —primero el histórico contra la base,
+     * y **solo si no encontró nada** el modelo—. Lo único que agrega
+     * este módulo es el `user_id`, que del lado del conector hace falta
+     * porque la service role key saltea RLS.
+     *
+     * Devuelve `null` sin quejarse si no hay con qué sugerir: la regla 7
+     * dice que ninguna feature de modelo puede ser bloqueante, y cargar
+     * un movimiento sin categoría propuesta es perfectamente válido.
+     */
+    sugerirClasificacion(descripcion: string): Promise<Sugerencia | null> {
+      return sugerirClasificacion(admin, descripcion, user_id);
+    },
+
+    /**
+     * Escribe una entrada de bitácora, de verdad y sin pasar por la
+     * bandeja.
+     *
+     * **Es la única escritura directa del conector, y puede serlo por lo
+     * mismo que la del agente de bitácora**: el texto es de Beno palabra
+     * por palabra. La regla 6 protege contra guardar *producción de un
+     * modelo* sin confirmación; acá no hay producción de modelo, hay
+     * transcripción. Si alguna vez la descripción de la tool pasa a
+     * pedir que se resuma o se mejore el texto, ese razonamiento se cae
+     * y esto pasa a necesitar la bandeja.
+     *
+     * El insert no está escrito acá a propósito: la regla de cómo nace
+     * una entrada vive en `lib/bitacora.ts` y la comparten el formulario,
+     * el agente y esto.
+     */
+    escribirBitacora(entrada: EntradaNueva) {
+      return crearEntradaDeBitacora(admin, user_id, entrada);
+    },
+
+    /**
+     * Busca lecciones y devuelve los ids **en orden de relevancia**.
+     *
+     * Ids y no filas, y ese es el punto: `buscar_lecciones_hibrido` es
+     * `security invoker` y no recibe un usuario, así que con la service
+     * role key vería las lecciones de cualquiera. Quien llama toma estos
+     * ids y los pasa por `de("lessons").in("id", …)`, que sí está
+     * acotado — o sea que **el ranking lo hace el RPC y la pertenencia la
+     * impone este módulo**, y una lección ajena se cae en el segundo
+     * paso aunque el primero la haya rankeado.
+     *
+     * Se prefirió esto antes que agregarle un `p_user_id` al RPC, al
+     * revés que con `sugerir_categoria_historico`: aquella función son
+     * treinta líneas y esta es la consulta de fusión RRF, delicada y
+     * medida, de la que depende el buscador entero de la app. El costo
+     * de tocarla es más alto que el de filtrar después.
+     *
+     * Va **sin embedding**, igual que el MCP local: generarlo necesita
+     * los 266 MB del modelo. No es una versión degradada por accidente
+     * —la regla 7 declara válida la búsqueda solo por texto— y con el
+     * corpus de hoy es lo que mejor midió.
+     */
+    async rankearLecciones(consulta: string, limite: number): Promise<string[]> {
+      const { data, error } = await admin.rpc("buscar_lecciones_hibrido", {
+        p_consulta: consulta,
+        p_embedding: undefined,
+        p_limite: limite,
+      });
+
+      if (error) throw new Error(`Falló la búsqueda: ${error.message}`);
+      return (data ?? []).map((fila) => fila.id);
     },
   };
 }
