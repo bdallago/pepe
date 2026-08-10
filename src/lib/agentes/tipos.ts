@@ -34,6 +34,19 @@ import type {
  * misma tabla y las dos puntas opuestas — una guarda lo que Beno acaba de
  * vivir, la otra sale a buscar lo que ya guardó—. Su agente transcribe
  * literal y escribe directo; el porqué largo está en `agentes/bitacora.ts`.
+ *
+ * `presupuesto` es el segundo vecino incómodo de `buscador`, y el choque
+ * estaba escrito en el prompt: una línea manda "presupuestos" a `buscador`
+ * a propósito, porque "¿qué anotaciones tengo sobre gestión de
+ * presupuestos?" pregunta por lo que Beno ESCRIBIÓ. Acá el pedido es el
+ * opuesto: ARMAR uno para un cliente. Se separan por verbo, no por tema,
+ * igual que `tema_estudio` y `lecciones_tema`.
+ *
+ * Su rama **no estima**: lleva a la pantalla de alta con el pedido
+ * pegado y el botón lo aprieta Beno. Es la misma decisión que
+ * `movimientos`, y por el mismo motivo — la estimación es producción de un
+ * modelo que termina en un documento que se le manda a un cliente, así que
+ * no arranca sola desde una caja de texto.
  */
 export const DESTINOS = [
   "consultas",
@@ -47,6 +60,7 @@ export const DESTINOS = [
   "suscripciones",
   "vencimientos",
   "movimientos",
+  "presupuesto",
   "desconocido",
 ] as const;
 
@@ -286,6 +300,29 @@ export type RespuestaSimple =
       /** Campo por campo, de dónde salió. Se muestra antes de abrir nada. */
       cuerpo: string;
       precarga: PrecargaMovimiento;
+    }
+  | {
+      /**
+       * Un pedido de presupuesto, listo para armar.
+       *
+       * **Acá no se estimó nada, y eso es la decisión.** La estimación es
+       * el razonador con `maxTokens 4500` escribiendo el contenido de un
+       * documento que se le manda a un cliente: no puede arrancar sola
+       * desde una caja de texto. Esto lleva a la pantalla de alta con el
+       * pedido ya pegado, y el botón "Estimar los entregables" lo aprieta
+       * Beno — el mismo criterio con el que `movimiento` abre el
+       * formulario en vez de guardar.
+       *
+       * Es una clase aparte y no un `propuestas` porque no hay ninguna
+       * propuesta esperando: la caja de `propuestas` dice "te esperan en
+       * la bandeja para que confirmes", y acá no hay nada en la bandeja.
+       */
+      clase: "presupuesto";
+      destino: Destino;
+      titulo: string;
+      cuerpo: string;
+      /** `/presupuestos/nuevo`, con el pedido en la query si entró. */
+      href: string;
     }
   | {
       /**

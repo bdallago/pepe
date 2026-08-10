@@ -229,6 +229,43 @@ import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
  * las seis simples 6/6 con una sola acción cada una y las cuatro ambiguas
  * 4/4 en 0.3.
  *
+ * **`presupuesto` entró con cinco líneas léxicas, y el choque estaba
+ * escrito adentro de este mismo prompt.** Una línea manda "presupuestos"
+ * a `buscador` **a propósito**, por la frase de Beno "¿qué anotaciones
+ * tengo sobre gestión de presupuestos?": ahí el tema es de plata pero lo
+ * que pregunta es por lo que ESCRIBIÓ. Armar uno para un cliente es el
+ * opuesto exacto y comparte la palabra entera, así que se separan como
+ * `tema_estudio` de `lecciones_tema`: **por verbo, no por tema**. Son el
+ * bullet del especialista (tres líneas con ejemplos) y dos líneas pegadas
+ * al párrafo que ya habla de `buscador`, que es de lo que hablan —"hacé",
+ * "hacéme", "armá", "cotizá", "presupuestá", "cuánto le cobro"—. Las
+ * cinco **arriba** del bloque de confianza, que quedó último.
+ *
+ * Medido el 2026-08-10, antes y después, con las mismas trece frases: las
+ * cuatro ambiguas siguen en 0.3 las cuatro y con el mismo destino, las
+ * seis simples siguen dando una sola acción cada una con la misma
+ * confianza, "qué anotaciones tengo sobre gestión de presupuestos" sigue
+ * yendo a `buscador` con 1, y el argumento de "-20usd Claude Code 06/08"
+ * volvió idéntico a la frase. Salió limpio al **primer intento**; es la
+ * primera vez que este prompt acepta un destino nuevo sin pelear, y la
+ * hipótesis es la de siempre: cinco líneas léxicas, ninguna en prosa,
+ * ninguna abajo de la confianza.
+ *
+ * Lo que sí se movió es la frase que se vino a arreglar: "Me haces un
+ * presupuesto para x proyecto? aca esta el spec" pasó de `desconocido`
+ * 0.3 a `presupuesto` 1. **Le ganó a la regla de "material que no podés
+ * abrir"**, que cubre "spec" y "acá está", y está bien que le gane: esa
+ * regla existe para que la app no finja leer un archivo, y acá no lo
+ * lee — lleva a la pantalla de alta con lo que Beno escribió pegado, y
+ * el spec lo pega él. Si algún día esa frase tiene que volver a
+ * `desconocido`, el lugar es la lista léxica, no un párrafo nuevo.
+ *
+ * Y el argumento volvió recortado a "x proyecto", que es lo esperable y
+ * por eso la rama de `despacho.ts` **usa la frase entera y no el
+ * argumento**: el pedido del cliente ES el texto, y es contra ese texto
+ * que se verifican después las citas de cada entregable. Misma clase de
+ * red que `textoDelMovimiento()`, y por el mismo motivo.
+ *
  * Un dato que salió de esa medición y del que depende el rango temporal:
  * para "consultas" el modelo ya devuelve el período dentro del argumento
  * ("mis balances según estos últimos 6 meses"), sin que haya que
@@ -272,6 +309,9 @@ Los especialistas:
 - "vencimientos": gastos recurrentes que están por vencer o cobrarse
   pronto. Ej: "tengo algún gasto recurrente próximo a vencer", "qué se me
   viene este mes".
+- "presupuesto": ARMAR un presupuesto o una cotización para un cliente.
+  Ej: "hacéme un presupuesto para este cliente", "cotizá este trabajo",
+  "cuánto le cobro por esto".
 - "desconocido": no encaja en ninguno.
 
 Si la frase nombra material que vos no podés abrir ("pdf", "archivo",
@@ -283,6 +323,8 @@ Si Beno pregunta por algo que ESCRIBIÓ (anotaciones, apuntes, notas,
 bitácora, lecciones), es "buscador" aunque el tema sea de plata:
 "presupuestos", "facturación" o "costos" son temas sobre los que se
 escribe. "consultas" es solo cuando pide NÚMEROS de movimientos cargados.
+Pero HACER uno ("hacé", "hacéme", "armá", "cotizá", "presupuestá", "cuánto
+le cobro") es "presupuesto", no "buscador".
 "qué lecciones hicimos de X" o "qué lecciones tengo de X" pregunta por
 las que YA están escritas: eso es "buscador", no "lecciones_tema".
 "bitacora" es al revés que "buscador": ahí te pide que ESCRIBAS algo que

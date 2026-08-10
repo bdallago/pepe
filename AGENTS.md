@@ -564,7 +564,7 @@ esa ya es la carga rápida de movimientos).
 
 | Archivo | Qué |
 |---|---|
-| `agentes/tipos.ts` | Los doce destinos, el esquema de la decisión, la unión de respuestas |
+| `agentes/tipos.ts` | Los trece destinos, el esquema de la decisión, la unión de respuestas |
 | `agentes/recepcionista.ts` | Frase → lista ordenada de decisiones |
 | `agentes/cadena.ts` | Las ejecuta en orden y contiene los fallos |
 | `agentes/despacho.ts` | Un `case` por destino, cáscara sobre lo que ya existe |
@@ -607,6 +607,18 @@ medir.** El piso de regresión son las cuatro ambiguas sueltas
 debajo de 0.6) y las seis simples con **una sola acción** cada una. Y si
 la regla que querés agregar se puede resolver con un test sobre un string
 en `despacho.ts`, hacelo ahí — como `textoDelMovimiento()`.
+
+**El quinto agregado pasó limpio al primer intento, y confirma la
+receta.** `presupuesto` (2026-08-10) entró con **cinco líneas léxicas** —
+tres del bullet del especialista y dos pegadas al párrafo que ya separaba
+`buscador` de `consultas`, que es de lo que hablan— y todas **arriba** del
+bloque de confianza. El piso quedó intacto: las cuatro ambiguas en 0.3,
+las seis simples con una acción, el argumento telegráfico literal, y
+`"qué anotaciones tengo sobre gestión de presupuestos"` todavía en
+`buscador`. Ese último era el choque: el prompt manda "presupuestos" a
+`buscador` a propósito, así que **buscar lo que anotó** y **armar uno para
+un cliente** se separan por VERBO, igual que `tema_estudio` y
+`lecciones_tema`.
 
 **Lo que se mide no es el acierto, es el modo de fallar.** La calibración
 del 2026-08-10 contra las quince frases reales de Beno pasó de 11/15 con

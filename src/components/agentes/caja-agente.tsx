@@ -671,6 +671,7 @@ const ETIQUETA_DESTINO: Record<Destino, string> = {
   suscripciones: "Suscripciones",
   vencimientos: "Vencimientos",
   movimientos: "Movimientos",
+  presupuesto: "Presupuesto",
   desconocido: "—",
 };
 
@@ -825,6 +826,26 @@ function Respuesta({
               Ver las <span className="cifra">{respuesta.cuantas}</span>{" "}
               propuestas
             </Link>
+          </Button>
+          <PieDeDestino destino={respuesta.destino} onElegir={onElegir} />
+        </div>
+      );
+
+    case "presupuesto":
+      /*
+        Igual que `movimiento`: acá no se estimó ni se guardó nada. El
+        botón lleva a la pantalla de alta con el pedido pegado y es Beno el
+        que aprieta "Estimar los entregables". El porqué está en la rama de
+        `despacho.ts`.
+      */
+      return (
+        <div className={TARJETA}>
+          <p className="text-sm font-semibold">{respuesta.titulo}</p>
+          <p className="text-muted-foreground text-sm whitespace-pre-line">
+            {respuesta.cuerpo}
+          </p>
+          <Button asChild variant="outline" onClick={onCerrar}>
+            <Link href={respuesta.href}>Armar el presupuesto</Link>
           </Button>
           <PieDeDestino destino={respuesta.destino} onElegir={onElegir} />
         </div>

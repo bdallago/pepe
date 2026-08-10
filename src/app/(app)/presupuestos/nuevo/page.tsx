@@ -9,15 +9,35 @@ import type { QuoteInput } from "@/lib/schemas";
 
 export const metadata: Metadata = { title: "Nuevo presupuesto" };
 
+/** Techo del pedido que se acepta por la query. Ver `?pedido=` abajo. */
+const PEDIDO_EN_URL_CHARS = 1_500;
+
 /**
- * El alta a mano, sin modelo.
+ * El alta.
  *
- * Es la etapa 0 del spec y ya sirve sola: la estimación con modelo es un
- * acelerador, y cargar, calcular, exportar, aceptar y descartar tienen que
- * andar sin Groq (regla 7).
+ * Sirve sola y sin modelo: cargar, calcular, exportar, aceptar y descartar
+ * tienen que andar sin Groq (regla 7). La estimación es un botón adentro
+ * del formulario, y es un acelerador.
+ *
+ * `?pedido=` es por dónde entra la caja de agentes: su rama de
+ * `presupuesto` **no estima**, deja el pedido pegado acá y el botón lo
+ * aprieta Beno. Se recorta por las dudas —una URL la escribe cualquiera—
+ * pero el largo real está limitado del otro lado, en `despacho.ts`.
  */
-export default async function NuevoPresupuestoPage() {
-  const ajustes = await getAjustesPresupuesto();
+export default async function NuevoPresupuestoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pedido?: string | string[] }>;
+}) {
+  const [ajustes, { pedido }] = await Promise.all([
+    getAjustesPresupuesto(),
+    searchParams,
+  ]);
+
+  const pedidoInicial = (Array.isArray(pedido) ? pedido[0] : pedido ?? "").slice(
+    0,
+    PEDIDO_EN_URL_CHARS,
+  );
 
   // Sin tarifa no hay precio posible. Se vuelve a la lista, que ya explica
   // dónde cargarla, en vez de mostrar un formulario que no puede guardar.
@@ -30,7 +50,7 @@ export default async function NuevoPresupuestoPage() {
     cliente_tipo: "particular",
     titulo: "",
     resumen_alcance: "",
-    pedido_texto: "",
+    pedido_texto: pedidoInicial,
     moneda: ajustes.tarifa_moneda,
     fecha: todayISO(),
     validez_dias: 15,

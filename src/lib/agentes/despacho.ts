@@ -558,6 +558,57 @@ export async function despachar(
       };
     }
 
+    case "presupuesto": {
+      /*
+        ⚠ **Esta rama no llama a `estimarEsfuerzo()`, a propósito.**
+
+        Podría: la función existe y el route handler también. Pero lo que
+        devuelve es producción de un modelo que termina, palabra por
+        palabra, adentro de un PDF que se le manda a un cliente con el
+        nombre de Beno. Que eso arranque solo porque una frase se pareció
+        a un pedido de presupuesto es exactamente lo que la regla 6
+        prohíbe, y además cuesta el razonador con `maxTokens 4500` y la
+        espera entera del limitador — minutos, por una derivación que el
+        recepcionista puede haber leído mal.
+
+        Así que esto hace lo mismo que `movimientos`: deja el pedido
+        pegado en la pantalla de alta y **el botón lo aprieta Beno**. Ahí
+        el formulario es el panel de confirmación, con los ítems marcados
+        como del modelo y cada cita verificada contra el pedido.
+      */
+      /*
+        La frase entera y no el argumento recortado, por el mismo motivo
+        por el que `movimientos` tiene `textoDelMovimiento()`: el pedido
+        del cliente ES el texto, y contra ese texto se verifican después
+        las citas de cada entregable. Un argumento que se comió media
+        frase produciría un presupuesto sobre medio pedido. El argumento
+        queda como red por si la frase pedía varias cosas y solo una parte
+        era el pedido.
+      */
+      const pedido = frase.trim() || (decision.argumento?.trim() ?? "");
+
+      // Viaja por la query, así que tiene que entrar en una URL. Hoy no
+      // puede no entrar —el handler capa `frase` en 1000 caracteres— y el
+      // chequeo está igual: el día que ese tope suba, medio pedido pegado
+      // en silencio produce medio presupuesto sin que nada lo avise.
+      const entra = pedido.length > 0 && pedido.length <= PEDIDO_EN_URL_CHARS;
+
+      return {
+        clase: "presupuesto",
+        destino: "presupuesto",
+        titulo: "Te abro el presupuesto para armarlo",
+        cuerpo: [
+          entra
+            ? "Te llevo lo que escribiste al campo del pedido."
+            : "No te llevo el texto: pegalo en la pantalla y estimá desde ahí.",
+          "Todavía no estimé nada. Ahí adentro apretás “Estimar los entregables” y el modelo propone los ítems con horas, supuestos y preguntas — todo editable, y nada se guarda hasta que crees el presupuesto.",
+        ].join("\n"),
+        href: entra
+          ? `/presupuestos/nuevo?pedido=${encodeURIComponent(pedido)}`
+          : "/presupuestos/nuevo",
+      };
+    }
+
     case "consultas": {
       // Las tres consultas son idénticas a las del layout de las pantallas
       // privadas: proyectos sin filtrar `archivado_en` y ordenados por
@@ -964,6 +1015,17 @@ export async function despachar(
       };
   }
 }
+
+/**
+ * Hasta cuánto pedido viaja por la query de `/presupuestos/nuevo`.
+ *
+ * Node corta la línea de pedido de una request bastante antes que los
+ * headers (el `--max-http-header-size=32768` del `dev` y el `start` no
+ * cubre esto), y 1500 caracteres codificados son ~4500 en el peor caso.
+ * Es de sobra para lo que se escribe en la caja: el argumento del
+ * recepcionista está capado en 300.
+ */
+const PEDIDO_EN_URL_CHARS = 1_500;
 
 // ─────────────────────────────────────────────────────────────
 // Movimientos
