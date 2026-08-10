@@ -278,8 +278,20 @@ prompt **no movió la aguja**: el techo era el modelo.
 Medido el 2026-08-08 con el prompt real, mismo sistema y mismo usuario:
 `openai/gpt-oss-120b` con `reasoning_effort: "medium"` devolvió
 afirmaciones discutibles ("Cobrar por cada versión mayor evita que el
-cliente exija cambios sin fin"); `qwen/qwen3.6-27b` ni siquiera devolvió
-JSON válido. De ahí `MODELO_RAZONADOR`.
+cliente exija cambios sin fin"); `qwen/qwen3.6-27b` no devolvió JSON
+válido **con ese prompt**. De ahí `MODELO_RAZONADOR`.
+
+⚠ **Ojo con lo de qwen: la frase de arriba decía "ni siquiera devolvió
+JSON válido" y se leía como una propiedad del modelo. No lo es.** Medido
+el 2026-08-10, `qwen/qwen3.6-27b` responde bien con
+`response_format: json_object`. Lo que falló el 08 fue esa combinación de
+prompt y modelo, no su capacidad de devolver JSON.
+
+Importa porque **qwen es el único modelo de la cuenta que lee
+imágenes**: los otros tres contestan HTTP 400 (`messages[0].content must
+be a string`) apenas les mandás el array multimodal. Descartarlo por una
+frase mal generalizada habría dejado sin salida el caso de las capturas.
+Ninguno de los cuatro lee PDF.
 
 **Las tres funciones de 6.3 a 6.5 usan el razonador.** La retro empezó
 con llama y se pasó el mismo día, por decisión explícita de Beno: pagar
