@@ -180,6 +180,55 @@ import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
  * dígito, gana la frase entera. Es un test sobre un string y no cuesta
  * ninguna llamada.
  *
+ * **Lo que faltaba no era un destino más, era saber decir "no sé".**
+ * Medido el 2026-08-10 contra las quince frases que Beno tipeó de verdad,
+ * antes de tocar nada: 11/15 y **cuatro errores silenciosos** (destino
+ * equivocado con confianza ≥ 0.6). Los tres peores eran las frases que se
+ * apoyan en algo que la app no puede abrir —un PDF, capturas, un spec—:
+ * no existe el agente que las resuelve, y el recepcionista contestaba
+ * igual y con seguridad. "te paso capturas para que veas esto que me
+ * contestó un cliente" volvía con **tres acciones en confianza 1**, y los
+ * argumentos eran los ejemplos del propio prompt copiados tal cual
+ * ("pagué 20 usd de Claude Code", "cómo viene Proder"). Sin nada real
+ * que enganchar, el modelo repite lo que tiene a mano.
+ *
+ * Lo arreglaron **cuatro líneas léxicas**, de la misma clase que la regla
+ * de la confianza: si la frase nombra material que el modelo no puede
+ * abrir ("pdf", "spec", "capturas", "te paso", "acá está"), el destino es
+ * "desconocido" con 0.3. Con eso las tres dejaron de mentir.
+ *
+ * El cuarto error silencioso era "qué lecciones hicimos de X", que se iba
+ * a `lecciones_tema` con 0.8 — o sea que a una pregunta por lo que ya
+ * está escrito le generaba lecciones nuevas. Son **dos líneas** en el
+ * párrafo que ya separa `buscador` de `consultas`, que es de lo que
+ * habla.
+ *
+ * Y la trampa mordió por cuarta vez, otra vez por volumen. La primera
+ * versión de esas dos correcciones ocupaba doce líneas en vez de seis:
+ * 14/15 y un solo error silencioso, pero "Proder" y "pricing" sueltos se
+ * fueron de 0.3 a 0.8 y el argumento de "-20usd Claude Code 06/08" volvió
+ * reescrito como "pagué 20 usd de Claude Code", **sin la fecha**. Mismo
+ * contenido a la mitad de largo: las cuatro ambiguas volvieron a 0.3 y el
+ * argumento volvió literal. No hace falta nombrar la palabra ni mover el
+ * bloque de confianza para romperlas; alcanza con escribir de más.
+ *
+ * Por lo mismo se descartó un tercer intento que solo aclaraba, en la
+ * línea del JSON, que las cuatro claves se escriben así: no arregló lo
+ * que iba a arreglar y volvió a romper el argumento literal de la frase
+ * telegráfica. Está revertido.
+ *
+ * Queda un caso vivo y **es del modelo, no del prompt**: en "te paso
+ * capturas…" el 8b elige bien (`desconocido`, 0.3) pero escribe la clave
+ * como `"confianca"`, así que no valida y salta `ErrorLLM` de tipo
+ * esquema. Se reprodujo en las tres corridas y no lo movió pedirle las
+ * claves textuales. Falla del lado seguro —la app avisa que no entendió y
+ * no deriva a ningún lado—, que es exactamente lo contrario del error
+ * silencioso que se vino a arreglar.
+ *
+ * Estado final medido el 2026-08-10: **14/15, cero errores silenciosos**,
+ * las seis simples 6/6 con una sola acción cada una y las cuatro ambiguas
+ * 4/4 en 0.3.
+ *
  * Un dato que salió de esa medición y del que depende el rango temporal:
  * para "consultas" el modelo ya devuelve el período dentro del argumento
  * ("mis balances según estos últimos 6 meses"), sin que haya que
@@ -225,10 +274,17 @@ Los especialistas:
   viene este mes".
 - "desconocido": no encaja en ninguno.
 
+Si la frase nombra material que vos no podés abrir ("pdf", "archivo",
+"spec", "capturas", "foto", "mail", "te paso", "acá está", "*inserte…*")
+o pide algo que no hace ninguno de los de arriba, va a "desconocido" con
+confianza 0.3, por más que el tema se parezca al de alguno.
+
 Si Beno pregunta por algo que ESCRIBIÓ (anotaciones, apuntes, notas,
 bitácora, lecciones), es "buscador" aunque el tema sea de plata:
 "presupuestos", "facturación" o "costos" son temas sobre los que se
 escribe. "consultas" es solo cuando pide NÚMEROS de movimientos cargados.
+"qué lecciones hicimos de X" o "qué lecciones tengo de X" pregunta por
+las que YA están escritas: eso es "buscador", no "lecciones_tema".
 "bitacora" es al revés que "buscador": ahí te pide que ESCRIBAS algo que
 le pasó, no que busques lo que ya escribió. Y si lo que cuenta es plata
 que entró o salió, es "movimientos" y no "bitacora".
