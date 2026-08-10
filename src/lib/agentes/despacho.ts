@@ -1,5 +1,6 @@
 import "server-only";
 
+import { describirRango, resolverRango } from "@/lib/agentes/rango";
 import { resolverProyecto, resolverTrack } from "@/lib/agentes/resolver";
 import { computeToday, trackProgress } from "@/lib/aprendizaje";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
@@ -11,6 +12,7 @@ import { generarRetro } from "@/lib/retro";
 import { crearSesionAlFinalDelTrack } from "@/lib/sesiones";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
+import type { Balances } from "@/lib/balances";
 import type { ItemDeHoy } from "@/lib/aprendizaje";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { Recurrence, StudySession } from "@/lib/supabase/database.types";
@@ -398,9 +400,26 @@ export async function despachar(
       // la app. Acá se usa ARS y la caja ofrece el link a la pantalla, que
       // sí tiene el conmutador.
       const moneda = "ARS" as const;
-      const filtros = { estado: "efectuado" as const };
 
-      const proyecto = resolverProyecto(decision.argumento, proyectos);
+      // El rango sale del texto libre y se resuelve en código, no en el
+      // modelo (ver `rango.ts`). Si no se reconoce ninguno vale `null` y
+      // los filtros quedan como estaban: todo el histórico.
+      const hoy = todayISO();
+      const rango = resolverRango(decision.argumento, hoy);
+      const filtros = {
+        estado: "efectuado" as const,
+        desde: rango?.desde,
+        hasta: rango?.hasta,
+      };
+
+      // El proyecto se busca en lo que queda **después** de sacarle la
+      // expresión temporal. Si no, un argumento que es solo un rango
+      // ("últimos 6 meses") puede matchear un proyecto de casualidad por
+      // el `includes` de `resolverProyecto`.
+      const proyecto = resolverProyecto(
+        rango ? rango.restante : decision.argumento,
+        proyectos,
+      );
 
       if (proyecto === "ambiguo") {
         return {
@@ -410,46 +429,33 @@ export async function despachar(
         };
       }
 
-      if (proyecto) {
-        const b = calcularBalancesProyecto(
-          movimientos,
-          proyectos,
-          categorias,
-          proyecto.id,
-          moneda,
-          filtros,
-        );
+      const balances: Balances = proyecto
+        ? calcularBalancesProyecto(
+            movimientos,
+            proyectos,
+            categorias,
+            proyecto.id,
+            moneda,
+            filtros,
+          )
+        : calcularBalances(movimientos, proyectos, categorias, moneda, filtros);
 
-        return {
-          clase: "texto",
-          destino: "consultas",
-          titulo: proyecto.nombre,
-          cuerpo: [
-            `Ingresos: ${formatMoney(b.efectuado.ingresos, moneda)}`,
-            `Egresos: ${formatMoney(b.efectuado.egresos, moneda)}`,
-            `Balance: ${formatMoney(b.efectuado.balance, moneda)}`,
-            `Sobre ${b.cantidadMovimientos} movimientos.`,
-          ].join("\n"),
-        };
-      }
-
-      const b = calcularBalances(
-        movimientos,
-        proyectos,
-        categorias,
-        moneda,
-        filtros,
-      );
+      const alcance = proyecto ? proyecto.nombre : "Balance general";
+      const lineaRango = describirRango(rango);
 
       return {
         clase: "texto",
         destino: "consultas",
-        titulo: "Balance general",
+        titulo: alcance,
         cuerpo: [
-          `Ingresos: ${formatMoney(b.efectuado.ingresos, moneda)}`,
-          `Egresos: ${formatMoney(b.efectuado.egresos, moneda)}`,
-          `Balance: ${formatMoney(b.efectuado.balance, moneda)}`,
-          `Sobre ${b.cantidadMovimientos} movimientos.`,
+          // Primero el rango y después los números, y no al revés: si el
+          // agente entendió otro período que el que Beno pidió, tiene que
+          // verlo antes de leer un solo monto.
+          lineaRango,
+          `Ingresos: ${formatMoney(balances.efectuado.ingresos, moneda)}`,
+          `Egresos: ${formatMoney(balances.efectuado.egresos, moneda)}`,
+          `Balance: ${formatMoney(balances.efectuado.balance, moneda)}`,
+          `Sobre ${balances.cantidadMovimientos} movimientos.`,
         ].join("\n"),
       };
     }
