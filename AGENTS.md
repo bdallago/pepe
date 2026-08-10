@@ -113,6 +113,15 @@ verifica el invariante en pantalla.
 Excepción real y documentada: sin proyectos activos no hay entre quiénes
 repartir. Eso sale por `Balances.compartidoSinRepartir` y la UI lo avisa.
 
+⚠ **Esto está por cambiar y ya tiene spec y plan aprobados** (2026-08-10,
+sin implementar). El defecto: `calcularParticipaciones()` no recibe fecha,
+así que usa la foto de los proyectos activos de **hoy** para repartir
+**todo el histórico** — cerrar un proyecto reescribe retroactivamente
+cuánto costó cada uno de los otros. Pasa a repartirse entre los que
+estaban vivos **en la fecha de cada gasto**, y la columna `activo` se
+borra: la ventana `fecha_inicio`/`fecha_fin` queda como única fuente de
+verdad. Ver `docs/superpowers/plans/2026-08-10-prorrateo-por-fecha.md`.
+
 ### 3. Moneda de origen vs. derivada
 
 El formulario muestra ARS y USD a la vez. El campo que se escribe define
@@ -620,6 +629,16 @@ esa ya es la carga rápida de movimientos).
 | `agentes/cadena.ts` | Las ejecuta en orden y contiene los fallos |
 | `agentes/despacho.ts` | Un `case` por destino, cáscara sobre lo que ya existe |
 | `agentes/resolver.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts` | Resolución **determinística**: proyectos, tracks, rangos, fechas, el formato telegráfico |
+
+⚠ **`bitacora` es el sumidero de todo lo que la app no sabe hacer**, y eso
+se descubrió usándolo el 2026-08-10. Tiene el gancho léxico más ancho
+("anotá", "apuntá", "registrá", "guardá") **y es el único destino que
+escribe directo**, así que un pedido no cubierto no termina en un "no sé
+hacer eso": termina en una fila escrita. Pasó — pedir las fechas de dos
+proyectos dejó dos entradas con el contenido `"Proder"` y `"El Prode"`,
+más una retro que nadie pidió. La salvaguarda y el destino `proyecto` que
+falta están en
+`docs/superpowers/specs/2026-08-10-operar-conversando-design.md`.
 
 **Regla que ordena todo: si algo se puede resolver sin modelo, se
 resuelve sin modelo.** El signo de `-20usd Claude Code 06/08` dice que es

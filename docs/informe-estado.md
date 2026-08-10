@@ -1,5 +1,20 @@
 # Pepe — informe de estado
 
+> ⚠ **Es una foto del 2026-08-09, no un documento vivo.** Se deja tal cual
+> porque su valor es haber auditado el repo contra el código en un momento
+> concreto; reescribirlo lo destruiría. Lo que cambió desde entonces y
+> contradice partes de este informe:
+>
+> - El **conector MCP remoto** existe, tiene OAuth 2.1 y **ocho tools**
+>   (`docs/conector-mcp.md`).
+> - `tipo_bandeja` ya no tiene cinco valores: se le sumaron
+>   `nota_de_adjunto`, `movimiento_dictado` y `leccion_dictada`.
+> - `sugerir_categoria_historico` toma un `p_user_id` opcional.
+> - Lo que viene está en `docs/superpowers/specs/2026-08-10-*`.
+>
+> Sigue vigente lo de la sección 5.3 sobre el limitador de Groq como
+> estado de módulo, y lo del enum `categorizacion` que nada produce.
+
 | | |
 |---|---|
 | **Fecha** | 2026-08-09 |
