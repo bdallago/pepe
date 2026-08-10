@@ -5,18 +5,25 @@ import { CotizacionPanel } from "@/components/ajustes/cotizacion-panel";
 import { ProyectosPanel } from "@/components/ajustes/proyectos-panel";
 import { RespaldoPanel } from "@/components/ajustes/respaldo-panel";
 import { SuscripcionesPanel } from "@/components/ajustes/suscripciones-panel";
+import { TarifasPanel } from "@/components/ajustes/tarifas-panel";
 import { TracksPanel } from "@/components/ajustes/tracks-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { AvisoTarifa } from "@/lib/avisos-tarifa";
+import type { AjustesPresupuesto } from "@/lib/presupuestos-server";
 import type { FxRate, Track } from "@/lib/supabase/database.types";
 
 export function AjustesView({
   ultimaTasa,
   tracks,
   diasInactividadZombie,
+  ajustesPresupuesto,
+  avisoTarifa,
 }: {
   ultimaTasa: FxRate | null;
   tracks: Track[];
   diasInactividadZombie: number;
+  ajustesPresupuesto: AjustesPresupuesto;
+  avisoTarifa: AvisoTarifa;
 }) {
   return (
     <Tabs defaultValue="proyectos" className="space-y-4">
@@ -24,6 +31,7 @@ export function AjustesView({
         <TabsTrigger value="proyectos">Proyectos</TabsTrigger>
         <TabsTrigger value="categorias">Categorías</TabsTrigger>
         <TabsTrigger value="cotizacion">Cotización</TabsTrigger>
+        <TabsTrigger value="tarifa">Tarifa</TabsTrigger>
         <TabsTrigger value="tracks">Tracks</TabsTrigger>
         <TabsTrigger value="suscripciones">Suscripciones</TabsTrigger>
         <TabsTrigger value="respaldo">Respaldo</TabsTrigger>
@@ -39,6 +47,10 @@ export function AjustesView({
 
       <TabsContent value="cotizacion">
         <CotizacionPanel ultimaTasa={ultimaTasa} />
+      </TabsContent>
+
+      <TabsContent value="tarifa">
+        <TarifasPanel ajustes={ajustesPresupuesto} aviso={avisoTarifa} />
       </TabsContent>
 
       <TabsContent value="tracks">

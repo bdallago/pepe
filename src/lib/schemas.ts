@@ -117,3 +117,125 @@ export const recurrenceSchema = z
   );
 
 export type RecurrenceInput = z.infer<typeof recurrenceSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// Presupuestos
+//
+// ⚠ Lo que NO está en este esquema es tan importante como lo que está:
+// `tarifa_hora`, `multiplicador`, `horas_por_semana`, `tasa_usada` y
+// `tasa_fecha` **no viajan desde el formulario**. Los pone el servidor al
+// guardar, leyéndolos de `settings` y de `fx_rates` (regla 1: son foto del
+// momento). Si el cliente los mandara, cualquiera podría cambiar el
+// congelado de un presupuesto viejo con un fetch a mano.
+// ─────────────────────────────────────────────────────────────
+export const tipoClienteSchema = z.enum(["particular", "pyme", "empresa"]);
+
+export const quoteItemSchema = z.object({
+  titulo: z
+    .string()
+    .trim()
+    .min(1, "Poné qué se entrega.")
+    .max(160, "Máximo 160 caracteres."),
+  detalle: z.string().trim().max(600, "Máximo 600 caracteres."),
+  horas: z
+    .number()
+    .nonnegative("Las horas no pueden ser negativas.")
+    .max(400, "Un ítem de más de 400 horas es el proyecto entero sin partir."),
+  /** Se apaga a 'manual' apenas se toca un campo del ítem. */
+  origen: z.enum(["modelo", "manual"]),
+  ancla: z.string().trim().max(200).nullable(),
+  ancla_verificada: z.boolean(),
+  confianza: z.enum(["alta", "media", "baja"]).nullable(),
+});
+
+export type QuoteItemInput = z.infer<typeof quoteItemSchema>;
+
+const lineaLibre = z.string().trim().min(1).max(300);
+
+export const quoteSchema = z.object({
+  cliente_nombre: z
+    .string()
+    .trim()
+    .min(1, "Poné el nombre del cliente.")
+    .max(120, "Máximo 120 caracteres."),
+  cliente_tipo: tipoClienteSchema,
+
+  titulo: z
+    .string()
+    .trim()
+    .min(1, "Poné un título.")
+    .max(160, "Máximo 160 caracteres."),
+  resumen_alcance: z.string().trim().max(2000, "Máximo 2000 caracteres."),
+  /** Lo que pegó o dictó. Es contra esto que se verifican las anclas. */
+  pedido_texto: z.string().trim().max(60000),
+
+  moneda: monedaSchema,
+  fecha: isoDate,
+  validez_dias: z
+    .number()
+    .int("Tiene que ser un número entero de días.")
+    .positive("La validez tiene que ser de al menos un día.")
+    .max(365, "Más de un año no es una validez."),
+  mostrar_horas: z.boolean(),
+  condiciones: z.string().trim().max(2000, "Máximo 2000 caracteres."),
+
+  /**
+   * El precio final, editable a mano: a veces el número que sale de la
+   * cuenta no es el número que uno quiere mandar. `total_editado` dice si
+   * Beno lo pisó; con `false` el servidor usa el que sale de
+   * `calcularPresupuesto()` contra los valores congelados.
+   */
+  total_origen: z
+    .number()
+    .nonnegative("El total no puede ser negativo.")
+    .max(1e12, "Total demasiado grande."),
+  total_editado: z.boolean(),
+
+  items: z.array(quoteItemSchema).max(50, "Máximo 50 entregables."),
+  supuestos: z.array(lineaLibre).max(20, "Máximo 20 supuestos."),
+  preguntas: z.array(lineaLibre).max(20, "Máximo 20 preguntas."),
+
+  /** Qué modelo estimó, o null si se cargó a mano. */
+  modelo: z.string().trim().max(80).nullable(),
+  /** La cadena "quedó desactualizado → hice otro". */
+  reemplaza_a: uuid.nullable(),
+});
+
+export type QuoteInput = z.infer<typeof quoteSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// La tarifa y los multiplicadores, en Ajustes
+// ─────────────────────────────────────────────────────────────
+export const tarifasSchema = z
+  .object({
+    tarifa_hora: z
+      .number()
+      .positive("La tarifa tiene que ser mayor a cero.")
+      .max(1e9, "Tarifa demasiado grande.")
+      .nullable(),
+    tarifa_moneda: monedaSchema,
+    multiplicador_particular: z.number().positive("Tiene que ser mayor a cero."),
+    multiplicador_pyme: z.number().positive("Tiene que ser mayor a cero."),
+    multiplicador_empresa: z.number().positive("Tiene que ser mayor a cero."),
+    horas_por_semana: z
+      .number()
+      .min(1, "Entre 1 y 80 horas por semana.")
+      .max(80, "Entre 1 y 80 horas por semana."),
+    emisor_nombre: z.string().trim().max(120).nullable(),
+    emisor_contacto: z.string().trim().max(200).nullable(),
+    condiciones_default: z.string().trim().max(2000).nullable(),
+  })
+  // El mismo check que la base (`settings_multiplicadores_ordenados`).
+  // Duplicarlo acá no es redundancia: atrapa el error de tipeo con un
+  // mensaje que se entiende, en vez de un 23514 de Postgres.
+  .refine(
+    (v) =>
+      v.multiplicador_particular <= v.multiplicador_pyme &&
+      v.multiplicador_pyme <= v.multiplicador_empresa,
+    {
+      message: "Los multiplicadores van de menor a mayor: particular ≤ pyme ≤ empresa.",
+      path: ["multiplicador_pyme"],
+    },
+  );
+
+export type TarifasInput = z.infer<typeof tarifasSchema>;
