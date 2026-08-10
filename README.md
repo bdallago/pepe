@@ -111,6 +111,48 @@ con "Guardar" queda como documento del proyecto, con el balance de ese
 momento congelado adentro. Las lecciones candidatas que salen de la retro
 van a la bandeja y se confirman de a una, como todo lo demás.
 
+### La caja: hablarle a Pepe en castellano
+
+En la pantalla de inicio hay una caja, y desde cualquier otra pantalla se
+abre con **`Ctrl+J`** (no `Ctrl+K`: esa ya es la carga rápida de
+movimientos). Escribís una frase y un **recepcionista** la deriva al
+especialista que corresponde: plata, roadmap, buscador, retro,
+suscripciones, vencimientos, temas de estudio, bitácora.
+
+Una frase puede pedir **varias cosas a la vez** y se ejecutan en orden.
+Es seguro porque nada entra al dominio sin confirmación: tres pedidos son
+tres propuestas, y si una falla quedan las otras.
+
+Lo que se puede resolver **sin modelo, se resuelve sin modelo**: el signo
+de `-20usd Claude Code 06/08` dice que es un egreso, y las frases
+telegráficas se parsean con cero llamadas.
+
+### Adjuntos
+
+Se puede pegar un **PDF** o **capturas** en la caja. El PDF se extrae con
+`unpdf` y las imágenes las lee el único modelo de la cuenta que ve. Todo
+lo que sale de un archivo va a la bandeja: es producción de un modelo
+sobre material que Beno no escribió.
+
+### Presupuestos
+
+Se carga una tarifa hora y un multiplicador por tipo de cliente
+(particular, pyme, empresa). Con el pedido del cliente, el modelo
+**estima el esfuerzo** —nunca el precio— y cada entregable trae una
+**cita literal del pedido**, verificada por código. El presupuesto se
+edita, se exporta a PDF por hoja de impresión, y si prospera se convierte
+en proyecto; si no, se descarta con motivo.
+
+Un cron semanal trae **tarifas de referencia del mercado argentino** y
+avisa si la tarifa quedó desfasada. Avisa: nunca la cambia.
+
+### Conector MCP
+
+Pepe se puede agregar a Claude.ai como conector remoto y operarlo
+conversando. OAuth 2.1 con PKCE y registro dinámico; Pepe es el
+authorization server y usa el login de Google solo para la identidad.
+Ver `docs/conector-mcp.md`.
+
 ## Las tres reglas que importan
 
 ### 1. El tipo de cambio se congela
@@ -393,14 +435,26 @@ tipo o categoría a mano.
 
 ### Límites del tier gratuito
 
-El techo que muerde **no son los pedidos sino los tokens por minuto**.
-Con ~800 tokens por entrada, el pase de extracción se choca el límite en
-la cuarta llamada con el contador de pedidos en 4 de 1000.
+Medidos el 2026-08-10 **disparando pedidos reales**, no leyendo la
+documentación:
 
-Y el techo de tokens **es por modelo**: 6000 para el chico, 12000 para
-`llama-3.3-70b` y 8000 para `gpt-oss-120b`. El limitador de `llm.ts`
-lleva una ventana por modelo y espera antes de salir, en vez de comerse
-el 429.
+| modelo | ped./min | ped./día | tok./min | tok./día |
+|---|---:|---:|---:|---:|
+| `llama-3.1-8b-instant` | 30 | 14 400 | 6000 | 500 000 |
+| `llama-3.3-70b-versatile` | 30 | 1000 | 12 000 | 100 000 |
+| `openai/gpt-oss-120b` | 30 | 1000 | 8000 | 200 000 |
+| `qwen/qwen3.6-27b` | 30 | 1000 | 8000 | 200 000 |
+
+Dos cosas que no son obvias: **los pedidos se cuentan por día, no por
+minuto** (se lee en el `reset` de los headers), y **hay un techo diario
+de tokens** que los headers no informan.
+
+El limitador de `llm.ts` lleva **una ventana por modelo** y espera antes
+de salir, en vez de comerse el 429.
+
+> Una versión anterior de este archivo decía que el techo de pedidos era
+> 1000 y no 30. Era falso: 1000 es el diario. Los 30 por minuto existen y
+> están medidos.
 
 ## Comandos
 
@@ -411,10 +465,16 @@ npm run start      # servir el build
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 
+npm run mcp        # servidor MCP local, por stdio (lo arranca Claude Code)
+
 npm run descargar:modelo      # pesos del modelo de embeddings
 npm run backfill:embeddings   # genera los embeddings faltantes, retomable
 npm run import:colmena        # importador de la app de estudio (histórico)
 ```
+
+Hay **dos** servidores MCP y no se pisan: el local, por stdio, que corre
+en la máquina de Beno y no tiene URL; y el remoto, en `/api/mcp`, que es
+el conector de Claude.ai y sí necesita OAuth.
 
 ## Stack
 
