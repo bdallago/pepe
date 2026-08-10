@@ -508,6 +508,121 @@ export type Database = {
           },
         ]
       }
+      oauth_clients: {
+        Row: {
+          client_id: string
+          client_name: string | null
+          created_at: string
+          redirect_uris: string[]
+        }
+        Insert: {
+          client_id: string
+          client_name?: string | null
+          created_at?: string
+          redirect_uris: string[]
+        }
+        Update: {
+          client_id?: string
+          client_name?: string | null
+          created_at?: string
+          redirect_uris?: string[]
+        }
+        Relationships: []
+      }
+      oauth_codes: {
+        Row: {
+          client_id: string
+          code_challenge: string
+          code_challenge_method: string
+          code_hash: string
+          created_at: string
+          expires_at: string
+          redirect_uri: string
+          scope: string
+          usado_en: string | null
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          code_challenge: string
+          code_challenge_method: string
+          code_hash: string
+          created_at?: string
+          expires_at: string
+          redirect_uri: string
+          scope?: string
+          usado_en?: string | null
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          code_challenge?: string
+          code_challenge_method?: string
+          code_hash?: string
+          created_at?: string
+          expires_at?: string
+          redirect_uri?: string
+          scope?: string
+          usado_en?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oauth_codes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "oauth_clients"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      oauth_tokens: {
+        Row: {
+          access_token_hash: string
+          client_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          refresh_token_hash: string | null
+          revocado_en: string | null
+          rotado_de: string | null
+          scope: string
+          user_id: string
+        }
+        Insert: {
+          access_token_hash: string
+          client_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          refresh_token_hash?: string | null
+          revocado_en?: string | null
+          rotado_de?: string | null
+          scope?: string
+          user_id: string
+        }
+        Update: {
+          access_token_hash?: string
+          client_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          refresh_token_hash?: string | null
+          revocado_en?: string | null
+          rotado_de?: string | null
+          scope?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oauth_tokens_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "oauth_clients"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           activo: boolean
