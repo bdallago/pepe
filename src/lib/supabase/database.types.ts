@@ -550,6 +550,256 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_assumptions: {
+        Row: {
+          created_at: string
+          id: string
+          orden: number
+          quote_id: string
+          texto: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          orden: number
+          quote_id: string
+          texto: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          orden?: number
+          quote_id?: string
+          texto?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_assumptions_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_items: {
+        Row: {
+          ancla: string | null
+          ancla_verificada: boolean
+          confianza: string | null
+          created_at: string
+          detalle: string
+          horas: number
+          id: string
+          orden: number
+          origen: string
+          quote_id: string
+          titulo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ancla?: string | null
+          ancla_verificada?: boolean
+          confianza?: string | null
+          created_at?: string
+          detalle?: string
+          horas: number
+          id?: string
+          orden: number
+          origen?: string
+          quote_id: string
+          titulo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ancla?: string | null
+          ancla_verificada?: boolean
+          confianza?: string | null
+          created_at?: string
+          detalle?: string
+          horas?: number
+          id?: string
+          orden?: number
+          origen?: string
+          quote_id?: string
+          titulo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_items_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_questions: {
+        Row: {
+          created_at: string
+          id: string
+          orden: number
+          quote_id: string
+          texto: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          orden: number
+          quote_id: string
+          texto: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          orden?: number
+          quote_id?: string
+          texto?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_questions_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quotes: {
+        Row: {
+          archivado_en: string | null
+          cliente_nombre: string
+          cliente_tipo: Database["public"]["Enums"]["tipo_cliente"]
+          condiciones: string
+          created_at: string
+          enviado_en: string | null
+          estado: Database["public"]["Enums"]["estado_presupuesto"]
+          fecha: string
+          horas_estimadas: number
+          horas_por_semana: number
+          id: string
+          modelo: string | null
+          moneda: Database["public"]["Enums"]["moneda"]
+          mostrar_horas: boolean
+          motivo_descarte: Database["public"]["Enums"]["motivo_descarte"] | null
+          motivo_detalle: string | null
+          multiplicador: number
+          numero: number
+          pedido_texto: string
+          project_id: string | null
+          reemplaza_a: string | null
+          resuelto_en: string | null
+          resumen_alcance: string
+          semanas_estimadas: number
+          tarifa_hora: number
+          tasa_fecha: string | null
+          tasa_usada: number | null
+          titulo: string
+          total_origen: number
+          updated_at: string
+          user_id: string
+          validez_dias: number
+        }
+        Insert: {
+          archivado_en?: string | null
+          cliente_nombre: string
+          cliente_tipo: Database["public"]["Enums"]["tipo_cliente"]
+          condiciones?: string
+          created_at?: string
+          enviado_en?: string | null
+          estado?: Database["public"]["Enums"]["estado_presupuesto"]
+          fecha?: string
+          horas_estimadas?: number
+          horas_por_semana: number
+          id?: string
+          modelo?: string | null
+          moneda: Database["public"]["Enums"]["moneda"]
+          mostrar_horas?: boolean
+          motivo_descarte?:
+            | Database["public"]["Enums"]["motivo_descarte"]
+            | null
+          motivo_detalle?: string | null
+          multiplicador: number
+          numero: number
+          pedido_texto?: string
+          project_id?: string | null
+          reemplaza_a?: string | null
+          resuelto_en?: string | null
+          resumen_alcance?: string
+          semanas_estimadas?: number
+          tarifa_hora: number
+          tasa_fecha?: string | null
+          tasa_usada?: number | null
+          titulo: string
+          total_origen: number
+          updated_at?: string
+          user_id: string
+          validez_dias?: number
+        }
+        Update: {
+          archivado_en?: string | null
+          cliente_nombre?: string
+          cliente_tipo?: Database["public"]["Enums"]["tipo_cliente"]
+          condiciones?: string
+          created_at?: string
+          enviado_en?: string | null
+          estado?: Database["public"]["Enums"]["estado_presupuesto"]
+          fecha?: string
+          horas_estimadas?: number
+          horas_por_semana?: number
+          id?: string
+          modelo?: string | null
+          moneda?: Database["public"]["Enums"]["moneda"]
+          mostrar_horas?: boolean
+          motivo_descarte?:
+            | Database["public"]["Enums"]["motivo_descarte"]
+            | null
+          motivo_detalle?: string | null
+          multiplicador?: number
+          numero?: number
+          pedido_texto?: string
+          project_id?: string | null
+          reemplaza_a?: string | null
+          resuelto_en?: string | null
+          resumen_alcance?: string
+          semanas_estimadas?: number
+          tarifa_hora?: number
+          tasa_fecha?: string | null
+          tasa_usada?: number | null
+          titulo?: string
+          total_origen?: number
+          updated_at?: string
+          user_id?: string
+          validez_dias?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_reemplaza_a_fkey"
+            columns: ["reemplaza_a"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rate_references: {
         Row: {
           clave: string
@@ -827,20 +1077,53 @@ export type Database = {
       }
       settings: {
         Row: {
+          condiciones_default: string | null
           created_at: string
           dias_inactividad_zombie: number
+          emisor_contacto: string | null
+          emisor_nombre: string | null
+          horas_por_semana: number
+          multiplicador_empresa: number
+          multiplicador_particular: number
+          multiplicador_pyme: number
+          seniority_referencia: string
+          servicio_referencia: string
+          tarifa_hora: number | null
+          tarifa_moneda: Database["public"]["Enums"]["moneda"]
           updated_at: string
           user_id: string
         }
         Insert: {
+          condiciones_default?: string | null
           created_at?: string
           dias_inactividad_zombie?: number
+          emisor_contacto?: string | null
+          emisor_nombre?: string | null
+          horas_por_semana?: number
+          multiplicador_empresa?: number
+          multiplicador_particular?: number
+          multiplicador_pyme?: number
+          seniority_referencia?: string
+          servicio_referencia?: string
+          tarifa_hora?: number | null
+          tarifa_moneda?: Database["public"]["Enums"]["moneda"]
           updated_at?: string
           user_id: string
         }
         Update: {
+          condiciones_default?: string | null
           created_at?: string
           dias_inactividad_zombie?: number
+          emisor_contacto?: string | null
+          emisor_nombre?: string | null
+          horas_por_semana?: number
+          multiplicador_empresa?: number
+          multiplicador_particular?: number
+          multiplicador_pyme?: number
+          seniority_referencia?: string
+          servicio_referencia?: string
+          tarifa_hora?: number | null
+          tarifa_moneda?: Database["public"]["Enums"]["moneda"]
           updated_at?: string
           user_id?: string
         }
@@ -997,8 +1280,14 @@ export type Database = {
         | "pospuesto"
         | "error"
       estado_movimiento: "efectuado" | "planificado"
+      estado_presupuesto: "borrador" | "enviado" | "aceptado" | "descartado"
       frecuencia_recurrencia: "mensual" | "anual"
       moneda: "ARS" | "USD"
+      motivo_descarte:
+        | "no_era_lo_que_queria"
+        | "quedo_desactualizado"
+        | "no_prospero"
+        | "otro"
       origen_leccion: "manual" | "importada" | "generada" | "retro" | "adjunto"
       tipo_adjunto: "pdf" | "imagen"
       tipo_bandeja:
@@ -1160,8 +1449,15 @@ export const Constants = {
         "error",
       ],
       estado_movimiento: ["efectuado", "planificado"],
+      estado_presupuesto: ["borrador", "enviado", "aceptado", "descartado"],
       frecuencia_recurrencia: ["mensual", "anual"],
       moneda: ["ARS", "USD"],
+      motivo_descarte: [
+        "no_era_lo_que_queria",
+        "quedo_desactualizado",
+        "no_prospero",
+        "otro",
+      ],
       origen_leccion: ["manual", "importada", "generada", "retro", "adjunto"],
       tipo_adjunto: ["pdf", "imagen"],
       tipo_bandeja: [

@@ -82,6 +82,13 @@ const TABLAS = [
   // referencia es justamente lo que dice cuándo hay que subir la tarifa.
   "rate_runs",
   "rate_references",
+  // Los presupuestos y sus tres tablas hijas. Van después de `projects`
+  // porque un presupuesto aceptado apunta al proyecto que creó, y en ese
+  // orden el respaldo sigue siendo reimportable.
+  "quotes",
+  "quote_items",
+  "quote_assumptions",
+  "quote_questions",
 ] as const;
 
 type Tabla = (typeof TABLAS)[number];
