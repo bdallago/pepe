@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { crearEntradaDeBitacora } from "@/lib/bitacora";
 import { todayISO } from "@/lib/dates";
 import type { DailyLog } from "@/lib/supabase/database.types";
 
@@ -23,6 +24,13 @@ import {
  * El formulario va a venir con el selector precargado en un proyecto, pero
  * eso es una comodidad de la interfaz: acá el id llega por parámetro y se
  * valida que exista y sea del usuario. Nada de proyectos hardcodeados.
+ *
+ * El alta en sí vive en `lib/bitacora.ts` y no acá: el agente de bitácora
+ * escribe la misma fila desde la caja y recibe el cliente de Supabase ya
+ * construido, así que la regla tiene que estar en un módulo que lo tome
+ * por parámetro. Esta action quedó como cáscara —valida, resuelve la
+ * sesión, llama y revalida—, igual que las de sesiones con
+ * `lib/sesiones.ts`.
  */
 
 const uuid = z.string().uuid("Identificador inválido.");
@@ -65,17 +73,12 @@ export async function crearEntradaBitacora(
 
   if (!proyecto) return fail("No se encontró el proyecto.");
 
-  const { data, error } = await supabase
-    .from("daily_log")
-    .insert({
-      user_id: userId,
-      project_id: parsed.data.projectId,
-      track_id: parsed.data.trackId ?? null,
-      fecha: parsed.data.fecha ?? todayISO(),
-      contenido: parsed.data.contenido,
-    })
-    .select()
-    .single();
+  const { data, error } = await crearEntradaDeBitacora(supabase, userId, {
+    contenido: parsed.data.contenido,
+    fecha: parsed.data.fecha ?? todayISO(),
+    projectId: parsed.data.projectId,
+    trackId: parsed.data.trackId,
+  });
 
   if (error) return fail(mensajeDeError(error));
 

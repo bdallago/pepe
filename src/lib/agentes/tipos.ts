@@ -21,10 +21,18 @@ import { z } from "zod";
  * plan, `estudio` PROPONE lo que Beno no pidió y `lecciones_tema` mira
  * para atrás, a lo que ya vivió. Acá el tema lo trae él y lo que pide es
  * que se lo AGREGUEN al plan.
+ *
+ * `bitacora` es el par que le faltaba a `buscador`, y su ausencia no era
+ * neutral: hasta que existió, "anotalo en la bitácora" caía en `buscador`,
+ * o sea que a un pedido de ESCRIBIR se le contestaba una búsqueda. Son la
+ * misma tabla y las dos puntas opuestas — una guarda lo que Beno acaba de
+ * vivir, la otra sale a buscar lo que ya guardó—. Su agente transcribe
+ * literal y escribe directo; el porqué largo está en `agentes/bitacora.ts`.
  */
 export const DESTINOS = [
   "consultas",
   "buscador",
+  "bitacora",
   "roadmap",
   "estudio",
   "tema_estudio",

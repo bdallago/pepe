@@ -33,6 +33,7 @@ import {
   borrarEntradaBitacora,
   crearEntradaBitacora,
 } from "@/lib/actions/journal";
+import { proyectoPorDefectoDeBitacora } from "@/lib/bitacora";
 import { formatDate, todayISO } from "@/lib/dates";
 import type { DailyLog, Track } from "@/lib/supabase/database.types";
 
@@ -49,11 +50,11 @@ import type { DailyLog, Track } from "@/lib/supabase/database.types";
  * - La entrada cuelga de un proyecto (`daily_log.project_id` es NOT NULL).
  *   El selector arranca en Gentius, que es donde va el estudio, pero se
  *   puede cambiar: el id lo valida la Server Action, no se hardcodea nada.
+ *   Cuál es ese proyecto lo decide `proyectoPorDefectoDeBitacora()` y no
+ *   este archivo: el agente de bitácora escribe la misma tabla desde la
+ *   caja y tiene que caer en el mismo lugar que el formulario.
  * - La cruz **archiva**, no borra, y pasa por una confirmación explícita.
  */
-
-/** Proyecto donde va el estudio; el selector arranca ahí por comodidad. */
-const SLUG_ESTUDIO = "gentius";
 
 /** Valor centinela: Radix no acepta `value=""` en un `SelectItem`. */
 const SIN_TRACK = "sin-track";
@@ -72,9 +73,7 @@ export function BitacoraView({
   const { projects, proyectosActivos } = useAppData();
 
   const proyectoPorDefecto =
-    proyectosActivos.find((p) => p.slug === SLUG_ESTUDIO)?.id ??
-    proyectosActivos[0]?.id ??
-    "";
+    proyectoPorDefectoDeBitacora(proyectosActivos)?.id ?? "";
 
   const [contenido, setContenido] = useState("");
   const [fecha, setFecha] = useState(todayISO());

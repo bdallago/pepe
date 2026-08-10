@@ -1,5 +1,6 @@
 import "server-only";
 
+import { leerAnotacion } from "@/lib/agentes/bitacora";
 import { observarBalances } from "@/lib/agentes/observaciones";
 import {
   describirRango,
@@ -9,6 +10,10 @@ import {
 import { resolverProyecto, resolverTrack } from "@/lib/agentes/resolver";
 import { computeToday, trackProgress } from "@/lib/aprendizaje";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
+import {
+  crearEntradaDeBitacora,
+  proyectoPorDefectoDeBitacora,
+} from "@/lib/bitacora";
 import { compareISO, formatDate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
@@ -578,6 +583,109 @@ export async function despachar(
         destino: "buscador",
         titulo: `Encontré ${items.length} sobre “${consulta}”`,
         items,
+      };
+    }
+
+    case "bitacora": {
+      /*
+        Esta rama ESCRIBE en `daily_log`, directo y sin pasar por la
+        bandeja. No contradice la regla 6, y **no como excepción**: lo que
+        la regla 6 protege es que no se guarde producción de un modelo sin
+        que Beno la confirme, y acá el texto es de Beno palabra por
+        palabra. El agente **transcribe literal** — no reformula, no
+        resume, no corrige y no mejora—. Lo único que un modelo toca es
+        recortar de la frase qué parte es la anotación (el recepcionista,
+        que tiene prohibido reformular el argumento) y, en código, la
+        fecha cuando la frase la menciona.
+
+        ⚠ Si alguna vez se le mete a ese prompt una instrucción de
+        mejorar, resumir o corregir el texto, el razonamiento deja de
+        valer y esta rama pasa a necesitar la bandeja. El desarrollo está
+        en `agentes/bitacora.ts` y en el spec de agentes; no lo borres.
+
+        Lo que sí obliga es a que la respuesta diga **exactamente** qué se
+        escribió, con qué fecha y en qué proyecto: el riesgo que queda no
+        es el texto, es la derivación equivocada. Como borrar es archivar
+        (regla 4), deshacerlo desde Bitácora no pierde nada.
+      */
+      const anotacion = leerAnotacion(decision.argumento);
+
+      if (!anotacion.contenido) {
+        return {
+          clase: "aviso",
+          titulo: "¿Qué querés que anote?",
+          cuerpo:
+            "Decime qué pasó y lo guardo en la bitácora tal cual me lo escribas.",
+        };
+      }
+
+      const { data: proyectos } = await supabase
+        .from("projects")
+        .select("*")
+        .order("nombre");
+
+      const todos = proyectos ?? [];
+
+      // El proyecto se busca en la anotación entera: si nombra uno, va
+      // ahí. `"ambiguo"` (más de un nombre adentro del texto) cae al de
+      // por defecto igual que si no hubiera nombrado ninguno — preguntar
+      // costaría hacerle retipear lo que acaba de escribir, y la
+      // respuesta ya dice a qué proyecto fue.
+      const nombrado = resolverProyecto(anotacion.contenido, todos);
+      const porNombre = nombrado !== "ambiguo" ? nombrado : null;
+
+      // Mismo criterio que el formulario de Bitácora, y de un solo lugar
+      // para que no se separen: el proyecto de estudio y si no, el
+      // primero activo. `daily_log.project_id` es NOT NULL, así que sin
+      // ninguno no hay entrada posible.
+      const proyecto = porNombre ?? proyectoPorDefectoDeBitacora(todos);
+
+      if (!proyecto) {
+        return {
+          clase: "aviso",
+          titulo: "No tenés ningún proyecto activo",
+          cuerpo:
+            "Una entrada de bitácora cuelga siempre de un proyecto. Creá o reactivá uno desde Ajustes y te la guardo ahí.",
+        };
+      }
+
+      const { data: entrada, error } = await crearEntradaDeBitacora(
+        supabase,
+        userId,
+        {
+          contenido: anotacion.contenido,
+          fecha: anotacion.fecha,
+          projectId: proyecto.id,
+        },
+      );
+
+      if (error || !entrada) {
+        return {
+          clase: "aviso",
+          titulo: "No pude anotarlo",
+          cuerpo: error?.message ?? "La entrada no se guardó.",
+        };
+      }
+
+      return {
+        clase: "texto",
+        destino: "bitacora",
+        titulo: `Anoté en la bitácora del ${formatDate(entrada.fecha)}`,
+        cuerpo: [
+          // Primero el texto guardado y entre comillas: es lo único que
+          // no se puede verificar de memoria, y va literal para que se
+          // note al toque si el recepcionista recortó de más.
+          `“${entrada.contenido}”`,
+          "",
+          anotacion.fechaExplicita
+            ? `Fecha: ${formatDate(entrada.fecha)}, por el “${anotacion.etiquetaFecha}” de tu frase.`
+            : `Fecha: ${formatDate(entrada.fecha)} (hoy). No dijiste ninguna.`,
+          porNombre
+            ? `Proyecto: ${proyecto.nombre}, porque lo nombraste.`
+            : `Proyecto: ${proyecto.nombre}. Es donde van las entradas cuando no decís cuál; si iba a otro, cambialo desde Bitácora.`,
+          "Lo guardé tal cual lo escribiste, sin reformular nada.",
+          "Si no era esto, archivalo desde Bitácora. Acá borrar es archivar, así que no se pierde.",
+        ].join("\n"),
       };
     }
 

@@ -124,6 +124,45 @@ import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
  * final. Si tocás esto, **volvé a medir las cuatro ambiguas** aunque lo
  * que hayas agregado no tenga nada que ver con ellas.
  *
+ * **`bitacora` se agregó con un bullet, dos líneas de frontera y tres
+ * palabras en la instrucción del argumento.** Es el par que le faltaba a
+ * `buscador`: hasta que existió, "anotalo en la bitácora" caía ahí, o sea
+ * que a un pedido de ESCRIBIR se le contestaba una búsqueda. La frontera
+ * es contra los dos vecinos y por eso son dos líneas y no una: contra
+ * `buscador` porque comparten la palabra "bitácora" y la tabla (una la
+ * escribe, la otra la lee) y contra `movimientos` porque "hoy pagué el
+ * hosting" también es algo que pasó hoy —pero es plata, y va al
+ * formulario—. Las tres palabras del argumento no son cosméticas: de ese
+ * campo sale **el texto que se guarda literal**, así que si el
+ * recepcionista lo recorta o lo reescribe, se rompe justamente lo que
+ * habilita a esa rama a escribir sin bandeja.
+ *
+ * **Y las dos líneas de "copiá ENTERA" se pagaron midiendo, no por
+ * prolijidad.** Con el bullet y la frontera solos, la frase real de Beno
+ * —"hoy el cliente x me dijo y cosa sobre Gentius, quiero que lo anotes
+ * en la bitácora y que…"— devolvía como argumento de bitácora
+ * **"cosa sobre Gentius"**: no reformulado, pero recortado a un tercio.
+ * En cualquier otro destino eso es un argumento pobre; en este es **la
+ * entrada de bitácora de Beno con las tres cuartas partes borradas**, y
+ * borradas en silencio. Con las dos líneas volvió entera. El "NO
+ * reformules" genérico no alcanzaba porque el modelo no estaba
+ * reformulando: estaba resumiendo, que es otro verbo.
+ *
+ * Ese arreglo tuvo un costo medido y se eligió pagarlo: en la misma
+ * frase, el argumento de `lecciones_tema` pasó de "cosa sobre Gentius" a
+ * **"eso"** —que es, literalmente, lo que Beno escribió ahí—, y con eso
+ * `resolverProyecto` no encuentra nada y esa acción termina preguntando a
+ * qué proyecto va. Se prefirió así: una pregunta se contesta con un
+ * click, y una anotación recortada solo se arregla volviéndola a tipear.
+ *
+ * Medido el 2026-08-10, antes y después del agregado, con las mismas
+ * frases: las seis simples siguen dando una sola acción y el mismo
+ * destino, y las cuatro ambiguas siguen en 0.3 las cuatro. El bloque de
+ * confianza quedó donde estaba —último—, por lo que dice el párrafo de
+ * arriba, y las líneas nuevas fueron todas **arriba** de él: dos en la
+ * lista de especialistas, dos en la frontera con `buscador` y dos pegadas
+ * a la instrucción del argumento, que es de lo que hablan.
+ *
  * Un dato que salió de esa medición y del que depende el rango temporal:
  * para "consultas" el modelo ya devuelve el período dentro del argumento
  * ("mis balances según estos últimos 6 meses"), sin que haya que
@@ -145,6 +184,9 @@ Los especialistas:
 - "buscador": buscar algo que ya está escrito, lecciones o bitácora. Ej:
   "tenía algo sobre backlogs", "qué había anotado de clientes", "qué
   anotaciones tengo sobre pricing", "qué apuntes tengo de contratos".
+- "bitacora": ANOTAR en la bitácora algo que le pasó o que hizo. Ej:
+  "anotá que hoy peleé con el deploy toda la tarde", "poné en la bitácora
+  que el cliente pidió otra ronda de cambios".
 - "roadmap": qué le toca del plan de estudio que YA está armado. Ej: "qué
   me toca hoy", "qué sesión sigue", "cómo voy con el track de PM".
 - "estudio": que le SUGIERAS qué estudiar mirando lo que viene haciendo.
@@ -170,6 +212,9 @@ Si Beno pregunta por algo que ESCRIBIÓ (anotaciones, apuntes, notas,
 bitácora, lecciones), es "buscador" aunque el tema sea de plata:
 "presupuestos", "facturación" o "costos" son temas sobre los que se
 escribe. "consultas" es solo cuando pide NÚMEROS de movimientos cargados.
+"bitacora" es al revés que "buscador": ahí te pide que ESCRIBAS algo que
+le pasó, no que busques lo que ya escribió. Y si lo que cuenta es plata
+que entró o salió, es "movimientos" y no "bitacora".
 
 "roadmap" y "estudio" se parecen y no son lo mismo. "roadmap" LEE el plan
 que ya existe: la sesión de hoy, la que sigue, cuánto avanzó un track.
@@ -191,8 +236,11 @@ VERBO, no el tema, y la palabra "lecciones" no decide nada:
 
 En "argumento" poné el dato concreto sobre el que trabaja el especialista:
 el nombre del proyecto para "retro", el tema para "lecciones_tema", lo que
-busca para "buscador". Si el especialista no necesita ninguno, poné null.
+busca para "buscador", lo que hay que anotar para "bitacora". Si el
+especialista no necesita ninguno, poné null.
 NO reformules ni traduzcas el argumento: copialo como lo escribió Beno.
+Para "bitacora" copiá ENTERA la parte de la frase que cuenta lo que pasó,
+desde donde empieza y sin sacarle palabras del medio.
 
 Casi todas las frases piden UNA sola cosa, y entonces la lista lleva UN
 solo elemento. Poné más de uno SOLO si la frase pide cosas distintas y lo
