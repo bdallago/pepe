@@ -27,6 +27,8 @@ Cada tarea se verifica así:
 
 ⚠ Los scripts `.mts` y no `.ts`: el `package.json` no declara módulos ES, así que `tsx` trata los `.ts` como CommonJS y ahí no hay `await` de nivel superior. Ya pasó con el MCP.
 
+⚠ **Los scripts se corren con `npx tsx --conditions=react-server`.** Casi todo lo que hay bajo `src/lib/` importa `server-only`, que fuera de Next tira *"This module cannot be imported from a Client Component module"*. Next resuelve la export condition `react-server` solo; `tsx` a secas no. Sin ese flag, cualquier script que importe un módulo de dominio falla antes de correr una línea. (Encontrado ejecutando la Task 2.)
+
 ---
 
 ## Estructura de archivos
