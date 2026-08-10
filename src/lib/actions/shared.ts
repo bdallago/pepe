@@ -1,6 +1,10 @@
 import "server-only";
 
-import { createClient, getUser } from "@/lib/supabase/server";
+import {
+  createClient,
+  getUser,
+  type SupabaseClient,
+} from "@/lib/supabase/server";
 
 /** Resultado uniforme de las Server Actions, para manejarlo en la UI. */
 export type ActionResult<T = undefined> =
@@ -56,4 +60,40 @@ export function slugify(nombre: string): string {
     .replace(/^-+|-+$/g, "");
 
   return base || "proyecto";
+}
+
+/**
+ * Busca un slug libre agregando -2, -3, … si hace falta.
+ *
+ * Vive acá y no en `projects.ts` porque lo necesitan dos caminos: el alta
+ * de proyecto desde Ajustes y la aceptación de un presupuesto, que crea el
+ * proyecto al vuelo. Un archivo `"use server"` no puede exportar esto —
+ * todo lo que exporta se vuelve una Server Action y el cliente de Supabase
+ * no viaja por el cable—, así que va en el módulo compartido.
+ */
+export async function slugDisponible(
+  supabase: SupabaseClient,
+  userId: string,
+  nombre: string,
+  excluirId?: string,
+): Promise<string> {
+  const base = slugify(nombre);
+
+  const query = supabase
+    .from("projects")
+    .select("slug")
+    .eq("user_id", userId)
+    .like("slug", `${base}%`);
+
+  const { data } = excluirId ? await query.neq("id", excluirId) : await query;
+  const tomados = new Set((data ?? []).map((row) => row.slug));
+
+  if (!tomados.has(base)) return base;
+
+  for (let i = 2; i < 500; i++) {
+    const candidato = `${base}-${i}`;
+    if (!tomados.has(candidato)) return candidato;
+  }
+
+  return `${base}-${Date.now()}`;
 }

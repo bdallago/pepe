@@ -10,37 +10,9 @@ import {
   mensajeDeError,
   ok,
   requireSession,
-  slugify,
+  slugDisponible,
   type ActionResult,
 } from "./shared";
-
-/** Busca un slug libre agregando -2, -3, … si hace falta. */
-async function slugDisponible(
-  supabase: Awaited<ReturnType<typeof requireSession>>["supabase"],
-  userId: string,
-  nombre: string,
-  excluirId?: string,
-): Promise<string> {
-  const base = slugify(nombre);
-
-  const query = supabase
-    .from("projects")
-    .select("slug")
-    .eq("user_id", userId)
-    .like("slug", `${base}%`);
-
-  const { data } = excluirId ? await query.neq("id", excluirId) : await query;
-  const tomados = new Set((data ?? []).map((row) => row.slug));
-
-  if (!tomados.has(base)) return base;
-
-  for (let i = 2; i < 500; i++) {
-    const candidato = `${base}-${i}`;
-    if (!tomados.has(candidato)) return candidato;
-  }
-
-  return `${base}-${Date.now()}`;
-}
 
 export async function crearProyecto(
   input: ProjectInput,
