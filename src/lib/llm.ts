@@ -56,7 +56,13 @@ export const MODELO_GRANDE = "llama-3.3-70b-versatile";
  *   afirmaciones discutibles: "Los clientes pequeños deben pagar una
  *   cuota de mantenimiento o te devoran", "Cobrar por cada versión mayor
  *   evita que el cliente exija cambios sin fin".
- * - `qwen/qwen3.6-27b` ni siquiera devolvió JSON válido (400 de Groq).
+ * - `qwen/qwen3.6-27b` no devolvió JSON válido **con ese prompt** (400 de
+ *   Groq). ⚠ Eso NO es una propiedad del modelo, aunque acá estuvo
+ *   escrito como si lo fuera: medido el 2026-08-10, qwen responde bien
+ *   con `response_format: json_object`. Importa porque es el **único
+ *   modelo de la cuenta que lee imágenes** —los otros tres contestan 400
+ *   apenas les mandás el array multimodal— y descartarlo por esta frase
+ *   dejaba sin salida el caso de las capturas.
  *
  * Los ejemplos en contraste dentro del prompt no alcanzaron para mover a
  * llama: el techo era el modelo. **No reemplaza a `MODELO_GRANDE`**, que
@@ -112,7 +118,10 @@ const TOKENS_POR_MINUTO: Readonly<Record<string, number>> = {
   // teniendo 8000 de techo real (leído de `x-ratelimit-limit-tokens` el
   // 2026-08-10, misma liga que el razonador). Un modelo que no está acá
   // no se rompe, se frena de más, y eso no se ve en ningún error.
-  "qwen/qwen3.6-27b": 8_000,
+  // 7300 y no 8000: el techo real medido es 8000, pero todas las filas de
+  // esta tabla van un poco por debajo del techo porque la reserva se hace
+  // estimando y se corrige recién con el `usage` de la respuesta.
+  "qwen/qwen3.6-27b": 7_300,
 };
 
 /** Para un modelo que no esté en la tabla, el techo más conservador. */

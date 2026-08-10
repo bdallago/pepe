@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -19,6 +19,7 @@ export type Database = {
           archivado_en: string | null
           created_at: string
           estado: Database["public"]["Enums"]["estado_artefacto"]
+          estado_manual: Database["public"]["Enums"]["estado_artefacto"] | null
           fecha_completado: string | null
           id: string
           nombre: string
@@ -33,6 +34,7 @@ export type Database = {
           archivado_en?: string | null
           created_at?: string
           estado?: Database["public"]["Enums"]["estado_artefacto"]
+          estado_manual?: Database["public"]["Enums"]["estado_artefacto"] | null
           fecha_completado?: string | null
           id?: string
           nombre: string
@@ -47,6 +49,7 @@ export type Database = {
           archivado_en?: string | null
           created_at?: string
           estado?: Database["public"]["Enums"]["estado_artefacto"]
+          estado_manual?: Database["public"]["Enums"]["estado_artefacto"] | null
           fecha_completado?: string | null
           id?: string
           nombre?: string
@@ -70,6 +73,7 @@ export type Database = {
       blocks: {
         Row: {
           archivado_en: string | null
+          artifact_id: string | null
           created_at: string
           fuentes: Json
           id: string
@@ -83,6 +87,7 @@ export type Database = {
         }
         Insert: {
           archivado_en?: string | null
+          artifact_id?: string | null
           created_at?: string
           fuentes?: Json
           id?: string
@@ -96,6 +101,7 @@ export type Database = {
         }
         Update: {
           archivado_en?: string | null
+          artifact_id?: string | null
           created_at?: string
           fuentes?: Json
           id?: string
@@ -108,6 +114,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "blocks_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "artifacts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "blocks_track_id_fkey"
             columns: ["track_id"]
@@ -427,6 +440,8 @@ export type Database = {
           archivado_en: string | null
           color: string
           created_at: string
+          fecha_fin: string | null
+          fecha_inicio: string | null
           id: string
           nombre: string
           peso_prorrateo: number
@@ -438,6 +453,8 @@ export type Database = {
           archivado_en?: string | null
           color?: string
           created_at?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
           id?: string
           nombre: string
           peso_prorrateo?: number
@@ -449,6 +466,8 @@ export type Database = {
           archivado_en?: string | null
           color?: string
           created_at?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string | null
           id?: string
           nombre?: string
           peso_prorrateo?: number
@@ -774,6 +793,14 @@ export type Database = {
           ultimo_cargo: string
         }[]
       }
+      estado_artefacto_derivado: {
+        Args: { p_artifact_id: string }
+        Returns: Database["public"]["Enums"]["estado_artefacto"]
+      }
+      fecha_artefacto_derivada: {
+        Args: { p_artifact_id: string }
+        Returns: string
+      }
       fx_rate_for_date: {
         Args: { p_fecha: string }
         Returns: {
@@ -791,6 +818,10 @@ export type Database = {
         }
       }
       nucleo_descripcion: { Args: { p_normalizada: string }; Returns: string }
+      refrescar_artefacto: {
+        Args: { p_artifact_id: string }
+        Returns: undefined
+      }
       sugerir_categoria_historico: {
         Args: { p_descripcion: string }
         Returns: {
