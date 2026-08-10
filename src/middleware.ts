@@ -70,7 +70,14 @@ export const config = {
      * Todas las rutas menos:
      * - archivos estáticos de Next y assets con extensión
      * - /api/cron/* , que se autentica con CRON_SECRET, no con sesión
+     * - /api/mcp , el servidor MCP: habla JSON-RPC con clientes que no
+     *   tienen cookies. Si el middleware lo tocara, un cliente sin sesión
+     *   se comería un 307 a `/login` en vez del 401 con
+     *   `WWW-Authenticate` que el protocolo necesita para arrancar el
+     *   flujo de OAuth — y el síntoma sería "no llego al servidor", que
+     *   manda a buscar el problema al lugar equivocado. La autenticación
+     *   la resuelve el propio handler.
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/cron|api/mcp|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
