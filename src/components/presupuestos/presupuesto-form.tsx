@@ -2,10 +2,27 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { GripVertical, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
+import {
+  GripVertical,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { useAppData } from "@/components/providers/app-data-provider";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +59,11 @@ import {
   type TipoCliente,
 } from "@/lib/presupuestos";
 import { quoteSchema, type QuoteInput, type QuoteItemInput } from "@/lib/schemas";
+import type { ActionResult } from "@/lib/actions/shared";
+// Solo el tipo: `lib/presupuestos/estimacion.ts` es `server-only` y el
+// `import type` se borra al compilar, así que nada de eso llega al
+// browser. Mismo criterio que `AjustesPresupuesto` en Ajustes.
+import type { EstimacionEsfuerzo } from "@/lib/presupuestos/estimacion";
 import type { Moneda } from "@/lib/supabase/database.types";
 
 /**
@@ -114,6 +136,21 @@ export function PresupuestoForm({
   const [guardando, empezarGuardado] = useTransition();
 
   const [valores, setValores] = useState<QuoteInput>(inicial);
+
+  /**
+   * La estimación, y nada más que eso.
+   *
+   * `estimando` bloquea el botón: la llamada es el razonador con
+   * `maxTokens 4500` y, como no entra en la ventana de un minuto del
+   * limitador, puede tardar minutos (ver el comentario de `maxTokens` en
+   * `lib/presupuestos/estimacion.ts`). Dos clicks serían dos llamadas
+   * carísimas y la segunda pisaría a la primera.
+   */
+  const [estimando, setEstimando] = useState(false);
+  /** Lo que la corrida quiere avisar: recorte del pedido, citas flojas. */
+  const [avisoEstimacion, setAvisoEstimacion] = useState<string | null>(null);
+  /** Pisar lo cargado se pregunta antes; acá espera el "sí". */
+  const [confirmandoPisar, setConfirmandoPisar] = useState(false);
 
   function set<K extends keyof QuoteInput>(clave: K, valor: QuoteInput[K]) {
     setValores((previo) => ({ ...previo, [clave]: valor }));
@@ -199,6 +236,117 @@ export function PresupuestoForm({
   const anclasSinVerificar = valores.items.filter(
     (item) => item.ancla !== null && !item.ancla_verificada,
   ).length;
+
+  // ── La estimación con el modelo ─────────────────────────────────────
+
+  /**
+   * Lo que se pisaría si la estimación entra: ítems, supuestos, preguntas
+   * y el alcance. Se pregunta **antes** de llamar y no después: el
+   * arrepentimiento llega cuando ya no hay a qué volver, y encima la
+   * llamada tarda minutos.
+   */
+  const hayCargado =
+    valores.items.length > 0 ||
+    valores.supuestos.length > 0 ||
+    valores.preguntas.length > 0 ||
+    valores.resumen_alcance.trim().length > 0;
+
+  const pedido = valores.pedido_texto.trim();
+
+  function pedirEstimacion() {
+    if (pedido.length < 10) {
+      toast.error("Pegá el pedido del cliente para poder estimar.");
+      return;
+    }
+
+    if (hayCargado) {
+      setConfirmandoPisar(true);
+      return;
+    }
+
+    void estimar();
+  }
+
+  /**
+   * Llama a `/api/presupuestos/estimar` y **precarga** el formulario.
+   *
+   * Regla 7: si el modelo falla, si no hay `GROQ_API_KEY` (el handler
+   * contesta 503) o si la respuesta no valida, se avisa con un toast y el
+   * formulario queda **exactamente como estaba**. Cargar el presupuesto a
+   * mano no depende de esto en ningún momento.
+   */
+  async function estimar() {
+    setEstimando(true);
+    setAvisoEstimacion(null);
+
+    try {
+      const respuesta = await fetch("/api/presupuestos/estimar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pedidoTexto: pedido,
+          tipoCliente: valores.cliente_tipo,
+        }),
+      });
+
+      const resultado: ActionResult<EstimacionEsfuerzo> =
+        await respuesta.json();
+
+      if (!resultado.ok) {
+        toast.error(resultado.error);
+        return;
+      }
+
+      const estimacion = resultado.data;
+
+      setValores((previo) => ({
+        ...previo,
+        resumen_alcance: estimacion.resumen_alcance,
+        // `origen: "modelo"` es la marca de procedencia, igual que las del
+        // formulario de movimientos: se apaga sola en `tocarItem()` apenas
+        // Beno edita el ítem, porque a partir de ahí el valor es suyo.
+        items: estimacion.entregables.map((entregable) => ({
+          titulo: entregable.titulo,
+          detalle: entregable.detalle,
+          horas: entregable.horas,
+          origen: "modelo" as const,
+          ancla: entregable.ancla,
+          ancla_verificada: entregable.ancla_verificada,
+          confianza: entregable.confianza,
+        })),
+        supuestos: estimacion.supuestos,
+        preguntas: estimacion.preguntas,
+        modelo: estimacion.modelo,
+        // El total vuelve a salir de la cuenta: los ítems son otros, así
+        // que un total puesto a mano antes de estimar ya no dice nada.
+        total_editado: false,
+      }));
+
+      // Lo que la corrida quiere que se sepa, en el orden en que importa.
+      const avisos = [
+        estimacion.pedido_recortado
+          ? `El pedido entró recortado a ${estimacion.pedido_chars} caracteres: lo que quedó afuera no se estimó.`
+          : null,
+        estimacion.anclas_sin_verificar > 0
+          ? `${estimacion.anclas_sin_verificar} de ${estimacion.entregables.length} citas no aparecen en el pedido. Están marcadas abajo.`
+          : null,
+      ].filter((linea): linea is string => linea !== null);
+
+      setAvisoEstimacion(avisos.length > 0 ? avisos.join(" ") : null);
+
+      toast.success(
+        estimacion.entregables.length === 0
+          ? "El pedido no alcanza para partirlo en entregables. Mirá las preguntas."
+          : `${estimacion.entregables.length} entregables, ${estimacion.horas_totales} horas. Revisalos.`,
+      );
+    } catch {
+      // Un fetch que no vuelve —red caída, timeout del navegador— es el
+      // mismo caso que el 503: se avisa y se sigue a mano.
+      toast.error("No pude estimar. Podés cargar los entregables a mano.");
+    } finally {
+      setEstimando(false);
+    }
+  }
 
   // ── Guardado ────────────────────────────────────────────────────────
 
@@ -429,6 +577,54 @@ export function PresupuestoForm({
         </CardContent>
       </Card>
 
+      {/* ── El pedido del cliente, y el botón que lo estima ─────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">El pedido del cliente</CardTitle>
+          <CardDescription>
+            No sale en el PDF. Queda guardado porque es contra este texto que
+            se verifican las citas de cada entregable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            id="q-pedido"
+            aria-label="El pedido del cliente"
+            rows={6}
+            value={valores.pedido_texto}
+            onChange={(e) => set("pedido_texto", e.target.value)}
+            placeholder="Pegá acá lo que te escribió, o contalo con tus palabras."
+          />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={pedirEstimacion}
+              disabled={estimando || pedido.length < 10}
+            >
+              {estimando ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="size-4" aria-hidden="true" />
+              )}
+              {estimando ? "Pensando…" : "Estimar los entregables"}
+            </Button>
+            <p className="text-muted-foreground text-xs">
+              {estimando
+                ? "Puede tardar un par de minutos: es el modelo que razona y espera su turno en el limitador. No cierres la pantalla."
+                : "Propone entregables con horas, supuestos y preguntas. No guarda nada: queda todo editable acá."}
+            </p>
+          </div>
+
+          {avisoEstimacion ? (
+            <p className="rounded-md border border-[var(--mango)] p-3 text-xs text-[var(--mango)]">
+              {avisoEstimacion}
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
       {/* ── Entregables ─────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
@@ -602,21 +798,6 @@ export function PresupuestoForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="q-pedido">El pedido del cliente</Label>
-            <Textarea
-              id="q-pedido"
-              rows={5}
-              value={valores.pedido_texto}
-              onChange={(e) => set("pedido_texto", e.target.value)}
-              placeholder="Pegá acá lo que te escribió, o contalo con tus palabras."
-            />
-            <p className="text-muted-foreground text-xs">
-              No sale en el PDF. Queda guardado porque es contra este texto que
-              se verifican las citas de cada entregable.
-            </p>
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="q-total">Total final</Label>
             <div className="flex flex-wrap items-center gap-2">
               <Input
@@ -678,6 +859,44 @@ export function PresupuestoForm({
           Volver a la lista
         </Button>
       </div>
+
+      {/*
+        Precarga, no reemplazo silencioso. Si ya había algo cargado, se dice
+        qué se pisa **antes** de gastar la llamada: la estimación tarda
+        minutos y arrepentirse después no devuelve los ítems.
+      */}
+      <AlertDialog open={confirmandoPisar} onOpenChange={setConfirmandoPisar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Esto pisa lo que ya cargaste</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  La estimación reemplaza el alcance, los entregables, los
+                  supuestos y las preguntas por lo que devuelva el modelo.
+                  Ahora mismo hay{" "}
+                  <span className="cifra">{valores.items.length}</span>{" "}
+                  entregables,{" "}
+                  <span className="cifra">{valores.supuestos.length}</span>{" "}
+                  supuestos y{" "}
+                  <span className="cifra">{valores.preguntas.length}</span>{" "}
+                  preguntas.
+                </p>
+                <p>
+                  El cliente, la fecha, la moneda y las condiciones no se
+                  tocan.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Dejalo como está</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void estimar()}>
+              Estimar igual
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

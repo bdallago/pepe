@@ -143,7 +143,16 @@ export const quoteItemSchema = z.object({
     .max(400, "Un ítem de más de 400 horas es el proyecto entero sin partir."),
   /** Se apaga a 'manual' apenas se toca un campo del ítem. */
   origen: z.enum(["modelo", "manual"]),
-  ancla: z.string().trim().max(200).nullable(),
+  /**
+   * 400 y no 200, que es lo que se le **pide** al modelo: el techo de acá
+   * tiene que ser el mismo `ANCLA_MAX_CHARS` que acepta
+   * `lib/presupuestos/estimacion.ts`, o una cita literal y correcta de 246
+   * caracteres —el caso medido el 2026-08-10, un punto que el cliente
+   * escribió en dos oraciones— pasaría la estimación y moriría recién al
+   * guardar, con el presupuesto entero ya en pantalla. Si movés uno, mové
+   * el otro.
+   */
+  ancla: z.string().trim().max(400).nullable(),
   ancla_verificada: z.boolean(),
   confianza: z.enum(["alta", "media", "baja"]).nullable(),
 });
