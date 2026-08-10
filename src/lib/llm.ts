@@ -105,6 +105,14 @@ const TOKENS_POR_MINUTO: Readonly<Record<string, number>> = {
   [MODELO_CHICO]: 5_500,
   [MODELO_GRANDE]: 11_000,
   [MODELO_RAZONADOR]: 7_300,
+  // El único modelo de la cuenta que lee imágenes. Todavía no lo usa
+  // ninguna feature —el diseño está en
+  // `docs/superpowers/specs/2026-08-10-adjuntos-design.md`— pero entra
+  // igual a la tabla: sin la fila cae al default conservador de 5500
+  // teniendo 8000 de techo real (leído de `x-ratelimit-limit-tokens` el
+  // 2026-08-10, misma liga que el razonador). Un modelo que no está acá
+  // no se rompe, se frena de más, y eso no se ve en ningún error.
+  "qwen/qwen3.6-27b": 8_000,
 };
 
 /** Para un modelo que no esté en la tabla, el techo más conservador. */
@@ -116,6 +124,30 @@ function techoDe(modelo: string): number {
 
 /** Caracteres por token en español. Conservador a propósito. */
 const CHARS_POR_TOKEN = 3;
+
+/**
+ * Cuántos tokens se le imputa a **cada imagen** en la estimación previa.
+ *
+ * Es un número fijo y no una función de los bytes, y esa es toda la
+ * gracia. Groq reescala la imagen del lado suyo antes de tokenizarla, así
+ * que el costo **no crece con el tamaño del archivo**: medido el
+ * 2026-08-10 con PNGs de distintas resoluciones, entre **780 y 1810
+ * `prompt_tokens`**, y una captura de celular de 1,4 MB salió más barata
+ * (782) que una imagen cuadrada de 12 KB (1299).
+ *
+ * Si en cambio el data URI se midiera por largo de string —que es lo que
+ * pasaría si la imagen entrara pegada dentro de `usuario`— un adjunto de
+ * 1 MB son ~1,4 millones de caracteres de base64, o sea **~460 000
+ * tokens estimados contra un techo de 8000**. El limitador dispararía su
+ * salida de emergencia `noEntraNunca` y esperaría la ventana entera
+ * **antes de cada imagen**: hasta un minuto de más, por nada. Por eso las
+ * imágenes van por un parámetro propio de `completarJSON` y no dentro del
+ * texto.
+ *
+ * Se toma el peor caso medido: reservar de más se corrige con el `usage`
+ * de la respuesta, reservar de menos se paga con un 429.
+ */
+export const TOKENS_POR_IMAGEN = 1_800;
 
 const VENTANA_MS = 60_000;
 const TIMEOUT_POR_DEFECTO_MS = 60_000;
@@ -266,9 +298,25 @@ async function esperarTurno(
   }
 }
 
-/** Cuántos tokens va a costar la llamada, antes de hacerla. */
-function estimarTokens(sistema: string, usuario: string, maxTokens: number) {
-  return Math.ceil((sistema.length + usuario.length) / CHARS_POR_TOKEN) + maxTokens;
+/**
+ * Cuántos tokens va a costar la llamada, antes de hacerla.
+ *
+ * El texto se estima por largo; las imágenes, por costo fijo (ver
+ * `TOKENS_POR_IMAGEN`). Sin imágenes el resultado es **idéntico** al de
+ * antes de que existiera este parámetro: `0 * lo que sea` es 0.
+ */
+function estimarTokens(
+  sistema: string,
+  usuario: string,
+  maxTokens: number,
+  cuantasImagenes = 0,
+  tokensPorImagen = TOKENS_POR_IMAGEN,
+) {
+  return (
+    Math.ceil((sistema.length + usuario.length) / CHARS_POR_TOKEN) +
+    maxTokens +
+    cuantasImagenes * tokensPorImagen
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -282,6 +330,36 @@ export interface OpcionesLLM<T> {
   sistema: string;
   /** El dato concreto sobre el que trabaja. */
   usuario: string;
+  /**
+   * Imágenes que acompañan a `usuario`, como data URI (`data:image/png;
+   * base64,…`) o URL.
+   *
+   * Van por acá y **no pegadas dentro de `usuario`** por dos razones
+   * distintas, y las dos importan:
+   *
+   * 1. **La estimación.** Un data URI mide megabytes de base64 y por
+   *    largo de string daría cientos de miles de tokens; acá cada imagen
+   *    cuesta `tokensPorImagen` y punto (ver `TOKENS_POR_IMAGEN`).
+   * 2. **La forma del pedido.** Con imágenes, `content` del mensaje de
+   *    usuario deja de ser un string y pasa a ser el array multimodal de
+   *    OpenAI. Armarlo acá adentro es lo que deja a los llamadores sin
+   *    enterarse.
+   *
+   * **Sin este campo no cambia absolutamente nada**: mismo body, mismo
+   * `content` string, misma estimación. Es lo que hace que los llamadores
+   * de hoy —ninguno manda imágenes— sigan comportándose igual.
+   *
+   * ⚠ Ojo con el modelo: medido el 2026-08-10, `MODELO_CHICO`,
+   * `MODELO_GRANDE` y `MODELO_RAZONADOR` contestan **HTTP 400
+   * (`messages[0].content must be a string`)** apenas les llega el array.
+   * El único de la cuenta que lee imágenes es `qwen/qwen3.6-27b`.
+   */
+  imagenes?: string[];
+  /**
+   * Cuánto reservar por imagen, si algún día se mide otra cosa o se
+   * cambia de modelo. Por defecto, `TOKENS_POR_IMAGEN`.
+   */
+  tokensPorImagen?: number;
   /** Se valida contra la respuesta antes de devolverla. */
   esquema: z.ZodType<T>;
   /** Bajo a propósito: acá se quiere consistencia, no creatividad. */
@@ -310,6 +388,11 @@ export interface RespuestaLLM<T> {
   };
 }
 
+/** Las dos piezas del `content` multimodal de OpenAI que usa Groq. */
+type ContenidoMultimodal =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 interface RespuestaGroq {
   choices?: { message?: { content?: string | null } }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
@@ -327,6 +410,8 @@ export async function completarJSON<T>({
   modelo = MODELO_CHICO,
   sistema,
   usuario,
+  imagenes,
+  tokensPorImagen = TOKENS_POR_IMAGEN,
   esquema,
   temperatura = 0.2,
   esfuerzo,
@@ -344,7 +429,27 @@ export async function completarJSON<T>({
   }
 
   const key = groqApiKey();
-  const estimado = estimarTokens(sistema, usuario, maxTokens);
+  const estimado = estimarTokens(
+    sistema,
+    usuario,
+    maxTokens,
+    imagenes?.length ?? 0,
+    tokensPorImagen,
+  );
+
+  // Sin imágenes, `content` sigue siendo el string de siempre: es la
+  // única forma que aceptan los tres modelos que usa la app hoy.
+  const contenidoUsuario: string | ContenidoMultimodal[] =
+    imagenes && imagenes.length > 0
+      ? [
+          { type: "text", text: usuario },
+          ...imagenes.map((url) => ({
+            type: "image_url" as const,
+            image_url: { url },
+          })),
+        ]
+      : usuario;
+
   let ultimoError: ErrorLLM | undefined;
 
   for (let intento = 0; intento <= reintentos; intento++) {
@@ -374,7 +479,7 @@ export async function completarJSON<T>({
               response_format: { type: "json_object" },
               messages: [
                 { role: "system", content: sistema },
-                { role: "user", content: usuario },
+                { role: "user", content: contenidoUsuario },
               ],
             }),
             signal: interna,
