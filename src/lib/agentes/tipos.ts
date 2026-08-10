@@ -14,12 +14,20 @@ import { z } from "zod";
  * INVENTA temas nuevos con el razonador. Son cosas opuestas — una lee el
  * plan que ya está armado (sin modelo), la otra propone lo que todavía no
  * existe (con el modelo más caro de la app)— así que van separadas.
+ *
+ * `tema_estudio` es el cuarto de esa familia y salió de medir cómo
+ * escribe Beno de verdad: "quiero aprender sobre tal cosa basado en tal
+ * proyecto" no lo cubría ninguno de los otros tres. `roadmap` LEE el
+ * plan, `estudio` PROPONE lo que Beno no pidió y `lecciones_tema` mira
+ * para atrás, a lo que ya vivió. Acá el tema lo trae él y lo que pide es
+ * que se lo AGREGUEN al plan.
  */
 export const DESTINOS = [
   "consultas",
   "buscador",
   "roadmap",
   "estudio",
+  "tema_estudio",
   "retro",
   "lecciones_tema",
   "suscripciones",

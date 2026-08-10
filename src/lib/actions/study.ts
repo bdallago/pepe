@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { todayISO } from "@/lib/dates";
+import { crearSesionAlFinalDelTrack } from "@/lib/sesiones";
 import type {
   Artifact,
   StudySession,
@@ -15,7 +16,6 @@ import {
   mensajeDeError,
   ok,
   requireSession,
-  slugify,
   type ActionResult,
 } from "./shared";
 
@@ -200,7 +200,10 @@ export async function actualizarTrack(
  *
  * La sesión nace al final del track y sin bloque: no es parte del temario
  * que vino del importador, es algo que se agregó después. Meterla en un
- * bloque existente mentiría sobre de dónde salió.
+ * bloque existente mentiría sobre de dónde salió. Esa regla vive en
+ * `lib/sesiones.ts` porque el agente que agrega un tema al plan escribe
+ * la misma fila; acá quedó la parte que es de una action y de nadie más:
+ * validar la entrada, resolver la sesión y revalidar.
  */
 export async function crearSesionDesdeSugerencia(
   trackId: string,
@@ -223,35 +226,17 @@ export async function crearSesionDesdeSugerencia(
 
   const { supabase, userId } = await requireSession();
 
-  // El orden va después de la última del track, archivadas incluidas: si
-  // se contaran solo las visibles, desarchivar una podría dejar dos
-  // sesiones con el mismo número.
-  const { data: ultima } = await supabase
-    .from("sessions")
-    .select("orden")
-    .eq("track_id", parsedTrack.data)
-    .order("orden", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { data, error } = await supabase
-    .from("sessions")
-    .insert({
-      user_id: userId,
-      track_id: parsedTrack.data,
-      // El slug es único por usuario y acá no viene de ningún export, así
-      // que se genera. El sufijo aleatorio evita chocar con una sesión
-      // vieja de título parecido.
-      slug: `sugerida-${slugify(parsed.data.titulo).slice(0, 60)}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`,
+  const { data, error } = await crearSesionAlFinalDelTrack(
+    supabase,
+    userId,
+    parsedTrack.data,
+    {
       titulo: parsed.data.titulo,
       consigna: parsed.data.consigna,
-      teoria_texto: parsed.data.teoriaTexto ?? null,
-      orden: (ultima?.orden ?? 0) + 1,
-    })
-    .select()
-    .single();
+      teoriaTexto: parsed.data.teoriaTexto,
+      prefijoSlug: "sugerida",
+    },
+  );
 
   if (error) return fail(mensajeDeError(error));
 

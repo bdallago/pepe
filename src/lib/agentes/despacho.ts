@@ -1,6 +1,6 @@
 import "server-only";
 
-import { resolverProyecto } from "@/lib/agentes/resolver";
+import { resolverProyecto, resolverTrack } from "@/lib/agentes/resolver";
 import { computeToday, trackProgress } from "@/lib/aprendizaje";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
 import { addDays, compareISO, formatDate, todayISO } from "@/lib/dates";
@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
 import { proximoVencimiento } from "@/lib/recurrences";
 import { generarRetro } from "@/lib/retro";
+import { crearSesionAlFinalDelTrack } from "@/lib/sesiones";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
 import type { ItemDeHoy } from "@/lib/aprendizaje";
@@ -177,6 +178,117 @@ export async function despachar(
           // que este cambio vino a arreglar.
           ancla: s.ancla,
         })),
+      };
+    }
+
+    case "tema_estudio": {
+      /*
+        Esta rama ESCRIBE en la base y no pasa por la bandeja, y eso no
+        contradice la regla 6. Lo que la regla 6 protege es que no se
+        guarde **producción de un modelo** sin que Beno la confirme: una
+        lección redactada por el razonador, el texto de una retro, una
+        propuesta de zombie. Acá lo único que se guarda es el tema que
+        Beno escribió, tal como lo escribió — el modelo no lo redacta, y
+        el recepcionista tiene prohibido reformularlo; solo recorta de la
+        frase el tema y a qué track va. Es el mismo razonamiento del
+        agente de bitácora: cuando el texto es de Beno, hacerle confirmar
+        lo que acaba de tipear es fricción sin nada del otro lado.
+
+        Pero eso obliga a dos cuidados, y son los dos de abajo:
+
+        1. Si no queda claro a qué track va, se PREGUNTA. Adivinar mal no
+           se nota —la sesión queda creada igual— y le ensucia el plan.
+        2. La respuesta dice exactamente qué se creó y dónde, para que
+           pueda deshacerlo. Como acá borrar es archivar (regla 4), eso
+           se hace desde el Roadmap y no se pierde nada.
+      */
+      const [tema, slugElegido] = partirArgumento(decision.argumento);
+
+      if (!tema) {
+        return {
+          clase: "aviso",
+          titulo: "¿Sobre qué querés aprender?",
+          cuerpo:
+            "Decime el tema y te lo agrego como sesión al final de un track.",
+        };
+      }
+
+      // Solo tracks vivos: uno archivado no se ve en ninguna pantalla y
+      // uno pausado (`activo = false`) no reparte días, así que la sesión
+      // nueva no aparecería nunca por sí sola.
+      const { data: tracks } = await supabase
+        .from("tracks")
+        .select("*")
+        .is("archivado_en", null)
+        .eq("activo", true)
+        .order("orden");
+
+      const activos = tracks ?? [];
+
+      if (activos.length === 0) {
+        return {
+          clase: "aviso",
+          titulo: "No tenés ningún track activo",
+          cuerpo:
+            "Creá o reactivá un track desde el Roadmap y te agrego el tema ahí.",
+        };
+      }
+
+      // Si vino de la pregunta de abajo, el slug manda y no se adivina de
+      // nuevo. Si no, se busca el track dentro del tema que escribió Beno.
+      const encontrado = resolverTrack(slugElegido ?? tema, activos);
+
+      // Con un solo track activo no hay nada que preguntar: no existe el
+      // track equivocado. La respuesta igual dice cuál fue.
+      const track =
+        encontrado !== "ambiguo" && encontrado
+          ? encontrado
+          : activos.length === 1
+            ? activos[0]!
+            : null;
+
+      if (!track) {
+        return {
+          clase: "pregunta",
+          titulo: `¿A qué track agrego “${tema}”?`,
+          opciones: activos.map((t) => ({
+            etiqueta: t.nombre,
+            destino: "tema_estudio" as const,
+            argumento: `${tema} — ${t.slug}`,
+          })),
+        };
+      }
+
+      // Título y nada más. `consigna` y `teoria_texto` quedan vacías a
+      // propósito: son las dos cosas que un modelo podría escribir, y
+      // esta rama justamente se saltea la bandeja porque no lo hace.
+      const { data: sesion, error } = await crearSesionAlFinalDelTrack(
+        supabase,
+        userId,
+        track.id,
+        { titulo: tema, prefijoSlug: "tema" },
+      );
+
+      if (error || !sesion) {
+        return {
+          clase: "aviso",
+          titulo: "No pude agregar el tema",
+          cuerpo: error?.message ?? "La sesión no se creó.",
+        };
+      }
+
+      return {
+        clase: "texto",
+        destino: "tema_estudio",
+        titulo: `Agregué “${sesion.titulo}” a ${track.nombre}`,
+        cuerpo: [
+          `Quedó como última sesión del track ${track.nombre}, sin bloque: en el Roadmap la vas a ver en el grupo “Agregadas”.`,
+          // Regla 5: los dos pasos son distintos y arrancan los dos sin
+          // marcar. Decirlo evita que parezca que quedó "empezada".
+          "Nace con la teoría y la aplicación sin marcar; se marcan por separado.",
+          "El título es el que escribiste, sin consigna ni teoría cargadas: eso lo ponés vos desde el Roadmap.",
+          "Si no era esto, archivala desde el Roadmap. Acá borrar es archivar, así que no se pierde.",
+        ].join("\n"),
       };
     }
 
@@ -613,16 +725,17 @@ async function buscarEnBitacora(supabase: SupabaseClient, consulta: string) {
 }
 
 /**
- * Parte el argumento de `lecciones_tema` en tema y slug de proyecto.
+ * Parte un argumento con forma `"tema — slug"` en sus dos partes.
  *
- * La rama arma las opciones de su propia pregunta como `"tema — slug"`,
- * así que este es el único lugar que conoce ese formato: entra por acá y
- * sale partido. Si nunca hubo pregunta de por medio, el slug es `null` y
- * el tema es la frase entera.
+ * Lo usan las dos ramas que preguntan a qué entidad va un tema —
+ * `lecciones_tema` (a qué proyecto) y `tema_estudio` (a qué track)—:
+ * cada una arma las opciones de su propia pregunta con ese formato, y
+ * este es el único lugar que lo conoce. Si nunca hubo pregunta de por
+ * medio, el slug es `null` y el tema es la frase entera.
  *
- * Se parte por el guion largo con espacios, que es el separador que arma
- * la propia rama. Un tema escrito por Beno que lo contenga se partiría
- * mal, pero para eso tendría que tipear " — " a mano.
+ * Se parte por el guion largo con espacios, que es el separador que arman
+ * las ramas. Un tema escrito por Beno que lo contenga se partiría mal,
+ * pero para eso tendría que tipear " — " a mano.
  */
 function partirArgumento(argumento: string | null): [string, string | null] {
   const texto = argumento?.trim() ?? "";

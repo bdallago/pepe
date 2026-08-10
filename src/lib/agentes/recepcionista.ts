@@ -57,6 +57,34 @@ import { decisionSchema, type Decision } from "@/lib/agentes/tipos";
  * "pricing" suelto de 0.3 a 0.8 — justo la ambigüedad que la regla
  * mecánica está para bajar. Nombrar una palabra en el prompt la vuelve
  * confiable en todos lados, no solo en el caso que estabas arreglando.
+ *
+ * **`tema_estudio` no se separa por descripción, se separa por verbo.**
+ * Medido el 2026-08-09 con las frases que Beno escribe de verdad, antes
+ * de tocar nada: "quiero aprender sobre tal cosa basado en tal proyecto"
+ * y "necesito aprender tal cosa aplicado a tal proyecto" se iban a
+ * `estudio` con 0.8, y "quiero que agreguemos lecciones sobre tal cosa" a
+ * `lecciones_tema` con 1. Las tres son pedidos de agregar un tema al
+ * plan.
+ *
+ * Lo que las arregló fue una **tabla de verbos**, no la explicación en
+ * prosa de la frontera: con la prosa sola ("mira para adelante / mira
+ * para atrás") las dos primeras seguían en `estudio`. Y de la tabla, la
+ * línea que desempata el caso difícil es la que pone los dos verbos en
+ * contraste — AGREGAR lecciones es querer aprender, SACAR lecciones es
+ * mirar lo ya vivido—: con la tabla pero sin ese contraste, "agreguemos
+ * lecciones" oscilaba entre los dos destinos entre corridas. Dos cosas
+ * más que hicieron falta y no se ven venir: decirle a `estudio` que ahí
+ * **el tema no lo dice Beno**, y desactivar a mano el "basado en /
+ * aplicado a" —que se parece demasiado al "mirando lo que viene
+ * haciendo" de `estudio`— que por sí solo alcanzaba para robarle la
+ * frase.
+ *
+ * Y la trampa de arriba volvió a saltar, ahora por volumen: la primera
+ * versión de este bloque era el doble de larga y en prosa, y sin nombrar
+ * ninguna de las cuatro anclas subió "Proder" suelto de 0.3 a 0.8. No
+ * hace falta nombrar la palabra: alcanza con diluir la regla mecánica.
+ * Si tocás este prompt, **volvé a medir las cuatro ambiguas**, aunque lo
+ * que hayas agregado no tenga nada que ver con ellas.
  */
 
 const SISTEMA = `Sos el recepcionista de Pepe, la app personal de Beno.
@@ -73,10 +101,14 @@ Los especialistas:
   anotaciones tengo sobre pricing", "qué apuntes tengo de contratos".
 - "roadmap": qué le toca del plan de estudio que YA está armado. Ej: "qué
   me toca hoy", "qué sesión sigue", "cómo voy con el track de PM".
-- "estudio": que le SUGIERAS qué estudiar mirando lo que viene haciendo,
-  temas que todavía no están en el plan. Ej: "qué lecciones sugerís hoy",
+- "estudio": que le SUGIERAS qué estudiar mirando lo que viene haciendo.
+  El tema NO lo dice él, lo elegís vos. Ej: "qué lecciones sugerís hoy",
   "según toda la actividad que vengo haciendo, qué sugerís hoy",
   "sugerime qué estudiar".
+- "tema_estudio": AGREGAR al plan un tema que él ya nombró, para
+  estudiarlo. Ej: "quiero aprender sobre eso", "quiero aprender sobre eso
+  basado en tal proyecto", "necesito aprender eso aplicado a un
+  proyecto", "quiero que agreguemos lecciones sobre eso".
 - "retro": cerrar un proyecto y hacer su retrospectiva. Ej: "cerrá Proder",
   "hacé la retro de Gentius".
 - "lecciones_tema": sacar lecciones sobre un tema. Ej: "sacá lecciones de
@@ -99,8 +131,17 @@ que ya existe: la sesión de hoy, la que sigue, cuánto avanzó un track.
 ningún track ("sugerís", "recomendás", "proponés"). Si no pide nada
 nuevo, es "roadmap".
 
-"lecciones_tema" viene siempre con un tema del que sacar lecciones. Si
-pide sugerencias sin nombrar ningún tema, es "estudio".
+Si Beno NOMBRA el tema, no es "estudio", y que además diga "basado en" o
+"aplicado a" un proyecto no lo cambia. Entre los otros tres decide el
+VERBO, no el tema, y la palabra "lecciones" no decide nada:
+
+- "quiero aprender", "necesito aprender", "quiero estudiar" ->
+  "tema_estudio".
+- AGREGAR lecciones es querer aprender: "agregá lecciones sobre X",
+  "agreguemos lecciones sobre X", "sumá X al plan" -> "tema_estudio".
+- SACAR lecciones es mirar lo que ya vivió: "sacá lecciones sobre X",
+  "qué aprendí de X" -> "lecciones_tema".
+- "qué me toca", "qué sigue", "cómo voy" -> "roadmap".
 
 En "argumento" poné el dato concreto sobre el que trabaja el especialista:
 el nombre del proyecto para "retro", el tema para "lecciones_tema", lo que

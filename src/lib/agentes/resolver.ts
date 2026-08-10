@@ -1,6 +1,17 @@
 import "server-only";
 
-import type { Project } from "@/lib/supabase/database.types";
+import type { Project, Track } from "@/lib/supabase/database.types";
+
+/**
+ * Lo mínimo que necesita una fila para poder resolverse por texto: cómo
+ * se llama y cómo se la nombra en una URL. Proyectos y tracks lo cumplen
+ * los dos, y por eso comparten el criterio de abajo en vez de tener cada
+ * uno el suyo.
+ */
+interface Nombrado {
+  nombre: string;
+  slug: string;
+}
 
 /**
  * Encuentra el proyecto que menciona una frase.
@@ -17,19 +28,43 @@ export function resolverProyecto(
   argumento: string | null,
   proyectos: Project[],
 ): Project | null | "ambiguo" {
+  return resolverNombrado(argumento, proyectos);
+}
+
+/**
+ * Lo mismo, para los tracks del plan de estudio.
+ *
+ * Es hermana de `resolverProyecto` y no una variante: el criterio de
+ * "exacto antes que parcial" es el mismo y tiene que quedar en un solo
+ * lugar. Lo que cambia es a qué se le pregunta, y lo que hace quien
+ * llama con el `null` — meter una sesión en el track equivocado ensucia
+ * el plan, así que ahí `null` y `"ambiguo"` terminan los dos en una
+ * pregunta.
+ */
+export function resolverTrack(
+  argumento: string | null,
+  tracks: Track[],
+): Track | null | "ambiguo" {
+  return resolverNombrado(argumento, tracks);
+}
+
+function resolverNombrado<T extends Nombrado>(
+  argumento: string | null,
+  filas: T[],
+): T | null | "ambiguo" {
   if (!argumento) return null;
 
   const aguja = normalizar(argumento);
   if (aguja.length === 0) return null;
 
-  const exactos = proyectos.filter(
-    (p) => normalizar(p.nombre) === aguja || normalizar(p.slug) === aguja,
+  const exactos = filas.filter(
+    (f) => normalizar(f.nombre) === aguja || normalizar(f.slug) === aguja,
   );
   if (exactos.length === 1) return exactos[0]!;
   if (exactos.length > 1) return "ambiguo";
 
-  const parciales = proyectos.filter(
-    (p) => normalizar(p.nombre).includes(aguja) || aguja.includes(normalizar(p.nombre)),
+  const parciales = filas.filter(
+    (f) => normalizar(f.nombre).includes(aguja) || aguja.includes(normalizar(f.nombre)),
   );
   if (parciales.length === 1) return parciales[0]!;
   if (parciales.length > 1) return "ambiguo";

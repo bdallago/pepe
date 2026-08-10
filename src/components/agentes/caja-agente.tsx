@@ -141,6 +141,7 @@ const ETIQUETA_DESTINO: Record<Destino, string> = {
   buscador: "Buscador",
   roadmap: "Roadmap",
   estudio: "Estudio",
+  tema_estudio: "Tema nuevo",
   retro: "Retro",
   lecciones_tema: "Lecciones",
   suscripciones: "Suscripciones",
