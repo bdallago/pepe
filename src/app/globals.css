@@ -238,3 +238,91 @@
     text-transform: uppercase;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Impresión
+
+   Todo el "PDF" de la app es esta hoja más Ctrl+P: no hay ninguna
+   dependencia de PDF en el proyecto, y no la hay a propósito. Con una
+   librería serían dos layouts que se van separando en silencio, y el
+   que se rompe es el que nadie mira: el que se manda al cliente. Acá el
+   PDF *es* la pantalla.
+
+   ⚠ EL FONDO VA BLANCO PURO, Y ESTÁ BIEN. NO LO "ARREGLES".
+
+   El sistema de diseño dice "fondo crema, nunca blanco puro; si aparece
+   #fff en una superficie, está mal", y esta es la única excepción
+   legítima del repo. En @media print la superficie deja de ser una
+   pantalla y pasa a ser papel: el crema #FFFDF5 se imprime como una
+   mancha beige que gasta tinta y se ve sucio. En pantalla el crema es
+   calidez; impreso es una hoja manchada.
+   ═══════════════════════════════════════════════════════════════ */
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+
+  /* El papel, no la pantalla. Ver la advertencia de arriba. */
+  html,
+  body {
+    background: #fff !important;
+    color: #14201a !important;
+  }
+
+  /* Los tokens se redefinen para el papel en vez de pisar cada regla:
+     así el mismo componente sirve en pantalla y acá, que es todo el
+     punto de no tener un segundo renderer. */
+  :root,
+  .dark {
+    --background: #fff;
+    --card: #fff;
+    --popover: #fff;
+    --foreground: #14201a;
+    --card-foreground: #14201a;
+    --muted: #fff;
+    --muted-foreground: #4a5654;
+    --accent: #fff;
+    --border: #c9cfc9;
+    --input: #c9cfc9;
+  }
+
+  /* Controles, navegación y avisos: nada de eso va al papel. */
+  .no-imprimir {
+    display: none !important;
+  }
+
+  /* Y lo que solo tiene sentido impreso. */
+  .solo-impresion {
+    display: revert !important;
+  }
+
+  /* La hoja ocupa el ancho del papel: los márgenes los pone @page, no
+     el padding de la tarjeta, o se suman los dos. */
+  .hoja {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Un entregable partido entre dos páginas es un entregable que el
+     cliente lee a medias. */
+  .evitar-corte {
+    break-inside: avoid;
+  }
+
+  /* Los links de la app no significan nada en papel; que no queden
+     subrayados en azul de navegador. */
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+}
+
+/* Fuera de impresión no se ve, y el bloque de arriba la enciende. */
+.solo-impresion {
+  display: none;
+}
