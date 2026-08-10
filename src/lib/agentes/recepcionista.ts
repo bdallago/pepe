@@ -163,6 +163,23 @@ import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
  * lista de especialistas, dos en la frontera con `buscador` y dos pegadas
  * a la instrucción del argumento, que es de lo que hablan.
  *
+ * **El agente de movimientos (ola 2) no necesitó tocar este prompt, y eso
+ * se midió antes de escribir una línea.** El riesgo era que el argumento
+ * volviera recortado —lo mismo que le pasó a `bitacora` con "cosa sobre
+ * Gentius"— pero acá el recorte cuesta más caro: sin el número no hay
+ * gasto que cargar. Medido el 2026-08-10 con las cinco frases telegráficas
+ * reales de Beno ("-20usd Claude Code 06/08", "+50000ARS Venta Proder",
+ * "-20 usd claude code 06/08", "-15000 hosting", "+200000 ARS venta"): las
+ * cinco fueron a `movimientos` con confianza 1 y **el argumento volvió
+ * idéntico a la frase, las cinco veces**. No hizo falta agregar nada, así
+ * que no se agregó — cada línea de más acá adentro es una chance de mover
+ * las cuatro ambiguas, que es la trampa que ya mordió tres veces.
+ *
+ * La red por si algún día eso cambia no está en el prompt sino en
+ * `despacho.ts` (`textoDelMovimiento`): si el argumento vuelve sin ningún
+ * dígito, gana la frase entera. Es un test sobre un string y no cuesta
+ * ninguna llamada.
+ *
  * Un dato que salió de esa medición y del que depende el rango temporal:
  * para "consultas" el modelo ya devuelve el período dentro del argumento
  * ("mis balances según estos últimos 6 meses"), sin que haya que

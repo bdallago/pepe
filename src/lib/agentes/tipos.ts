@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { Moneda, TipoMovimiento } from "@/lib/supabase/database.types";
+
 /**
  * Los destinos posibles del recepcionista.
  *
@@ -179,7 +181,97 @@ export type RespuestaSimple =
       titulo: string;
       opciones: { etiqueta: string; destino: Destino; argumento: string | null }[];
     }
+  | {
+      /**
+       * Falta un dato y **hay que escribirlo**, no elegirlo.
+       *
+       * Es una clase aparte y no una `pregunta` con botones, y la razón es
+       * que un monto no tiene opciones: los valores posibles son infinitos.
+       * `pregunta` sirve cuando la respuesta es una de un puñado de cosas
+       * que la app ya conoce (a qué proyecto, a qué track, a qué
+       * especialista); acá el valor lo trae Beno. Forzarlo dentro de
+       * `pregunta` habría dejado un botón "otra" que no puede hacer nada.
+       *
+       * Lo que Beno escribe se mete en el hueco de `plantilla` y vuelve
+       * como una frase telegráfica completa, así que la segunda vuelta la
+       * resuelve el regex **sin gastar otra llamada al modelo** y sin que
+       * él tenga que retipear lo que ya dijo. Eso es todo el punto: si
+       * completar un dato cuesta reescribir la frase entera, es más rápido
+       * abrir el formulario.
+       *
+       * Corta la cadena igual que una `pregunta` (ver `cadena.ts`): no se
+       * pueden contestar dos cosas a la vez en una caja de una línea.
+       */
+      clase: "completar";
+      destino: Destino;
+      titulo: string;
+      cuerpo: string;
+      /** Qué se espera, para el placeholder del campo. */
+      ejemplo: string;
+      /** Lo ya entendido, con `{}` donde va lo que falta. */
+      plantilla: string;
+      /** Atajos de un click. El valor reemplaza al `{}`. */
+      opciones?: { etiqueta: string; valor: string }[];
+    }
+  | {
+      /**
+       * Un movimiento entendido y listo para confirmar.
+       *
+       * **No escribe nada**: la caja lo muestra y abre el formulario
+       * precargado. Ese formulario es el panel de confirmación que pide la
+       * sección 6 del spec —hay alguien mirando en el momento en que se
+       * propone—, por eso esto no pasa por la bandeja, igual que el
+       * clasificador de `lib/clasificacion.ts`.
+       */
+      clase: "movimiento";
+      destino: Destino;
+      titulo: string;
+      /** Campo por campo, de dónde salió. Se muestra antes de abrir nada. */
+      cuerpo: string;
+      precarga: PrecargaMovimiento;
+    }
   | { clase: "aviso"; titulo: string; cuerpo: string };
+
+/**
+ * Un movimiento leído de una frase, listo para precargar el formulario.
+ *
+ * Vive en este módulo —y no en `agentes/movimientos.ts`, que es
+ * `server-only`— porque lo consumen los dos lados: el despacho lo arma y
+ * `movement-form.tsx` lo recibe.
+ *
+ * **No trae tasa de cambio, y es a propósito.** El par ARS/USD lo arma el
+ * formulario con la cotización de la fecha elegida, que es el único lugar
+ * donde se congela (regla 1). Mandar una tasa desde acá sería un segundo
+ * lugar donde se decide eso.
+ */
+export interface PrecargaMovimiento {
+  descripcion: string;
+  /** Positivo siempre: si es entrada o salida lo dice `tipo`. */
+  monto: number;
+  /** La que se escribió. El otro campo del formulario es el derivado. */
+  moneda: Moneda;
+  fecha: string;
+  tipo: TipoMovimiento;
+  categoryId: string | null;
+  /** `null` es compartido, igual que en `movements`. */
+  projectId: string | null;
+  /**
+   * De dónde salió cada campo, ya redactado.
+   *
+   * No es adorno: es un libro de cuentas y si el modelo lee "15 mil" donde
+   * eran 15 y el formulario se ve igual que siempre, se guarda sin mirar.
+   * Va como texto y no como un enum porque lo único que hace la pantalla
+   * con esto es mostrarlo.
+   */
+  procedencia: {
+    descripcion: string;
+    monto: string;
+    fecha: string;
+    tipo: string;
+    categoria: string | null;
+    proyecto: string;
+  };
+}
 
 /**
  * Lo que la caja termina mostrando: una respuesta sola, o la cadena de

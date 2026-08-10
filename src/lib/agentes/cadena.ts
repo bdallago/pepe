@@ -95,7 +95,9 @@ export async function ejecutarCadena(
     /*
       Una pregunta corta la cadena. No se pueden hacer tres preguntas a la
       vez en una caja de una línea: quedaría un montón de botones sin
-      saber cuál contesta qué.
+      saber cuál contesta qué. `completar` cuenta igual: es la otra forma
+      de preguntar —la que necesita que Beno escriba el dato en vez de
+      elegirlo entre opciones— y tiene el mismo problema si son dos.
 
       **Lo que quedó pendiente se descarta**, y se muestra. Cuando Beno
       aprieta una opción, la caja manda ese destino solo y el handler no
@@ -107,7 +109,7 @@ export async function ejecutarCadena(
       que todavía no dio. Así que se frena, se dice qué falta, y si lo
       quiere lo vuelve a pedir en una frase.
     */
-    if (respuesta.clase === "pregunta") {
+    if (respuesta.clase === "pregunta" || respuesta.clase === "completar") {
       pendientes = acciones.slice(indice + 1);
       break;
     }
@@ -170,7 +172,12 @@ async function ejecutarUna(
   }
 
   try {
-    return { respuesta: await despachar(supabase, userId, decision), fallo: false };
+    return {
+      // El fragmento va también como texto de trabajo: `movimientos` lo
+      // necesita porque el argumento recortado puede haber perdido el monto.
+      respuesta: await despachar(supabase, userId, decision, fragmento),
+      fallo: false,
+    };
   } catch (error: unknown) {
     console.error("[agentes] falló una acción de la cadena:", error);
     return {

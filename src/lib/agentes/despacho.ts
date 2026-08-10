@@ -1,6 +1,7 @@
 import "server-only";
 
 import { leerAnotacion } from "@/lib/agentes/bitacora";
+import { leerMovimiento } from "@/lib/agentes/movimientos";
 import { observarBalances } from "@/lib/agentes/observaciones";
 import {
   describirRango,
@@ -14,7 +15,8 @@ import {
   crearEntradaDeBitacora,
   proyectoPorDefectoDeBitacora,
 } from "@/lib/bitacora";
-import { compareISO, formatDate, todayISO } from "@/lib/dates";
+import { sugerirClasificacion } from "@/lib/clasificacion";
+import { addDays, compareISO, formatDate, formatDayMonth, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
 import { mensajeDeErrorLLM } from "@/lib/llm";
@@ -23,11 +25,18 @@ import { generarRetro } from "@/lib/retro";
 import { crearSesionAlFinalDelTrack } from "@/lib/sesiones";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
+import type { MovimientoLeido } from "@/lib/agentes/movimientos";
 import type { Observacion } from "@/lib/agentes/observaciones";
 import type { Balances } from "@/lib/balances";
+import type { Sugerencia } from "@/lib/clasificacion";
 import type { ItemDeHoy } from "@/lib/aprendizaje";
 import type { SupabaseClient } from "@/lib/supabase/server";
-import type { Recurrence, StudySession } from "@/lib/supabase/database.types";
+import type {
+  Moneda,
+  Recurrence,
+  StudySession,
+  TipoMovimiento,
+} from "@/lib/supabase/database.types";
 import type { Decision, RespuestaSimple } from "@/lib/agentes/tipos";
 
 /**
@@ -41,11 +50,17 @@ import type { Decision, RespuestaSimple } from "@/lib/agentes/tipos";
  * frase pedía varias cosas: encadenarlas es trabajo de `cadena.ts`. Por
  * eso el retorno es `RespuestaSimple` y no `RespuestaAgente` — de acá no
  * sale nunca una cadena.
+ *
+ * `frase` es el texto tal como llegó (o el fragmento que le toca a esta
+ * acción cuando vino en cadena). Lo usa **solo** `movimientos`, que es el
+ * único destino donde el recorte del recepcionista puede perder un dato
+ * que no se recupera: el monto.
  */
 export async function despachar(
   supabase: SupabaseClient,
   userId: string,
   decision: Decision,
+  frase: string,
 ): Promise<RespuestaSimple> {
   switch (decision.destino) {
     case "roadmap": {
@@ -403,13 +418,145 @@ export async function despachar(
       };
     }
 
-    case "movimientos":
-      return {
-        clase: "aviso",
-        titulo: "Todavía no puedo cargar gastos desde acá",
-        cuerpo:
-          "Entendí que querés anotar plata, pero ese agente todavía no está. Cargalo desde Movimientos.",
+    case "movimientos": {
+      /*
+        El único agente con lógica nueva de todo el roster, y el orden de
+        adentro es el que manda:
+
+        1. **Extracción** (`agentes/movimientos.ts`): monto, moneda,
+           descripción y fecha. Primero un regex sobre el estilo telegráfico
+           de Beno —que resuelve el caso común sin modelo, gratis y con Groq
+           caído— y el modelo solo si esa forma no matcheó.
+        2. **Si falta un dato necesario, se PREGUNTA.** Beno lo pidió con
+           todas las letras: "acá me olvido de la fecha, me la tiene que
+           preguntar, aplica también por si me olvido la cantidad de dinero,
+           el motivo y cualquier otro dato relevante para clasificar".
+        3. **Clasificación** con `lib/clasificacion.ts`, que ya existe y no
+           se toca: primero el histórico (SQL puro, contra índice) y el
+           modelo solo si no encontró nada. Regla 6.c, y no se negocia.
+        4. El formulario precargado, que es el panel de confirmación. Nada
+           se escribe acá.
+      */
+      const hoy = todayISO();
+      const texto = textoDelMovimiento(decision.argumento, frase);
+
+      if (!texto) {
+        return {
+          clase: "aviso",
+          titulo: "¿Qué querés anotar?",
+          cuerpo:
+            "Decime algo como “-20usd Claude Code 06/08” o “pagué 20 dólares de Claude Code”.",
+        };
+      }
+
+      const leido = await leerMovimiento(texto, hoy);
+
+      // Los datos necesarios son tres: monto, descripción y fecha. Se
+      // preguntan de a uno y en este orden —de lo más caro de equivocar a
+      // lo menos— y cada pregunta vuelve con lo ya entendido adentro, así
+      // que contestarla no cuesta retipear nada.
+      const faltante = preguntarPorLoQueFalta(leido, hoy);
+      if (faltante) return faltante;
+
+      // El TypeScript no lo sabe, pero `preguntarPorLoQueFalta` ya
+      // garantizó que estos tres están.
+      const monto = leido.monto!;
+      const descripcion = leido.descripcion!;
+      const fecha = leido.fecha!;
+
+      // Sin moneda dicha, pesos. Es la moneda del país y la que Beno usa
+      // en la mayoría de las cargas; la respuesta lo dice para que se vea.
+      const moneda: Moneda = leido.moneda ?? "ARS";
+
+      // Regla 6.c en una línea: histórico primero, modelo solo si no
+      // encontró nada. Nunca se reimplementa acá.
+      const sugerencia = await sugerirClasificacion(supabase, descripcion);
+
+      /*
+        El signo le gana a la clasificación para el tipo, y no es un
+        empate arbitrario: el "-" lo escribió Beno en esta frase, mientras
+        que el histórico habla de otras veces. Si no hay ninguno de los
+        dos, egreso — que es lo que dice el prompt del clasificador
+        ("ante la duda sobre el tipo, es egreso: la enorme mayoría de los
+        movimientos lo son") y lo que el formulario ya trae por defecto.
+      */
+      const tipo: TipoMovimiento = leido.tipo ?? sugerencia?.tipo ?? "egreso";
+
+      /*
+        Y si la categoría que salió es del otro tipo, no se precarga. Pasa
+        cuando el signo dice una cosa y el histórico otra: una categoría de
+        ingreso puesta en un egreso desaparecería sola del `select` en
+        cuanto el formulario filtra por tipo, y Beno vería la marca de
+        "como las 3 veces anteriores" al lado de un campo vacío.
+      */
+      const categoria = sugerencia && sugerencia.tipo === tipo ? sugerencia : null;
+
+      // El proyecto sale del texto de la descripción, igual que en la
+      // bitácora: "Venta Proder" nombra un proyecto. Si nombra más de uno o
+      // ninguno, va compartido, que es el default del formulario.
+      const { data: proyectos } = await supabase
+        .from("projects")
+        .select("*")
+        .order("nombre");
+
+      const nombrado = resolverProyecto(descripcion, proyectos ?? []);
+      const proyecto =
+        nombrado !== "ambiguo" && nombrado?.activo ? nombrado : null;
+
+      const procedencia = {
+        descripcion: describirFuente(leido.fuentes.descripcion),
+        monto: `${describirFuente(leido.fuentes.monto)}${
+          leido.moneda ? "" : ", en pesos porque no dijiste la moneda"
+        }`,
+        // Cómo la nombró él, salvo que la haya escrito en números: repetir
+        // "10/08/2026 — de tu frase (10/08/2026)" no informa nada.
+        fecha:
+          leido.etiquetaFecha && leido.etiquetaFecha !== formatDate(fecha)
+            ? `de tu frase, por el “${leido.etiquetaFecha}”`
+            : "de tu frase",
+        tipo:
+          leido.tipo !== null
+            ? `del signo “${tipo === "ingreso" ? "+" : "-"}” de tu frase`
+            : sugerencia
+              ? describirHistorico(sugerencia)
+              : "por defecto: casi todo es egreso",
+        categoria: categoria ? describirHistorico(categoria) : null,
+        proyecto: proyecto ? "lo nombraste en la descripción" : "compartido",
       };
+
+      const cuerpo = [
+        `Descripción: ${descripcion} — ${procedencia.descripcion}`,
+        `Monto: ${formatMoney(monto, moneda)} — ${procedencia.monto}`,
+        `Tipo: ${tipo} — ${procedencia.tipo}`,
+        categoria
+          ? `Categoría: ${categoria.categoriaNombre} — ${procedencia.categoria}`
+          : "Categoría: sin elegir — elegila vos",
+        `Fecha: ${formatDate(fecha)} — ${procedencia.fecha}`,
+        `Proyecto: ${proyecto ? proyecto.nombre : "Compartido"} — ${procedencia.proyecto}`,
+        leido.degradado
+          ? "\nEsto lo saqué con un regex porque no pude hablar con el modelo: revisalo bien."
+          : null,
+      ]
+        .filter((linea): linea is string => linea !== null)
+        .join("\n");
+
+      return {
+        clase: "movimiento",
+        destino: "movimientos",
+        titulo: "Esto entendí. Revisalo y cargalo",
+        cuerpo,
+        precarga: {
+          descripcion,
+          monto,
+          moneda,
+          fecha,
+          tipo,
+          categoryId: categoria?.categoryId ?? null,
+          projectId: proyecto?.id ?? null,
+          procedencia,
+        },
+      };
+    }
 
     case "consultas": {
       // Las tres consultas son idénticas a las del layout de las pantallas
@@ -816,6 +963,151 @@ export async function despachar(
           "Probá con algo como “cómo viene Proder”, “qué me toca hoy” o “qué estoy pagando que no uso”.",
       };
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Movimientos
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Con qué texto trabaja el agente de movimientos.
+ *
+ * Normalmente el argumento del recepcionista, que ya viene con la parte de
+ * plata recortada y es lo único que sirve cuando la frase pidió varias
+ * cosas. Pero **si ese recorte se comió el número, gana la frase entera**:
+ * un argumento sin monto no se puede cargar, y volver a preguntar algo que
+ * Beno ya escribió es el peor final posible. Es una red barata —un test
+ * sobre un string, sin llamadas— contra la única forma de fallar de este
+ * destino que no se recupera sola.
+ */
+function textoDelMovimiento(argumento: string | null, frase: string): string {
+  const recortado = argumento?.trim() ?? "";
+  const entera = frase.trim();
+
+  if (!recortado) return entera;
+  if (/\d/.test(recortado)) return recortado;
+
+  return /\d/.test(entera) ? entera : recortado;
+}
+
+/**
+ * Lo que falta, preguntado de a uno.
+ *
+ * Los datos necesarios son **monto, descripción y fecha**. La moneda no
+ * está en esa lista: sin decir nada son pesos, y la respuesta lo aclara.
+ * El tipo tampoco: sale del signo, del histórico o —última opción— del
+ * default de egreso.
+ *
+ * Cada pregunta vuelve con **todo lo ya entendido adentro** de
+ * `plantilla`, así que contestar cuesta escribir el dato que falta y nada
+ * más. Sin eso, preguntar sería peor que abrir el formulario.
+ */
+function preguntarPorLoQueFalta(
+  leido: MovimientoLeido,
+  hoy: string,
+): RespuestaSimple | null {
+  const aclaracion = leido.degradado
+    ? " No pude hablar con el modelo, así que leí lo que pude con un regex."
+    : "";
+
+  if (leido.monto === null) {
+    return {
+      clase: "completar",
+      destino: "movimientos",
+      titulo: "¿De cuánto fue?",
+      cuerpo: `No encontré ningún monto en lo que escribiste, y no me lo voy a inventar.${aclaracion}`,
+      ejemplo: "20 usd",
+      plantilla: plantillaCanonica(leido, "monto"),
+    };
+  }
+
+  if (!leido.descripcion) {
+    return {
+      clase: "completar",
+      destino: "movimientos",
+      titulo: "¿De qué era?",
+      cuerpo: `Sin descripción no puedo buscar en el histórico cómo lo clasificaste las veces anteriores.${aclaracion}`,
+      ejemplo: "Claude Code",
+      plantilla: plantillaCanonica(leido, "descripcion"),
+    };
+  }
+
+  if (!leido.fecha) {
+    return {
+      clase: "completar",
+      destino: "movimientos",
+      titulo: "¿De qué día es?",
+      cuerpo:
+        "No dijiste ninguna y no la asumo: un gasto de la semana pasada anotado hoy cae en el mes equivocado y también agarra la cotización equivocada.",
+      ejemplo: "06/08",
+      plantilla: plantillaCanonica(leido, "fecha"),
+      // Los dos días que cubren casi todas las cargas van de un click; el
+      // resto se escribe, que es justamente para lo que existe `completar`.
+      opciones: [
+        { etiqueta: "Hoy", valor: formatDayMonth(hoy) },
+        { etiqueta: "Ayer", valor: formatDayMonth(addDays(hoy, -1)) },
+      ],
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Rearma lo entendido como una frase telegráfica, con `{}` donde falta.
+ *
+ * La gracia es que lo que vuelve **es del formato que el regex resuelve
+ * solo**: la segunda vuelta no gasta ninguna llamada al modelo y no puede
+ * leer distinto lo que ya había leído bien. Es el mismo truco que usa la
+ * pregunta de proyecto de `lecciones_tema` con su `"tema — slug"`, pero en
+ * el idioma en el que Beno ya escribe.
+ */
+function plantillaCanonica(
+  leido: MovimientoLeido,
+  hueco: "monto" | "descripcion" | "fecha",
+): string {
+  const signo =
+    leido.tipo === "ingreso" ? "+" : leido.tipo === "egreso" ? "-" : "";
+
+  const cabeza =
+    hueco === "monto"
+      ? "{}"
+      : `${signo}${leido.monto} ${leido.moneda ?? ""}`.trim();
+
+  const descripcion = hueco === "descripcion" ? "{}" : (leido.descripcion ?? "");
+
+  const fecha =
+    hueco === "fecha" ? "{}" : leido.fecha ? formatDayMonth(leido.fecha) : "";
+
+  return [cabeza, descripcion, fecha].filter(Boolean).join(" ");
+}
+
+/** De dónde salió un campo, en criollo y listo para mostrar. */
+function describirFuente(fuente: MovimientoLeido["fuentes"]["monto"]): string {
+  switch (fuente) {
+    case "modelo":
+      return "de tu frase, leída por el modelo";
+    case "signo":
+      return "del signo de tu frase";
+    case "defecto":
+      return "por defecto";
+    default:
+      return "de tu frase";
+  }
+}
+
+/**
+ * Lo mismo para la clasificación, con las palabras exactas que ya usa el
+ * formulario: "como las 3 veces anteriores" no es lo mismo que "como los
+ * meses anteriores", y ninguna de las dos es lo mismo que "sugerida".
+ */
+function describirHistorico(sugerencia: Sugerencia): string {
+  if (sugerencia.origen !== "historico") return "sugerida por el modelo";
+  if (!sugerencia.exacto) return "como los meses anteriores";
+
+  return sugerencia.veces === 1
+    ? "como la vez anterior"
+    : `como las ${sugerencia.veces} veces anteriores`;
 }
 
 /**
