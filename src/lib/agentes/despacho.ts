@@ -1,11 +1,15 @@
 import "server-only";
 
 import { observarBalances } from "@/lib/agentes/observaciones";
-import { describirRango, resolverRango } from "@/lib/agentes/rango";
+import {
+  describirRango,
+  resolverMesDeVencimientos,
+  resolverRango,
+} from "@/lib/agentes/rango";
 import { resolverProyecto, resolverTrack } from "@/lib/agentes/resolver";
 import { computeToday, trackProgress } from "@/lib/aprendizaje";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
-import { addDays, compareISO, formatDate, todayISO } from "@/lib/dates";
+import { compareISO, formatDate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
 import { mensajeDeErrorLLM } from "@/lib/llm";
@@ -20,15 +24,6 @@ import type { ItemDeHoy } from "@/lib/aprendizaje";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { Recurrence, StudySession } from "@/lib/supabase/database.types";
 import type { Decision, RespuestaSimple } from "@/lib/agentes/tipos";
-
-/**
- * Qué tan lejos mira el agente de vencimientos.
- *
- * Treinta días es un ciclo mensual entero: alcanza para que toda
- * recurrencia mensual aparezca al menos una vez, y no tanto como para que
- * la lista deje de ser "lo que se viene".
- */
-const DIAS_DE_VENCIMIENTO_PROXIMO = 30;
 
 /**
  * Llama al especialista que corresponde y arma la respuesta para pantalla.
@@ -345,38 +340,60 @@ export async function despachar(
       }
 
       const hoy = todayISO();
-      const limite = addDays(hoy, DIAS_DE_VENCIMIENTO_PROXIMO);
+
+      // Mes de **calendario**, no una ventana de 30 días corridos, y no es
+      // el mismo criterio que usa `resolverRango` para las consultas de
+      // plata. La facturación funciona por mes: una suscripción no "vence
+      // dentro de 30 días", vence en septiembre. El porqué completo —y qué
+      // pasa con "el mes pasado"— está en `resolverMesDeVencimientos`.
+      const ventana = resolverMesDeVencimientos(decision.argumento, hoy);
 
       // `proximoVencimiento` es de `lib/recurrences.ts`, el módulo puro
       // donde vive esa regla y que ya usan el cron y la pantalla de
       // Recurrentes. Repetir acá el cálculo del día efectivo (el 31 en un
       // mes de 30) sería copiarse una regla que ya tiene dueño.
-      const proximos = (data ?? [])
+      //
+      // Alcanza con el próximo de cada recurrencia porque la ventana es un
+      // mes: mensual cae una vez y anual, a lo sumo una. Si algún día
+      // hubiera frecuencia quincenal, esto pasa a `vencimientosEnRango`.
+      const enElMes = (data ?? [])
         .map((recurrencia) => ({
           recurrencia,
-          fecha: proximoVencimiento(recurrencia, hoy),
+          fecha: proximoVencimiento(recurrencia, ventana.desde),
         }))
         .filter(
           (v): v is { recurrencia: Recurrence; fecha: string } =>
-            v.fecha !== null && v.fecha <= limite,
+            v.fecha !== null && v.fecha <= ventana.hasta,
         )
         .sort((a, b) => compareISO(a.fecha, b.fecha));
 
-      if (proximos.length === 0) {
+      // El mes en curso arranca hoy, así que es "lo que queda de agosto" y
+      // no "agosto": decir el mes entero prometería cargos que ya pasaron.
+      const cuando = ventana.enCurso
+        ? `lo que queda de ${ventana.mes}`
+        : ventana.mes;
+
+      if (enElMes.length === 0) {
         return {
           clase: "aviso",
-          titulo: "No se te viene nada",
-          cuerpo: `Ninguna recurrencia activa vence en los próximos ${DIAS_DE_VENCIMIENTO_PROXIMO} días.`,
+          titulo: ventana.pasado ? "No te venció nada" : "No se te viene nada",
+          cuerpo: ventana.pasado
+            ? `Ninguna recurrencia activa venció en ${ventana.mes}.`
+            : `Ninguna recurrencia activa vence en ${cuando}.`,
         };
       }
 
       return {
         clase: "lista",
         destino: "vencimientos",
-        titulo: `Lo que se te viene en los próximos ${DIAS_DE_VENCIMIENTO_PROXIMO} días`,
-        items: proximos.map(({ recurrencia, fecha }) => ({
+        titulo: ventana.pasado
+          ? `Lo que te venció en ${ventana.mes}`
+          : `Lo que se te viene en ${ventana.mes}`,
+        items: enElMes.map(({ recurrencia, fecha }) => ({
           titulo: recurrencia.descripcion,
-          detalle: `${formatMoney(recurrencia.monto_origen, recurrencia.moneda_origen)} · vence el ${formatDate(fecha)}`,
+          detalle: `${formatMoney(recurrencia.monto_origen, recurrencia.moneda_origen)} · ${
+            ventana.pasado ? "venció" : "vence"
+          } el ${formatDate(fecha)}`,
         })),
       };
     }

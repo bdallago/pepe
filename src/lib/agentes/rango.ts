@@ -3,6 +3,8 @@ import {
   addMonths,
   endOfMonth,
   formatDate,
+  monthKey,
+  parseISODate,
   startOfMonth,
   todayISO,
 } from "@/lib/dates";
@@ -18,24 +20,34 @@ import {
  *
  * Dos decisiones que no se ven leyendo una regex suelta:
  *
- * 1. **Los meses son meses de calendario, no ventanas de 30 días.**
- *    "Los últimos 6 meses" arranca el día 1 del sexto mes para atrás,
- *    contando el mes en curso. Así los cortes coinciden con los buckets
- *    de `Balances.porMes` y con lo que Beno ve en los gráficos; una
- *    ventana móvil partiría meses al medio y ningún total cerraría con la
- *    pantalla.
- * 2. **"El último mes" es el mes en curso**, que es el último de esos
- *    buckets. Es la lectura que hace coherente la frase real de Beno
- *    ("analizame los últimos 6 meses… y si hacemos foco en el último
- *    mes"): el foco cae sobre el último tramo de lo que acaba de mirar,
- *    no sobre el mes anterior. Como el mes en curso está incompleto, la
- *    respuesta muestra siempre las fechas exactas y la interpretación
- *    queda a la vista.
+ * 1. **"Los últimos N meses" son meses de calendario.** Arranca el día 1
+ *    del enésimo mes para atrás, contando el mes en curso. Así los cortes
+ *    coinciden con los buckets de `Balances.porMes` y con lo que Beno ve
+ *    en los gráficos; una ventana móvil partiría meses al medio y ningún
+ *    total cerraría con la pantalla.
+ * 2. **"El último mes" (sin número) es una ventana móvil de 30 días.**
+ *    Decisión de Beno del 2026-08-09: para analizar plata, "el último
+ *    mes" es lo que pasó en los últimos 30 días, no lo que va del mes en
+ *    curso. El 2 de agosto, el mes calendario son dos días de datos y la
+ *    respuesta no dice nada; 30 días para atrás siempre dicen lo mismo.
+ *    Como la ventana se corre, **suele cruzar dos meses de calendario, y
+ *    cuando lo hace la etiqueta lo dice**: "a caballo entre julio y
+ *    agosto". Si no lo dijera, el mismo texto significaría cosas
+ *    distintas según el día en que se preguntó.
+ *
+ *    **"Este mes" no cambió**: ese sigue siendo el mes de calendario en
+ *    curso, y "el mes pasado", el de calendario anterior completo. Son
+ *    tres frases distintas porque son tres preguntas distintas.
  *
  * **Si no se reconoce nada devuelve `null`, y eso no es un error**: la
  * consulta sigue siendo sobre todo el histórico, como fue siempre, y la
  * respuesta lo dice. Adivinar un rango sería peor que no tener ninguno:
  * los números cambiarían sin que nada lo avise.
+ *
+ * Al final del archivo vive `resolverMesDeVencimientos()`, que interpreta
+ * las mismas palabras con **otro criterio** —mes de calendario— porque
+ * responde otra pregunta. Están juntas a propósito: la diferencia se ve
+ * leyendo un solo archivo.
  */
 
 export interface RangoResuelto {
@@ -87,6 +99,17 @@ function aNumero(texto: string): number | null {
   }
   return NUMEROS[texto] ?? null;
 }
+
+/**
+ * Cuántos días para atrás llega "el último mes".
+ *
+ * Treinta, y el borde queda en `hoy - 30`: el 10 de agosto la ventana
+ * arranca el 11 de julio, que es como lo escribió Beno. Es un día más
+ * ancha que la regla de "los últimos N días", que cuenta hoy adentro de
+ * los N; esa no se tocó porque ahí el número lo pone él y significa lo que
+ * dice.
+ */
+const DIAS_DE_UN_MES = 30;
 
 interface Regla {
   patron: RegExp;
@@ -152,17 +175,15 @@ const REGLAS: Regla[] = [
     },
   },
 
-  // "el último mes" (sin número): el mes en curso. Ver el bloque de arriba.
-  {
-    patron: /\b(?:el\s+)?ultimo\s+mes\b/,
-    armar: (_m, hoy) => ({
-      desde: startOfMonth(hoy),
-      hasta: hoy,
-      etiqueta: "el último mes, el que está en curso",
-    }),
-  },
+  /*
+    "este mes", "el mes actual", "lo que va del mes": el mes de calendario
+    en curso.
 
-  // "este mes", "el mes actual", "lo que va del mes"
+    Va **arriba** de la regla de "el último mes", y el orden importa desde
+    que esa regla también matchea "el mes" a secas: sin este orden, "el mes
+    actual" caería en la ventana de 30 días. Gana la primera que matchea,
+    así que la frase más específica va primero.
+  */
   {
     patron: /\b(?:este\s+mes|el\s+mes\s+actual|mes\s+en\s+curso|lo\s+que\s+va\s+del\s+mes)\b/,
     armar: (_m, hoy) => ({
@@ -170,6 +191,28 @@ const REGLAS: Regla[] = [
       hasta: hoy,
       etiqueta: "este mes",
     }),
+  },
+
+  /*
+    "el último mes", "último mes", "el mes": los últimos 30 días.
+
+    Ventana móvil, no mes de calendario (ver el bloque de arriba). El borde
+    es `hoy - 30 días`, que es como lo dijo Beno: el 10 de agosto la
+    ventana arranca el 11 de julio.
+
+    El lookahead saca "el mes que viene" y sus variantes: eso mira para
+    adelante y acá se contestan preguntas sobre plata ya gastada. Sin él,
+    "cuánto gasto el mes que viene" contestaría con los últimos 30 días,
+    que es exactamente al revés. Lo que sí mira para adelante son los
+    vencimientos, y esos tienen su propio resolvedor abajo.
+  */
+  {
+    patron:
+      /\b(?:el\s+)?ultimo\s+mes\b|\bel\s+mes\b(?!\s+(?:que\s+viene|proximo|entrante|siguiente))/,
+    armar: (_m, hoy) => {
+      const desde = addDays(hoy, -DIAS_DE_UN_MES);
+      return { desde, hasta: hoy, etiqueta: etiquetaDeUltimoMes(desde, hoy) };
+    },
   },
 
   // "el año pasado"
@@ -260,6 +303,114 @@ export function describirRango(rango: RangoResuelto | null): string {
   if (!rango) return "Rango: todo el histórico.";
 
   return `Rango: ${rango.etiqueta} (del ${formatDate(rango.desde)} al ${formatDate(rango.hasta)}).`;
+}
+
+const FORMATO_DE_MES = new Intl.DateTimeFormat("es-AR", { month: "long" });
+
+/** "2026-08-10" → "agosto". En minúscula, para meterlo adentro de una frase. */
+export function nombreDeMes(iso: string): string {
+  // `parseISODate` arma el Date al mediodía local: `new Date(iso)` a secas
+  // parsea en UTC y en Argentina puede devolver el mes anterior el día 1.
+  return FORMATO_DE_MES.format(parseISODate(iso));
+}
+
+/**
+ * Cómo se nombra la ventana de 30 días.
+ *
+ * Los últimos 30 días caen dentro de un mes o cruzan dos —nunca tres, que
+ * necesitaría 32 días— y la etiqueta dice cuál de los dos casos es. Sin
+ * eso, "el último mes" pedido el 10 de agosto se leería como "agosto"
+ * cuando en realidad son tres semanas de julio y una de agosto.
+ */
+function etiquetaDeUltimoMes(desde: string, hasta: string): string {
+  const base = "el último mes: los últimos 30 días";
+
+  return monthKey(desde) === monthKey(hasta)
+    ? `${base}, todos dentro de ${nombreDeMes(hasta)}`
+    : `${base}, a caballo entre ${nombreDeMes(desde)} y ${nombreDeMes(hasta)}`;
+}
+
+/** El mes de calendario que mira el agente de vencimientos. */
+export interface MesDeVencimientos {
+  /** "YYYY-MM-DD", inclusive. */
+  desde: string;
+  /** "YYYY-MM-DD", inclusive. */
+  hasta: string;
+  /** Cómo se llama el mes: "agosto". */
+  mes: string;
+  /** El mes ya terminó: la lista mira para atrás y se nombra en pasado. */
+  pasado: boolean;
+  /** Es el mes en curso, así que arranca hoy: es lo que **queda** del mes. */
+  enCurso: boolean;
+}
+
+/**
+ * El mes que mira el agente de vencimientos.
+ *
+ * Acá el criterio es el **mes de calendario**, al revés que `resolverRango`
+ * — y es a propósito, no una inconsistencia. Son dos preguntas distintas:
+ * para analizar plata, una ventana móvil de 30 días dice más (siempre mide
+ * lo mismo, no importa el día del mes); para lo que se viene a cobrar, el
+ * mes de calendario es literalmente como funciona la facturación. Una
+ * suscripción que vence el 3 no "vence dentro de 30 días": vence en
+ * septiembre.
+ *
+ * Sin frase reconocida devuelve el **mes en curso desde hoy**: lo que
+ * queda por pagar este mes, que es lo que se pregunta cuando se pregunta
+ * sin aclarar nada.
+ *
+ * **"El mes pasado" se contesta mirando para atrás, no con un error.**
+ * Es tentador decir "un vencimiento pasado ya venció, esto es para lo que
+ * viene", pero la pregunta tiene una respuesta real y a mano: qué cargos
+ * cayeron el mes pasado según lo declarado en `recurrences`. Negarse sería
+ * tirar información que está a un `proximoVencimiento` de distancia. Lo
+ * único que no se puede hacer es contestarla **como si fuera futuro**: por
+ * eso viaja `pasado` y quien llama titula en pasado ("Lo que te venció en
+ * julio"). Ojo con lo que NO dice esa lista: son los vencimientos
+ * declarados, no los pagos hechos; que algo venciera no prueba que se haya
+ * pagado, y eso vive en `movements`.
+ */
+export function resolverMesDeVencimientos(
+  texto: string | null,
+  hoy: string = todayISO(),
+): MesDeVencimientos {
+  const normalizado = normalizar(texto ?? "");
+
+  // El que viene se pregunta antes que el pasado, y los dos antes que el
+  // default: "el mes que viene" contiene "el mes", que es la frase más
+  // general de las tres.
+  if (/\b(?:mes\s+que\s+viene|proximo\s+mes|mes\s+proximo|mes\s+entrante|mes\s+siguiente)\b/.test(normalizado)) {
+    const siguiente = addMonths(startOfMonth(hoy), 1);
+    return {
+      desde: siguiente,
+      hasta: endOfMonth(siguiente),
+      mes: nombreDeMes(siguiente),
+      pasado: false,
+      // El mes que viene se mira entero: no hay parte de él que ya pasó.
+      enCurso: false,
+    };
+  }
+
+  if (/\b(?:mes\s+pasado|mes\s+anterior|ultimo\s+mes)\b/.test(normalizado)) {
+    const anterior = addMonths(startOfMonth(hoy), -1);
+    return {
+      desde: anterior,
+      hasta: endOfMonth(anterior),
+      mes: nombreDeMes(anterior),
+      pasado: true,
+      enCurso: false,
+    };
+  }
+
+  return {
+    // Desde hoy y no desde el 1: lo que ya venció este mes no es "lo que
+    // se te viene". Un vencimiento que cae hoy sí entra.
+    desde: hoy,
+    hasta: endOfMonth(hoy),
+    mes: nombreDeMes(hoy),
+    pasado: false,
+    enCurso: true,
+  };
 }
 
 /** Minúsculas, sin tildes y sin puntuación. Mismo criterio que `resolver.ts`. */
