@@ -49,8 +49,16 @@ export async function middleware(request: NextRequest) {
 
   if (!user && !isPublic) {
     const redirectUrl = request.nextUrl.clone();
+    // ⚠ El `next` lleva el pathname **con su query**. Antes guardaba solo
+    // el pathname, y para las pantallas de la app daba igual porque
+    // ninguna dependía de sus parámetros. `/oauth/authorize` sí: sus
+    // parámetros son el pedido de OAuth entero, y perderlos en el viaje a
+    // Google hacía que el flujo volviera a un `/authorize` pelado y
+    // muriera con "falta client_id", tres redirects después de la causa.
+    const destino = `${pathname}${request.nextUrl.search}`;
     redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("next", pathname);
+    redirectUrl.search = "";
+    redirectUrl.searchParams.set("next", destino);
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -77,7 +85,18 @@ export const config = {
      *   flujo de OAuth — y el síntoma sería "no llego al servidor", que
      *   manda a buscar el problema al lugar equivocado. La autenticación
      *   la resuelve el propio handler.
+     * - /api/oauth/* , el token y el registro dinámico del conector: los
+     *   llama el servidor de Claude, sin cookies y sin browser. Un 307 a
+     *   /login ahí se ve del otro lado como HTML donde tendría que haber
+     *   JSON.
+     * - /.well-known/* , los documentos de descubrimiento de OAuth. Son
+     *   públicos por definición: si hiciera falta estar logueado para
+     *   leerlos, nadie podría averiguar **cómo** loguearse.
+     *
+     * ⚠ `/oauth/authorize` **sí** pasa por acá, y tiene que seguir
+     * pasando: es la única pieza del flujo que necesita la sesión de
+     * Beno, y es este middleware el que la refresca.
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/cron|api/mcp|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/cron|api/mcp|api/oauth|\\.well-known|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
