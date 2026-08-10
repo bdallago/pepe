@@ -559,6 +559,52 @@ archivo es uno solo, un JSON roto committeado se llevaría puesto el
 último respaldo bueno, en silencio, y te enterarías el día que lo
 necesitás.
 
+### Los comprobantes van al lado del JSON, no adentro
+
+Los adjuntos de los movimientos viven en un bucket privado, no en la
+base, así que el JSON no los cubría: la frase del encabezado de
+`lib/respaldo.ts` era falsa para ellos. Ahora `/api/cron/respaldo` trae
+el **inventario** (`.comprobantes`) y `/api/cron/comprobantes` las **URLs
+firmadas** para bajarlos.
+
+**Son dos rutas porque las URLs firmadas no pueden terminar en el repo.**
+`respaldo.json` se commitea, y una credencial en el historial de git
+queda publicada para siempre aunque venza en una hora. Lo que se guarda
+no lleva firmas; lo que lleva firmas no se guarda.
+
+**Los bytes se guardan como archivos sueltos, nunca en base64 adentro del
+JSON.** `respaldo.json` se reescribe entero todos los días: un adjunto
+adentro entra en el blob de cada día y git guardaría una copia nueva del
+mismo PDF cada 24 horas, para siempre. Suelto, el path lleva un uuid y no
+cambia nunca, así que git lo guarda una sola vez y el workflow ni lo
+vuelve a bajar. Además base64 infla un 33 % y le saca a git la
+posibilidad de comprimir.
+
+Lo que sí es indispensable que viaje en el JSON es la **relación
+comprobante ↔ movimiento**: un archivo suelto con nombre de uuid no le
+sirve a nadie. Va en `.comprobantes.archivos[]` y se copia en
+`comprobantes/MANIFIESTO.json`, al lado de los bytes.
+
+El inventario cruza las dos direcciones y las trata distinto:
+
+- **huérfano** (archivo sin movimiento): se respalda igual y se cuenta
+  aparte. Pasa cuando se sube un comprobante y se cancela el formulario.
+- **faltante** (movimiento cuyo archivo ya no está en el storage): el
+  comprobante se perdió y ningún respaldo lo trae de vuelta, pero
+  callárselo sería peor. El workflow lo convierte en un error visible y
+  el job termina en rojo. La forma honesta de cerrar el aviso es dejar en
+  `null` ese `comprobante_path`.
+
+Con los comprobantes el workflow **commitea primero y falla después**, al
+revés que con las tablas: perder el respaldo del día entero porque un PDF
+no bajó sería cambiar una pérdida chica por una grande. El mail de
+GitHub llega lo mismo.
+
+`VERSION_RESPALDO` pasó a **2** y el workflow lo usa de puerta: con
+`version < 2` avisa y saltea el paso (la app todavía no se desplegó), con
+`version >= 2` la falta de inventario es un error. Así no hay ventana
+rota entre el merge y el deploy, ni un agujero permanente después.
+
 ## Búsqueda de lecciones
 
 Híbrida: full-text en español + similitud vectorial, fusionados con
@@ -689,7 +735,9 @@ las lee del documento y las relee cuando cambia el tema.
   **no filtra lo archivado**, y la única que pagina de a 1000. Sin
   paginar, una tabla de más de mil filas se exportaría cortada sin
   ningún error visible, que es la peor forma posible de fallar en un
-  backup. Si agregás una tabla al esquema, agregala a `TABLAS`.
+  backup. Si agregás una tabla al esquema, agregala a `TABLAS`; si
+  agregás un bucket, acordate de que `TABLAS` no lo cubre —ver "Los
+  comprobantes van al lado del JSON"—.
 - Server Actions devuelven `ActionResult<T>` (`{ ok, data } | { ok, error }`),
   nunca lanzan para errores esperables.
 - `createAdminClient()` saltea RLS. Solo lo usan el cron y la

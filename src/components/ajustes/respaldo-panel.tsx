@@ -102,8 +102,10 @@ export function RespaldoPanel() {
           </p>
           <p>
             No incluye los embeddings de las lecciones, que se regeneran solos y
-            multiplicarían por diez el peso del archivo. Tampoco los
-            comprobantes, que viven en el storage de Supabase.
+            multiplicarían por diez el peso del archivo. De los comprobantes
+            trae el <strong>inventario</strong> —qué archivo es de qué
+            movimiento— pero no los archivos: esos los guarda el respaldo
+            automático, al lado del JSON.
           </p>
         </div>
       </CardContent>

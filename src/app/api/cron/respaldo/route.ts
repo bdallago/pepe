@@ -26,11 +26,15 @@ import { createAdminClient } from "@/lib/supabase/server";
  *
  * Devuelve el JSON crudo y nada más. Toda la decisión de qué guardar,
  * cuánto conservar y cómo verificarlo vive del otro lado, en el workflow.
+ *
+ * Los **bytes** de los comprobantes no salen por acá: este JSON trae el
+ * inventario y las URLs firmadas para bajarlos salen por
+ * `/api/cron/comprobantes`.
  */
 
 export const dynamic = "force-dynamic";
-// Catorce tablas leídas de a mil filas. Hoy tarda menos de un segundo; el
-// margen es para cuando haya años de datos.
+// Catorce tablas leídas de a mil filas, más el listado del bucket. Hoy
+// tarda menos de un segundo; el margen es para cuando haya años de datos.
 export const maxDuration = 60;
 
 function autorizado(request: NextRequest): boolean {
