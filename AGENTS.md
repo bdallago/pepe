@@ -461,6 +461,71 @@ Y por eso mismo `mcp/datos.mts` lee los proyectos igual que
 nombre—: filtrar ahí haría que el MCP conteste números distintos a los
 de la pantalla.
 
+### 9. La capa de agentes, y por qué su prompt es de vidrio
+
+`src/lib/agentes/` es la puerta en castellano de la app: Beno escribe una
+frase, el **recepcionista** la clasifica y el **despachador** llama al
+especialista. Vive en la pantalla de inicio y en `Ctrl+J` (no `Ctrl+K`:
+esa ya es la carga rápida de movimientos).
+
+| Archivo | Qué |
+|---|---|
+| `agentes/tipos.ts` | Los doce destinos, el esquema de la decisión, la unión de respuestas |
+| `agentes/recepcionista.ts` | Frase → lista ordenada de decisiones |
+| `agentes/cadena.ts` | Las ejecuta en orden y contiene los fallos |
+| `agentes/despacho.ts` | Un `case` por destino, cáscara sobre lo que ya existe |
+| `agentes/resolver.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts` | Resolución **determinística**: proyectos, tracks, rangos, fechas, el formato telegráfico |
+
+**Regla que ordena todo: si algo se puede resolver sin modelo, se
+resuelve sin modelo.** El signo de `-20usd Claude Code 06/08` dice que es
+un egreso; el nombre de un proyecto se busca en tres filas; "el mes
+pasado" es aritmética de calendario. Las cinco frases telegráficas reales
+de Beno se parsean con **cero llamadas**.
+
+**Multi-acción es seguro por una razón concreta**: nada entra al dominio
+sin confirmación, así que una frase con tres pedidos son tres propuestas
+y si la segunda falla quedan dos. No hay transacción que deshacer. La
+excepción es `bitacora` y `tema_estudio`, que **escriben directo** — y
+pueden hacerlo porque **no hay producción de un modelo**: el texto y el
+título los pone Beno, el modelo solo recorta y fecha. Si a esos prompts
+alguien les agrega "mejorá" o "resumí", el razonamiento deja de valer y
+pasan a necesitar la bandeja.
+
+#### El prompt del recepcionista es de vidrio. Cuatro veces medidas.
+
+**Agregarle texto rompe casos que no tienen nada que ver, aunque no los
+nombres.** No es una sospecha, son cuatro incidentes con medición:
+
+1. Poner `"pricing"` como ejemplo subió la confianza de `"pricing"` suelto
+   de 0.3 a 0.8.
+2. Un párrafo más largo, sin nombrar ninguna ancla, subió `"Proder"` de
+   0.3 a 0.8. **Diluir la regla mecánica alcanza.**
+3. El mismo texto **movido de lugar** lo arregló: el bloque de confianza
+   tiene que quedar **último**. La posición pesa tanto como el contenido.
+4. Doce líneas en prosa subieron dos anclas a 0.8 **y** hicieron que el
+   argumento de una frase telegráfica volviera reescrito y sin la fecha.
+   Las mismas dos reglas en **seis líneas y léxicas** (listas de palabras,
+   no descripciones) pasaron limpio.
+
+Por eso: **antes de tocar ese prompt, medí; después de tocarlo, volvé a
+medir.** El piso de regresión son las cuatro ambiguas sueltas
+(`"Claude Code"`, `"Proder"`, `"pricing"`, `"Vercel Pro"`, todas por
+debajo de 0.6) y las seis simples con **una sola acción** cada una. Y si
+la regla que querés agregar se puede resolver con un test sobre un string
+en `despacho.ts`, hacelo ahí — como `textoDelMovimiento()`.
+
+**Lo que se mide no es el acierto, es el modo de fallar.** La calibración
+del 2026-08-10 contra las quince frases reales de Beno pasó de 11/15 con
+**cuatro errores silenciosos** a 14/15 con **cero**. Un destino
+equivocado con confianza baja pregunta y se corrige; con confianza alta
+te contesta cualquier cosa con seguridad. Lo segundo es lo inaceptable, y
+aparecía justo en las frases que piden algo que la app no hace.
+
+**El umbral de 0.6 es circular** y conviene saberlo: el prompt le enseña
+el número al modelo y el código compara contra ese mismo número. No se
+está midiendo incertidumbre, se le está pidiendo al modelo que elija de
+qué lado caer. Explica por qué la calibración es tan frágil.
+
 ## Respaldo automático
 
 Además del botón de Ajustes, hay un respaldo **diario y automático**:
