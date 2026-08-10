@@ -53,7 +53,14 @@ export function cronSecret(): string {
  * ninguno" y no "entra cualquiera" es el punto entero de esta variable.
  */
 export function mcpUsuarioPermitido(): string | null {
-  return process.env.MCP_USUARIO_PERMITIDO || null;
+  // ⚠ El `trim()` no es decorativo. Un uuid nunca lleva espacios
+  // alrededor, así que recortarlo no puede cambiar un valor legítimo —
+  // pero cargar la variable con un pipe (`$id | vercel env add`) le pega
+  // un salto de línea, y entonces la comparación falla con el uuid
+  // correcto adentro. El síntoma es el peor posible: la pantalla dice
+  // "esta cuenta no puede conectar" y manda a revisar la cuenta de
+  // Google, que no tiene nada que ver.
+  return process.env.MCP_USUARIO_PERMITIDO?.trim() || null;
 }
 
 /**

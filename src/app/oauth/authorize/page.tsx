@@ -255,6 +255,18 @@ export default async function AutorizarPage({
   // Cualquier otra persona que llegue hasta acá con su sesión se va con
   // `access_denied` y sin token.
   if (usuario.id !== permitido) {
+    // El rechazo se ve en pantalla como "esta cuenta no puede conectar",
+    // que manda a mirar la cuenta de Google. Pero la causa más probable
+    // **no** es la cuenta: es que la variable esté mal cargada. Ya pasó
+    // una vez, con un salto de línea que le pegó un pipe de PowerShell.
+    // Sin este log, diagnosticarlo es adivinar.
+    console.error(
+      "[oauth] cuenta rechazada. " +
+        `sesión=${usuario.id} (${usuario.id.length} chars) · ` +
+        `permitido=${permitido} (${permitido.length} chars) · ` +
+        `iguales_al_recortar=${usuario.id.trim() === permitido.trim()}`,
+    );
+
     const destino = urlDeError(
       redirect_uri,
       "access_denied",
