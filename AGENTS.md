@@ -521,6 +521,57 @@ La regla que ordena todo esto: **un tool de MCP que escriba en una tabla
 de dominio sin pasar por `inbox` es una violación de la regla 6**, no un
 atajo. Si aparece la tentación, la respuesta es proponer, no escribir.
 
+#### Las ocho del conector remoto, y la única que escribe
+
+Al 2026-08-11 el conector remoto tiene ocho tools, repartidas por ese
+mismo corte (`lib/mcp/tools/`, una familia por archivo):
+
+| Escribe | Tools |
+|---|---|
+| nada | `listar_proyectos`, `listar_movimientos`, `balance`, `buscar_lecciones`, `leer_bitacora` |
+| `inbox` | `registrar_movimiento`, `registrar_leccion` |
+| directo | `escribir_bitacora` |
+
+**`escribir_bitacora` es la única excepción y no es una excepción a la
+regla, es su aplicación**: la regla 6 protege contra guardar *producción
+de un modelo* sin confirmación, y ahí no hay ninguna — el texto es de
+Beno. Es el mismo razonamiento que habilita a `agentes/bitacora.ts`, y
+tiene la misma condición de validez: **si alguien le agrega a la
+descripción de esa tool "resumí" o "mejorá", deja de valer y pasa a
+necesitar la bandeja.**
+
+`registrar_leccion` **no** entra en esa excepción aunque el contenido
+también sea de Beno, y la diferencia es dónde está la garantía. En la
+caja, `agentes/bitacora.ts` recorta un prefijo con una expresión regular:
+que el texto llegue intacto se verifica leyendo el archivo. Acá del otro
+lado hay Claude redactando, y una lección es justo el tipo de texto que
+un modelo "mejora" sin que se note —le sube el registro, le saca el
+número concreto y la convierte en un rótulo, que es exactamente lo que
+prohíbe la vara de 6.3—. Sin garantía mecánica, vale la regla 6.
+
+Dos cosas más que no se ven leyendo un archivo suelto:
+
+1. **`movimiento_dictado` y `leccion_dictada` son valores nuevos de
+   `tipo_bandeja`**, no reusos. Tentaba reciclar `categorizacion`, que no
+   lo produce nada; no alcanza, porque un ítem del conector trae un
+   movimiento entero y no una categoría a confirmar. Y `leccion_sugerida`
+   habría sido peor: nace con `origen = 'generada'`, o sea "hipótesis del
+   modelo", que es lo contrario de lo que es. `leccion_dictada` nace
+   **`manual`**. El desarrollo está en
+   `20260811000000_bandeja_conector.sql`.
+2. **La cotización se congela al aceptar, no al proponer.** La propuesta
+   no lleva tasa: `aceptarMovimientoDictado()` la resuelve contra la
+   fecha del movimiento recién cuando el movimiento pasa a existir.
+   Congelarla al proponer fijaría la del día en que se dictó —una
+   propuesta puede quedarse días en la bandeja— y para un movimiento de
+   hoy lo dejaría pegado a la tasa de ayer si todavía no corrió el cron.
+
+Y una que sí se ve, pero conviene saber por qué: `sugerir_categoria_historico`
+tiene un `p_user_id` opcional desde `20260811000001_historico_por_usuario.sql`.
+Es `security invoker` y se apoyaba en RLS, que del lado del conector no
+existe —ahí el cliente lleva la service role key—. El default `null`
+mantiene a los dos call sites de siempre exactamente como estaban.
+
 **El servidor es local y por stdio** (`mcp/servidor.mts`, lo arranca
 Claude Code; `.mcp.json` lo declara). No es una ruta de la app, y eso
 fue una decisión de seguridad de Beno: un `/api/mcp` público es un

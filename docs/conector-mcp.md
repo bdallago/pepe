@@ -21,6 +21,62 @@ operar la app conversando, sin abrir el browser.
 
 En un chat nuevo, pedile *"listá mis proyectos de Pepe"*.
 
+## Qué sabe hacer
+
+Ocho tools, ordenadas por **quién termina escribiendo en la base**. Ese
+corte no es una etapa del desarrollo: es la regla que las gobierna.
+
+### Leen y nada más
+
+| Tool | Qué devuelve |
+|---|---|
+| `listar_proyectos` | Los proyectos con su slug y si están activos. Casi todo lo demás pide un slug, así que suele ser el primer paso |
+| `listar_movimientos` | Ingresos y egresos, filtrables por proyecto, fechas, categoría, tipo y estado. De a 25 |
+| `balance` | Ingresos, egresos y saldo en una sola moneda. Sin proyecto, el general; con proyecto, el de ese proyecto **con su parte de lo compartido** |
+| `buscar_lecciones` | Búsqueda por texto en español sobre las lecciones anotadas. Incluye las archivadas |
+| `leer_bitacora` | Las entradas del día a día, por rango de fechas y proyecto |
+
+### Proponen: dejan el ítem en la bandeja
+
+| Tool | Qué deja |
+|---|---|
+| `registrar_movimiento` | Un movimiento propuesto, con la categoría que Pepe sugiere sola |
+| `registrar_leccion` | Una lección propuesta, que nace como **manual** (es tuya, no una hipótesis del modelo) |
+
+**No cargan nada.** Dejan una fila en `inbox` y la bandeja de siempre es
+donde se aceptan o se descartan. Es la regla que ordena toda la app —nada
+se escribe sin que aprietes un botón— y no hizo falta inventarle un
+mecanismo nuevo: ya existía.
+
+La categoría de un movimiento sale del mismo camino que en el formulario:
+primero **cómo lo clasificaste antes** (sin modelo, contra el histórico) y
+solo si nunca lo viste, un modelo. Lo que el conector no puede saber —a
+qué proyecto va, o qué categoría si no hay antecedente— **no se inventa**:
+queda en blanco y la tarjeta de la bandeja lo pide antes de dejarte
+aceptar.
+
+La cotización **se congela al aceptar**, no al proponer: el par ARS/USD se
+arma contra la fecha del movimiento en el momento en que el movimiento
+pasa a existir.
+
+### Escribe directo
+
+| Tool | Qué hace |
+|---|---|
+| `escribir_bitacora` | Anota una entrada de bitácora, de verdad |
+
+Es la única, y puede serlo por una razón concreta: **lo que se guarda es
+tu texto**. No hay producción de un modelo que confirmar. Si alguna vez la
+descripción de esa tool pasa a pedir que se resuma o se mejore lo que
+dijiste, ese razonamiento se cae y pasa a necesitar la bandeja como todo
+lo demás.
+
+`registrar_leccion` no entra acá aunque el contenido también sea tuyo, y
+la diferencia vale la pena: del otro lado hay un modelo redactando y no
+hay garantía mecánica de que no haya reformulado. Una lección es
+exactamente el tipo de texto que un modelo "mejora" sin que se note — le
+sube el registro, le saca el número concreto y la convierte en un rótulo.
+
 ## Solo vos
 
 `/authorize` compara tu id de Supabase contra **`MCP_USUARIO_PERMITIDO`**.

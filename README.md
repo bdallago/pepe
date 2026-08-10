@@ -151,7 +151,13 @@ avisa si la tarifa quedó desfasada. Avisa: nunca la cambia.
 Pepe se puede agregar a Claude.ai como conector remoto y operarlo
 conversando. OAuth 2.1 con PKCE y registro dinámico; Pepe es el
 authorization server y usa el login de Google solo para la identidad.
-Ver `docs/conector-mcp.md`.
+
+Ocho tools, ordenadas por **quién termina escribiendo**: cinco que solo
+leen (proyectos, movimientos, balance, lecciones, bitácora), dos que
+**proponen** —dejan el ítem en la bandeja y lo aceptás con un botón, como
+todo lo demás— y una sola que escribe directo, `escribir_bitacora`, que
+puede hacerlo porque lo que se guarda es tu texto y no la producción de
+un modelo. Ver `docs/conector-mcp.md`.
 
 ## Las tres reglas que importan
 
