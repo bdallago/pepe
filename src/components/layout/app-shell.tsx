@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   CalendarDays,
   Compass,
+  FileText,
   GraduationCap,
   Inbox,
   LayoutDashboard,
@@ -57,6 +58,10 @@ const SECCIONES = [
       { href: "/proyectos", label: "Proyectos", icon: Wallet },
       { href: "/movimientos", label: "Movimientos", icon: ArrowLeftRight },
       { href: "/recurrentes", label: "Recurrentes", icon: Repeat },
+      // Presupuestos es de Finanzas: es plata que todavía no entró, pero
+      // es plata. Y el que prospera nace como proyecto, que es la entidad
+      // raíz de toda la app.
+      { href: "/presupuestos", label: "Presupuestos", icon: FileText },
     ],
   },
   {
