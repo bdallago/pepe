@@ -1,0 +1,51 @@
+-- ============================================================
+-- Tres tipos de bandeja nuevos: lo que dicta Beno por el conector y
+-- todavía no tenía dónde caer.
+--
+-- Los tres son **producción de un modelo sobre tablas de dominio**, así
+-- que la regla 6 de AGENTS.md aplica entera y no hay ningún razonamiento
+-- que los exima: van a `inbox` como `pendiente` y los acepta Beno.
+--
+-- | valor | lo deja | aceptar crea |
+-- |---|---|---|
+-- | proyecto_dictado    | registrar_proyecto    | el proyecto, y su presupuesto en borrador si el payload lo trae |
+-- | presupuesto_dictado | registrar_presupuesto | el presupuesto en borrador |
+-- | nota_dictada        | registrar_nota        | una entrada de daily_log |
+--
+-- ⚠ Un presupuesto en `borrador` **no cuelga de ningún proyecto**, y no
+-- es un olvido: `quotes` tiene el check
+-- `(estado = 'aceptado') = (project_id is not null)`. El vínculo con el
+-- proyecto se hace recién al aceptar el presupuesto, que es cuando se
+-- elige o se crea el proyecto.
+--
+-- ## Por qué `nota_dictada` no reusa `nota_de_adjunto`
+--
+-- El camino de aceptación es el mismo —de hecho la action se generaliza
+-- en vez de duplicarse— pero **de dónde vino no es lo mismo**, y eso es
+-- justo lo que la tarjeta de la bandeja muestra a la izquierda para poder
+-- juzgar la propuesta: allá va la imagen de la que salió el texto, acá va
+-- la frase de Beno que lo pidió. Con un solo valor, la tarjeta tendría que
+-- adivinar mirando el payload.
+--
+-- ## Por qué `registrar_nota` importa más de lo que parece
+--
+-- Es lo que sostiene la excepción de `escribir_bitacora`. Hasta que
+-- existió, un resumen escrito por un modelo no tenía a dónde ir, y esa es
+-- exactamente la presión que termina aflojando la única regla que permite
+-- escribir sin confirmación. Con esto la separación es nítida y
+-- verificable: el texto de Beno va directo, el del modelo va a la bandeja.
+--
+-- ## Por qué esta migración está sola
+--
+-- Un valor de enum agregado con `alter type ... add value` **no se puede
+-- usar en la misma transacción que lo agregó**. Mismo criterio que
+-- `20260810001000_adjuntos_enums.sql` y `20260811000000_bandeja_conector.sql`.
+--
+-- Y el timestamp es `20260812…` y no `20260811…` a propósito: las dos
+-- migraciones del reparto por fecha quedaron numeradas antes que las
+-- `20260811…` ya aplicadas y hubo que empujarlas con `--include-all`.
+-- ============================================================
+
+alter type public.tipo_bandeja add value if not exists 'proyecto_dictado';
+alter type public.tipo_bandeja add value if not exists 'presupuesto_dictado';
+alter type public.tipo_bandeja add value if not exists 'nota_dictada';

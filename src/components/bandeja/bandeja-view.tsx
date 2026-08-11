@@ -74,10 +74,13 @@ const TIPO_LABEL: Record<TipoBandeja, string> = {
   leccion_extraida: "Lección de la bitácora",
   retro: "Retro de proyecto",
   nota_de_adjunto: "Nota de una captura",
-  // Los dos que entran por el conector MCP. "Dictado" y no "de Claude":
+  // Los cinco que entran por el conector MCP. "Dictado" y no "de Claude":
   // lo que importa no es qué programa lo mandó, es que lo dijo él.
   movimiento_dictado: "Movimiento dictado",
   leccion_dictada: "Lección dictada",
+  proyecto_dictado: "Proyecto dictado",
+  presupuesto_dictado: "Presupuesto dictado",
+  nota_dictada: "Nota dictada",
 };
 
 /** El valor del selector de proyecto que significa "gasto compartido". */

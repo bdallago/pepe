@@ -1411,6 +1411,9 @@ export type Database = {
         | "nota_de_adjunto"
         | "movimiento_dictado"
         | "leccion_dictada"
+        | "proyecto_dictado"
+        | "presupuesto_dictado"
+        | "nota_dictada"
       tipo_cliente: "particular" | "pyme" | "empresa"
       tipo_movimiento: "ingreso" | "egreso"
     }
@@ -1583,6 +1586,9 @@ export const Constants = {
         "nota_de_adjunto",
         "movimiento_dictado",
         "leccion_dictada",
+        "proyecto_dictado",
+        "presupuesto_dictado",
+        "nota_dictada",
       ],
       tipo_cliente: ["particular", "pyme", "empresa"],
       tipo_movimiento: ["ingreso", "egreso"],
