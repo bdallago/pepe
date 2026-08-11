@@ -450,15 +450,17 @@ export async function despachar(
         explícito, con el mismo helper y el mismo formato que usan
         `lecciones_tema` y `tema_estudio` para su pregunta de entidad.
 
-        La gracia es la misma: lo que vuelve del lado izquierdo es la
-        frase telegráfica original, así que `leerMovimiento()` la resuelve
-        con el regex y la segunda vuelta **no gasta ninguna llamada al
-        modelo** ni puede leer distinto lo que ya había leído bien.
+        La gracia es la misma, pero con una condición: cuando la frase es
+        telegráfica —el caso común— lo que vuelve del lado izquierdo es esa
+        forma, y `leerMovimiento()` la resuelve con el regex sin gastar
+        ninguna llamada al modelo. Si la frase original no era telegráfica
+        ("pagué 20 dólares de Claude Code ayer"), la segunda vuelta sí
+        vuelve a llamar al modelo, igual que la primera.
       */
-      const [argumentoCrudo, proyectoElegido] = partirArgumento(
+      const [argumentoSinSlug, slugElegido] = partirArgumento(
         decision.argumento,
       );
-      const texto = textoDelMovimiento(argumentoCrudo || null, frase);
+      const texto = textoDelMovimiento(argumentoSinSlug || null, frase);
 
       if (!texto) {
         return {
@@ -541,10 +543,10 @@ export async function despachar(
       const todosLosProyectos = proyectos ?? [];
 
       const nombrado =
-        proyectoElegido === COMPARTIDO_EN_PREGUNTA
+        slugElegido === COMPARTIDO_EN_PREGUNTA
           ? null
-          : proyectoElegido
-            ? resolverProyecto(proyectoElegido, todosLosProyectos)
+          : slugElegido
+            ? resolverProyecto(slugElegido, todosLosProyectos)
             : resolverProyecto(texto, todosLosProyectos);
 
       const proyecto = nombrado !== "ambiguo" ? nombrado : null;
@@ -559,7 +561,7 @@ export async function despachar(
         "Compartido" va **primero y con nombre**, porque es una elección
         legítima y frecuente (las suscripciones), no un default.
       */
-      if (!proyecto && !proyectoElegido && todosLosProyectos.length > 0) {
+      if (!proyecto && !slugElegido && todosLosProyectos.length > 0) {
         return {
           clase: "pregunta",
           titulo:
@@ -600,7 +602,7 @@ export async function despachar(
               : "por defecto: casi todo es egreso",
         categoria: categoria ? describirHistorico(categoria) : null,
         proyecto: proyecto
-          ? proyectoElegido
+          ? slugElegido
             ? "lo elegiste vos"
             : "lo nombraste en la frase"
           : "compartido, lo elegiste vos",

@@ -33,7 +33,22 @@ const cuerpoSchema = z
     frase: z.string().trim().max(1000),
     /** Cuando Beno elige una opción de una pregunta, ya sabemos el destino. */
     destino: z.enum(DESTINOS).optional(),
-    argumento: z.string().max(300).nullable().optional(),
+    /**
+     * Hasta 1100 y no 300, que es lo que acepta el argumento del
+     * recepcionista (`tipos.ts`).
+     *
+     * Este campo tiene dos orígenes distintos y solo uno es texto libre.
+     * Cuando Beno corrige el destino con "¿no era esto?", la caja manda la
+     * frase recortada a 300. Pero **las opciones de una pregunta las arma
+     * la app**, y algunas empaquetan el texto de trabajo junto con la
+     * entidad elegida (`"<texto> — <slug>"`, en `movimientos`,
+     * `lecciones_tema` y `tema_estudio`). Ese texto puede ser la frase
+     * entera, que llega hasta 1000: con el tope en 300 la opción volvía
+     * **400** y el movimiento se perdía, con Beno teniendo que retipearlo.
+     * Medido el 2026-08-11 con una frase de 298 caracteres, que produjo un
+     * argumento de 317.
+     */
+    argumento: z.string().max(1100).nullable().optional(),
     /** Solo lo manda la caja cuando Beno eligió una opción de confirmación. */
     confirmado: z.boolean().optional(),
     /** Los archivos que el browser ya subió al bucket `adjuntos`. */
