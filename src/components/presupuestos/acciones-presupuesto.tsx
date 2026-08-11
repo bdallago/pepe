@@ -66,10 +66,13 @@ import type { EstadoPresupuesto } from "@/lib/presupuestos-server";
  * después. Que un número cambie es tolerable; que cambie sin que nadie
  * lo dijera, no.
  *
- * Los dos repartos se simulan **en la fecha de hoy**, que es la ventana
- * en la que nace el proyecto: `participacionesEnFecha()` reparte entre
- * los que estaban vivos en cada fecha, así que un proyecto que empieza
- * hoy no toca el reparto de lo que ya pasó.
+ * Los dos repartos se simulan **en la fecha de inicio del formulario**,
+ * que es la que se va a insertar. Con la de hoy el aviso mentía apenas
+ * Beno retrocedía el campo: `participacionesEnFecha()` reparte entre los
+ * que estaban vivos en la fecha de cada gasto, así que una fecha vieja
+ * mete al proyecto nuevo en el reparto de gastos que ya pasaron —que es
+ * justo el caso sobre el que este recuadro existe para avisar— y los
+ * proyectos a listar son los de entonces, no los de hoy.
  */
 
 /**
@@ -108,6 +111,24 @@ function porcentaje(fraccion: number): string {
   return `${(fraccion * 100).toFixed(1)} %`;
 }
 
+/**
+ * La fecha más vieja en la que ya había algo que repartir.
+ *
+ * Es dónde se simula cuando el campo de inicio quedó vacío: eso inserta
+ * `fecha_inicio: null`, que para `estaVivo()` es **desde siempre**, así
+ * que el efecto del proyecto nuevo arranca en el gasto más viejo y no
+ * hoy. Sin proyectos con fecha, no hay histórico contra el cual avisar.
+ */
+function inicioDelHistorico(
+  projects: { fecha_inicio: string | null }[],
+): string {
+  const fechas = projects
+    .map((p) => p.fecha_inicio)
+    .filter((f): f is string => f !== null);
+  if (fechas.length === 0) return todayISO();
+  return fechas.reduce((a, b) => (a < b ? a : b));
+}
+
 export function AccionesPresupuesto({
   presupuestoId,
   estado,
@@ -142,23 +163,27 @@ export function AccionesPresupuesto({
   const resuelto = estado === "aceptado" || estado === "descartado";
 
   // ── El aviso del prorrateo, con números concretos ─────────────────
-  const hoy = todayISO();
-  const activos = projects.filter((p) => estaVivo(p));
-  const antes = participacionesEnFecha(projects, hoy);
+  //
+  // Todo se mira en `desdeCuando`, que es la fecha del campo de arriba
+  // —la misma que se inserta— y no hoy: con una fecha retroactiva el
+  // proyecto nuevo entra al reparto de gastos que ya pasaron, y los que
+  // tienen que aparecer en la lista son los que estaban vivos entonces.
+  const desdeCuando = fechaInicio || inicioDelHistorico(projects);
+  const activos = projects.filter((p) => estaVivo(p, desdeCuando));
+  const antes = participacionesEnFecha(projects, desdeCuando);
   const despues = participacionesEnFecha(
     [
       ...projects,
       {
         id: "__nuevo__",
-        // El proyecto nace hoy y sin fecha de cierre: es con lo que
-        // viene cargado el campo de arriba y lo que inserta
-        // `aceptarPresupuesto`.
-        fecha_inicio: hoy,
+        // Tal cual lo inserta `aceptarPresupuesto`: el campo vacío es
+        // `null`, y sin fecha de cierre el proyecto queda abierto.
+        fecha_inicio: fechaInicio || null,
         fecha_fin: null,
         peso_prorrateo: 1,
       },
     ],
-    hoy,
+    desdeCuando,
   );
 
   const proyectoVinculado = projectId
