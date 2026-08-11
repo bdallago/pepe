@@ -1,4 +1,5 @@
 import { montoEnMoneda, round2 } from "@/lib/fx";
+import { todayISO } from "@/lib/dates";
 import type { Moneda, Movement, Project } from "@/lib/supabase/database.types";
 
 /**
@@ -47,6 +48,70 @@ export function calcularParticipaciones(
       fraccion: Number(project.peso_prorrateo) / pesoTotal,
       indice: indice + 1,
       total: activos.length,
+    });
+  });
+
+  return map;
+}
+
+/** Lo mínimo que hace falta para saber si un proyecto entra a un reparto. */
+export type ProyectoParaReparto = Pick<
+  Project,
+  "id" | "fecha_inicio" | "fecha_fin" | "peso_prorrateo"
+>;
+
+/**
+ * ¿El proyecto estaba vivo en esta fecha?
+ *
+ * Es lo que antes decía la columna `activo`, pero preguntado contra una
+ * fecha en vez de contra el presente. Las dos puntas abiertas tienen
+ * significado y no son un caso degenerado: `fecha_inicio` nula es "desde
+ * siempre" y `fecha_fin` nula es "sigue abierto". Un proyecto sin ninguna
+ * de las dos participa de todo, que es exactamente el comportamiento
+ * anterior a este cambio — y por eso la migración de datos puede ser
+ * incremental sin romper nada en el medio.
+ *
+ * Las dos comparaciones son inclusivas: el día que abrís y el día que
+ * cerrás el proyecto está vivo.
+ */
+export function estaVivo(
+  proyecto: Pick<Project, "fecha_inicio" | "fecha_fin">,
+  fecha: string = todayISO(),
+): boolean {
+  if (proyecto.fecha_inicio && fecha < proyecto.fecha_inicio) return false;
+  if (proyecto.fecha_fin && fecha > proyecto.fecha_fin) return false;
+  return true;
+}
+
+/**
+ * Qué fracción del gasto compartido **de esa fecha** le toca a cada
+ * proyecto.
+ *
+ * ⚠ **La fecha no tiene default, y es a propósito.** Un default a hoy
+ * dejaría compilar cualquier call site que se olvide de pasarla,
+ * exactamente con el bug que este cambio viene a arreglar. Sin default,
+ * el compilador obliga a mirar los ocho.
+ *
+ * Si no hay ningún proyecto vivo esa fecha devuelve un mapa vacío: el
+ * gasto sigue contando en el balance general, simplemente no se reparte.
+ * Quien llama tiene que decirlo, no esconderlo.
+ */
+export function participacionesEnFecha(
+  projects: ProyectoParaReparto[],
+  fecha: string,
+): Map<string, ParticipacionProyecto> {
+  const vivos = projects.filter((p) => estaVivo(p, fecha));
+  const pesoTotal = vivos.reduce((sum, p) => sum + Number(p.peso_prorrateo), 0);
+
+  const map = new Map<string, ParticipacionProyecto>();
+  if (vivos.length === 0 || pesoTotal <= 0) return map;
+
+  vivos.forEach((project, indice) => {
+    map.set(project.id, {
+      projectId: project.id,
+      fraccion: Number(project.peso_prorrateo) / pesoTotal,
+      indice: indice + 1,
+      total: vivos.length,
     });
   });
 
