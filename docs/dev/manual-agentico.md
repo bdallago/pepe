@@ -281,6 +281,13 @@ opción visible, no el default mudo). La respuesta viaja como
 `"<texto> — <slug>"`, con el centinela `__compartido__`, y por eso
 `route.ts` acepta `argumento` hasta **1100** y no 300: con 300 una frase
 larga devolvía 400 y el movimiento se perdía.
+⚠ **La opción de "¿de qué proyecto?" prependea el slug al argumento.** No
+lo pega al final —ahí lo pierde la primera marca de ventana, porque
+`limpiarNombre()` corta el nombre en la marca— y no confía en que el
+`.replace()` del nombre leído encuentre algo: ese nombre viene limpiado
+(puntuación y espacios colapsados), así que contra `"cerrá  Mi   App  S.A."`
+no está literal en el texto. Sin la red, la app repregunta lo mismo para
+siempre.
 ⚠ **`agentes/proyectos.ts` es el módulo más frágil de esta área.** Lee sin
 modelo qué se le pide a un proyecto; llevó cuatro vueltas de revisión y
 tiene un bloque **"Lo que este lector no cubre"** al final con los bordes

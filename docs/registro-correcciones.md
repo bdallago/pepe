@@ -17,9 +17,9 @@ en ARS y en USD.
 **La ola 1 de `docs/superpowers/plans/2026-08-11-operar-conversando.md` está terminada en la rama
 `operar-conversando`, sin mergear ni desplegar** (tareas 1 a 6, con `typecheck`, `lint` y `build`
 limpios). Arregla dos bugs que **sí llegaron a producción** —el sumidero de bitácora y el proyecto
-del movimiento—, agrega el destino `proyecto` y recalibra el recepcionista midiendo. Falta **la ola
-2 entera**: las tres tools del conector. **La tarea 4 quedó sin la revisión de dos etapas** que sí
-tuvieron las tres anteriores.
+del movimiento—, agrega el destino `proyecto` y recalibra el recepcionista midiendo. Las seis
+tareas quedaron revisadas corriendo el código. Falta **la ola 2 entera**: las tres tools del
+conector.
 
 ⚠ **De esa rama salió el hallazgo metodológico de la sesión, y vale más que cualquiera de los
 bugs**: el plan se escribió midiendo y aun así trajo **ocho defectos**, todos silenciosos. Los
@@ -39,6 +39,12 @@ respaldando. Del lado de Pepe está todo hecho desde hace días.
 
 ## Historial
 
+- **2026-08-11 — La pregunta de "¿de qué proyecto?" podía quedarse sin salida.** `reemplazarNombre()`
+  hacía `.replace()` con el nombre **ya limpiado**, y `limpiarNombre()` cambia `[.,;:]` por espacios
+  y colapsa los repetidos: contra `"cerrá  Mi   App  S.A."` el nombre leído es `"Mi App S A"`, que no
+  está literal en el argumento. El replace devolvía el texto igual, la respuesta volvía a no resolver
+  y la app repreguntaba lo mismo **para siempre**. La red es prependear el slug, no appendearlo: al
+  final lo pierde la primera marca de ventana. *(En la rama `operar-conversando`.)*
 - **2026-08-11 — El prompt del recepcionista mandaba `"cerrá Proder"` a `retro` a propósito.** El
   bullet decía textual `Ej: "cerrá Proder"`, así que la colisión con el destino `proyecto` no era
   previsible: estaba escrita. Corregido para que `retro` hable del documento y no del cierre.
