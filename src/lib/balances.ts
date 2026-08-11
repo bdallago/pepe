@@ -161,6 +161,27 @@ export function repartirPorRestoMayor(
 }
 
 /**
+ * Reparte un monto entre los participantes de una fecha y devuelve, por
+ * proyecto, lo que le tocó.
+ *
+ * Es el **único** lugar donde se emparejan proyecto y parte, y por eso
+ * existe: `repartirPorRestoMayor()` devuelve un array posicional que hay
+ * que mantener alineado con el de ids, y desalinearlo es la única forma
+ * de que la plata termine en el proyecto equivocado. Devolviendo un mapa,
+ * ningún call site puede desalinearlo — ni el de la vista general ni el
+ * de la vista por proyecto.
+ */
+function repartirEntreParticipantes(
+  participaciones: Map<string, ParticipacionProyecto>,
+  monto: number,
+): Map<string, number> {
+  const ids = [...participaciones.keys()];
+  const fracciones = ids.map((id) => participaciones.get(id)!.fraccion);
+  const partes = repartirPorRestoMayor(monto, fracciones);
+  return new Map(ids.map((id, i) => [id, partes[i]]));
+}
+
+/**
  * Reparte los movimientos compartidos y devuelve, por proyecto, lo que le
  * tocó — más los que no encontraron a nadie.
  *
@@ -189,25 +210,23 @@ function repartirCompartidos(
 
   for (const movement of compartidos) {
     const participaciones = participacionesDe(movement.fecha);
-    const ids = [...participaciones.keys()];
 
-    if (ids.length === 0) {
+    if (participaciones.size === 0) {
       sinRepartir.push(movement);
       continue;
     }
 
-    const fracciones = ids.map((id) => participaciones.get(id)!.fraccion);
-    const partes = repartirPorRestoMayor(
+    const partes = repartirEntreParticipantes(
+      participaciones,
       montoEnMoneda(movement, moneda),
-      fracciones,
     );
 
-    ids.forEach((id, i) => {
+    for (const [id, parte] of partes) {
       const acc = porProyecto.get(id) ?? { ingresos: 0, egresos: 0 };
-      if (movement.tipo === "ingreso") acc.ingresos += partes[i];
-      else acc.egresos += partes[i];
+      if (movement.tipo === "ingreso") acc.ingresos += parte;
+      else acc.egresos += parte;
       porProyecto.set(id, acc);
-    });
+    }
   }
 
   for (const acc of porProyecto.values()) {
@@ -384,6 +403,15 @@ export function calcularBalances(
 /**
  * Balances acotados a un proyecto, incluyendo su porción prorrateada.
  * Es la vista por proyecto del spec.
+ *
+ * Reparte los compartidos **por resto mayor, igual que la vista general**,
+ * y eso no es un detalle de implementación: es lo que hace que las dos
+ * pantallas digan el mismo número. Acá se escalaba cada movimiento con
+ * `round2(monto * fraccion)` —el redondeo por fracción que el docstring
+ * del módulo señala como el que rompe el invariante— y la grilla de
+ * Proyectos terminaba diciendo US$ 330,96 donde la pantalla del proyecto
+ * decía US$ 330,91. Dos caminos de cálculo distintos para el mismo número
+ * se despegan; el reparto tiene que ser el mismo en los dos.
  */
 export function calcularBalancesProyecto(
   movements: Movement[],
@@ -408,8 +436,8 @@ export function calcularBalancesProyecto(
   const participacion = participacionesDe(todayISO()).get(projectId);
 
   // Se materializan los movimientos imputados al proyecto: los directos
-  // enteros y los compartidos escalados por su fracción. Son objetos
-  // efímeros para el cálculo, nunca se persisten.
+  // enteros y los compartidos por la parte que les tocó del reparto. Son
+  // objetos efímeros para el cálculo, nunca se persisten.
   const imputados: Movement[] = [];
 
   // ¿Alguno de los números que se van a mostrar lleva adentro la parte de
@@ -428,15 +456,26 @@ export function calcularBalancesProyecto(
     }
     if (m.project_id !== null) continue;
 
-    const parte = participacionesDe(m.fecha).get(projectId);
-    if (!parte) continue;
+    const participaciones = participacionesDe(m.fecha);
+    if (!participaciones.has(projectId)) continue;
 
     incluyeCompartidos = true;
 
+    // Las dos monedas se reparten por separado, cada una por resto mayor.
+    // No se deriva una de la otra por regla de tres: eso le devolvería a
+    // la moneda derivada el redondeo por fracción que acabamos de sacar
+    // y, con una tasa de por medio, además recalcularía un monto
+    // congelado. `monto_ars` y `monto_usd` vienen los dos de la base.
     imputados.push({
       ...m,
-      monto_ars: round2(Number(m.monto_ars) * parte.fraccion),
-      monto_usd: round2(Number(m.monto_usd) * parte.fraccion),
+      monto_ars: repartirEntreParticipantes(
+        participaciones,
+        Number(m.monto_ars),
+      ).get(projectId)!,
+      monto_usd: repartirEntreParticipantes(
+        participaciones,
+        Number(m.monto_usd),
+      ).get(projectId)!,
     });
   }
 
