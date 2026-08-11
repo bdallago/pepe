@@ -1,0 +1,30 @@
+-- ============================================================
+-- Se va `projects.activo`. La ventana es la única fuente de verdad.
+--
+-- Decidido con Beno el 2026-08-10, y el motivo es concreto: con las dos
+-- cosas guardadas existe el estado contradictorio de un proyecto marcado
+-- activo con el cierre vencido, que es exactamente el estado que él
+-- señaló como incorrecto al pedir esta feature.
+--
+-- No se deja como columna generada: la expresión tendría que depender de
+-- `current_date`, que no es inmutable y Postgres no lo acepta ahí. Y
+-- tampoco como caché mantenida por la app, que deriva en silencio el día
+-- que alguien escriba por afuera.
+--
+-- Lo que antes decía esta columna ahora lo dice `estaVivo()` en
+-- `src/lib/prorrateo.ts`, contra una fecha.
+--
+-- Las ventanas se cargaron en `20260810100000`. Esta migración va después
+-- a propósito, y no por prolijidad: entre las dos hay diecinueve commits
+-- de código que ya lee fechas, y **se aplica recién con ese código
+-- desplegado en producción**. Al revés habría una ventana en la que la
+-- app sigue pidiendo una columna que ya no existe: PostgREST contesta
+-- `42703` en `error` con `data: null`, y los call sites que no miran
+-- `.error` se quedan sin datos sin romperse. O sea, mintiendo.
+--
+-- `projects_user_activo_idx` (índice sobre `(user_id, activo)`, de
+-- `20260101000000_schema.sql:46`) se cae solo con la columna. No hace
+-- falta borrarlo aparte y por eso no aparece acá.
+-- ============================================================
+
+alter table public.projects drop column activo;

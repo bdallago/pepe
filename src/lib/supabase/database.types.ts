@@ -625,7 +625,6 @@ export type Database = {
       }
       projects: {
         Row: {
-          activo: boolean
           archivado_en: string | null
           color: string
           created_at: string
@@ -638,7 +637,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          activo?: boolean
           archivado_en?: string | null
           color?: string
           created_at?: string
@@ -651,7 +649,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          activo?: boolean
           archivado_en?: string | null
           color?: string
           created_at?: string
