@@ -240,20 +240,56 @@ completitud.
 | **Qué hace** | Beno escribe una frase, el **recepcionista** la clasifica y el **despachador** llama al especialista. |
 | **Dónde se usa** | Pantalla de inicio y **`Ctrl+J`** (no `Ctrl+K`: esa es la carga rápida). |
 | **Entrypoint** | `/api/agentes/interpretar`. |
-| **Lógica** | `lib/agentes/`: `tipos.ts` (13 destinos), `recepcionista.ts`, `cadena.ts`, `despacho.ts`, y la resolución determinística en `resolver.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts`. |
+| **Lógica** | `lib/agentes/`: `tipos.ts` (14 destinos), `recepcionista.ts`, `cadena.ts`, `despacho.ts`, y la resolución determinística en `resolver.ts`, `nombres.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts`, `proyectos.ts`. |
+
+⚠ **Al 2026-08-11 esta área está a mitad de camino, en la rama
+`operar-conversando` y sin mergear ni desplegar.** Lo que sigue describe
+el estado **de la rama**; `main` todavía tiene 13 destinos y no tiene
+salvaguarda de bitácora. El plan es
+`docs/superpowers/plans/2026-08-11-operar-conversando.md` y su sección
+"Correcciones de la ejecución" **gana sobre el código que figura en las
+tareas**.
 
 **Trampas.** ⚠ **El prompt del recepcionista es de vidrio: cuatro
 incidentes medidos** donde agregarle texto rompió casos que ni nombraba.
 Antes de tocarlo, medir; después, volver a medir. Si la regla se puede
-resolver con un test sobre un string, va en `despacho.ts`.
-⚠ **`bitacora` es el sumidero**: tiene el gancho léxico más ancho y es el
-único destino que escribe directo, así que un pedido no cubierto termina
-en una fila escrita. ⚠ Falta el destino `proyecto`; está en
-`docs/superpowers/specs/2026-08-10-operar-conversando-design.md`.
+resolver con un test sobre un string, va en `despacho.ts`. **Medir cuesta
+~8 minutos por corrida**: el prompt son ~2100 tokens contra un techo de
+5500/minuto, o sea 2 frases por minuto.
+⚠ **`bitacora` era el sumidero** —gancho léxico ancho + escribe directo—
+y por eso `agentes/bitacora.ts` tiene ahora `pareceAnotacion()`: menos de
+15 caracteres o menos de 3 palabras, **o** coincidencia **exacta** con el
+nombre o slug de un proyecto o track, y se pregunta en vez de escribir. El
+chequeo de nombre es exacto y **no** `resolverProyecto()`, que matchea
+parcial: con parcial, cualquier anotación que mencione un proyecto caería
+en la pregunta.
+⚠ **`confirmado` es el que corta el bucle** de esa pregunta. Viaja del
+browser al despachador y **no está en `decisionBase`** a propósito: si
+estuviera, la salida de un modelo podría apagar la salvaguarda.
 ⚠ **`despacho.ts` ya NO filtra el proyecto por estado** al resolver un
 movimiento dictado, y eso es deliberado: un gasto de un proyecto cerrado
 va a ese proyecto, que para eso se cerró en esa fecha y no en otra.
-Filtrar ahí lo mandaba a "Compartido" sin decir nada.
+⚠ **El proyecto de un movimiento sale del texto de trabajo entero**, no de
+la descripción extraída, y si no se sabe **se pregunta** (Compartido es una
+opción visible, no el default mudo). La respuesta viaja como
+`"<texto> — <slug>"`, con el centinela `__compartido__`, y por eso
+`route.ts` acepta `argumento` hasta **1100** y no 300: con 300 una frase
+larga devolvía 400 y el movimiento se perdía.
+⚠ **`agentes/proyectos.ts` es el módulo más frágil de esta área.** Lee sin
+modelo qué se le pide a un proyecto; llevó cuatro vueltas de revisión y
+tiene un bloque **"Lo que este lector no cubre"** al final con los bordes
+que quedaron a propósito. La causa de fondo está escrita ahí: hace tres
+pasadas sobre el string crudo con regex que sirven para propósitos
+opuestos. **Leé ese bloque antes de tocarlo.**
+⚠ **`leerFecha()` recorta al pasado salvo `{ futuro: true }`**, y el
+destino `proyecto` es el único que lo pasa. Sin esa opción, `"30/12"` se
+lee como diciembre **del año pasado** y `"2027-01-15"` como hoy — bien
+para bitácora y movimientos, que registran lo que ya pasó; catastrófico y
+silencioso para la ventana de un proyecto.
+⚠ **`EXPRESIONES_DE_FECHA` se exporta desde `fechas.ts`** y se deriva de
+las mismas listas que `REGLAS`. Hubo una copia a mano y se separó en los
+dos sentidos: nació sin la regla de días de la semana y más ancha que el
+original. No la vuelvas a copiar.
 
 ---
 
