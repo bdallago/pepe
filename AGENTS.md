@@ -116,25 +116,66 @@ con la cotización actual.**
 
 ### 2. El prorrateo se calcula al vuelo (`src/lib/prorrateo.ts`, `src/lib/balances.ts`)
 
-`project_id = null` es gasto compartido. Se reparte entre los proyectos
-**activos** por `peso_prorrateo`, **sin guardar filas duplicadas**.
+`project_id = null` es gasto compartido. Se reparte por `peso_prorrateo`
+entre los proyectos que estaban **vivos en la fecha de ese gasto**, **sin
+guardar filas duplicadas**.
 
-Invariante: `suma(balance de cada proyecto) === balance general`. Se
-sostiene con `repartirPorRestoMayor()`, que reparte centavos enteros —
-redondear cada fracción por separado lo rompe. La pantalla de Proyectos
-verifica el invariante en pantalla.
+No entre los activos de hoy, que era lo que hacía antes: usar la foto del
+presente para repartir todo el histórico hace que cerrar un proyecto
+reescriba retroactivamente cuánto costó cada uno de los otros. Un gasto
+de marzo se reparte entre los que existían en marzo y no cambia nunca
+más.
 
-Excepción real y documentada: sin proyectos activos no hay entre quiénes
-repartir. Eso sale por `Balances.compartidoSinRepartir` y la UI lo avisa.
+**La columna `activo` ya no se lee en ningún lado del código** (y está
+por borrarse de la base): la ventana `fecha_inicio`/`fecha_fin` es la
+única fuente de verdad. Con las dos cosas guardadas existía un estado
+contradictorio —un proyecto marcado activo con el cierre vencido— y no
+había forma de decidir cuál de las dos mandaba. Ojo con el nombre:
+`TotalPorProyecto.activo` sigue existiendo, pero ya no es una columna
+sino `estaVivo(project)` resuelto contra hoy, y sirve solo para atenuar
+al proyecto en la lista.
 
-⚠ **Esto está por cambiar y ya tiene spec y plan aprobados** (2026-08-10,
-sin implementar). El defecto: `calcularParticipaciones()` no recibe fecha,
-así que usa la foto de los proyectos activos de **hoy** para repartir
-**todo el histórico** — cerrar un proyecto reescribe retroactivamente
-cuánto costó cada uno de los otros. Pasa a repartirse entre los que
-estaban vivos **en la fecha de cada gasto**, y la columna `activo` se
-borra: la ventana `fecha_inicio`/`fecha_fin` queda como única fuente de
-verdad. Ver `docs/superpowers/plans/2026-08-10-prorrateo-por-fecha.md`.
+`estaVivo(proyecto, fecha)` es **inclusivo en las dos puntas**: el día
+que abrís y el día que cerrás, el proyecto está vivo. Las puntas nulas
+tienen significado propio — sin `fecha_inicio` es "desde siempre", sin
+`fecha_fin` es "sigue abierto" —, que es lo que permitió cargar las
+ventanas proyecto por proyecto sin ningún estado intermedio roto.
+
+`calcularParticipaciones(projects, fecha)` **no tiene default en
+`fecha`, a propósito.** Un default a hoy dejaría compilar cualquier call
+site que se olvide de pasarla, y ese call site repartiría el histórico
+entero con la foto de hoy: exactamente el bug original, y de los que no
+se ven, porque no falla — contesta números plausibles. Sin default no
+compila. Como los compartidos caen en muchas menos fechas distintas que
+movimientos, quien recorre movimientos usa `memoParticipaciones()` en vez
+de recalcular el mapa por fila.
+
+Invariante: `suma(balance de cada proyecto) === balance general`. Sigue
+en pie, y lo sostiene `repartirPorRestoMayor()`, que reparte centavos
+enteros — redondear cada fracción por separado lo rompe. La pantalla de
+Proyectos verifica el invariante en pantalla.
+
+La excepción dejó de ser global y pasó a ser **por movimiento**: antes
+era "no hay proyectos activos", ahora es "la fecha de este gasto no cae
+en la ventana de nadie". Por eso además de `compartidoSinRepartir` (el
+monto) hay `movimientosSinRepartir` (**cuáles**): un aviso que dice que
+faltan $27.000 sin decir de qué no se puede accionar.
+
+En la pantalla de Ajustes el **botón** de cerrar/reabrir mira
+`fecha_fin`, mientras el **badge** mira `estaVivo()`. Son dos preguntas
+distintas: el botón edita la ventana ("¿tiene cierre?"), el badge informa
+el presente ("¿está vivo hoy?"). Un proyecto cerrado hoy contesta que sí
+a las dos y las dos son ciertas. Si el botón mirara `estaVivo()`, un
+cierre no se podría deshacer hasta el día siguiente; no los unifiques.
+
+Un detalle que se ve al comparar pantallas y no es un bug nuevo:
+`calcularBalancesProyecto()` escala cada movimiento con
+`round2(monto * fraccion)` en vez de repartir por resto mayor, así que
+el balance de un proyecto puede diferir hasta unos centavos del que
+muestra la vista general (medido el 2026-08-11: 5 centavos en el peor
+caso, Proder en USD). Es pre-existente y creció al pasar de mitades a
+tercios. La salida buena es unificar el algoritmo, no aflojar la
+tolerancia de quien lo compare.
 
 ### 3. Moneda de origen vs. derivada
 

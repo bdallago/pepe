@@ -180,13 +180,25 @@ ahí se recalcula contra la fecha real de efectivización.
 ### 2. Los gastos compartidos se prorratean al vuelo
 
 Un movimiento sin proyecto (`project_id = null`) es compartido: sirve a
-todos los proyectos. En las vistas por proyecto se reparte entre los
-**activos**, ponderado por su `peso_prorrateo`.
+todos los proyectos. En las vistas por proyecto se reparte entre los que
+estaban **abiertos en la fecha de ese gasto**, ponderado por su
+`peso_prorrateo`.
+
+Cada proyecto tiene una ventana: cuándo arrancó y cuándo cerró (sin fecha
+de cierre, sigue abierto). Un gasto compartido de marzo se reparte entre
+los que existían en marzo, y sigue diciendo lo mismo dentro de un año.
+Repartirlo entre los proyectos abiertos hoy haría que cerrar uno cambie
+retroactivamente cuánto costaron los otros.
 
 El reparto se calcula en cada consulta, **nunca se guardan filas
-duplicadas**. El reparto usa el método de resto mayor sobre centavos
-enteros, así la suma de los balances por proyecto da exactamente el
-balance general (la pantalla de Proyectos verifica y muestra ese chequeo).
+duplicadas**. Usa el método de resto mayor sobre centavos enteros, así la
+suma de los balances por proyecto da exactamente el balance general (la
+pantalla de Proyectos verifica y muestra ese chequeo).
+
+Si un gasto compartido cae en una fecha en la que no había ningún
+proyecto abierto no hay entre quiénes repartirlo: cuenta igual en el
+balance general y la app lo avisa diciendo cuáles son esos movimientos,
+en vez de mostrar números que no cierran.
 
 ### 3. El importe real es el que escribiste
 
