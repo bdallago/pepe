@@ -1,5 +1,5 @@
 import { montoEnMoneda, round2 } from "@/lib/fx";
-import { todayISO } from "@/lib/dates";
+import { addDays, todayISO } from "@/lib/dates";
 import type { Moneda, Movement, Project } from "@/lib/supabase/database.types";
 
 /**
@@ -116,6 +116,34 @@ export function participacionesEnFecha(
   });
 
   return map;
+}
+
+/**
+ * Las fechas, de `desde` en adelante, donde el reparto **puede** cambiar:
+ * el propio `desde`, cada apertura de proyecto y **el día siguiente** a
+ * cada cierre. Entre dos cortes consecutivos el conjunto de proyectos
+ * vivos es el mismo, así que el reparto también.
+ *
+ * Vive acá y no en la pantalla que lo usa porque es una consecuencia
+ * directa de que los dos bordes de `estaVivo()` sean inclusivos: el día
+ * que cerrás el proyecto todavía participa, y por eso el corte es el
+ * día después. Si alguna vez ese borde pasa a ser exclusivo, hay que
+ * mover el `addDays(fin, 1)` con él — enterrado en un componente, se
+ * rompería en silencio.
+ *
+ * No hace falta mirar las fechas de los movimientos: un gasto no cambia
+ * el reparto, solo lo sufre.
+ */
+export function cortesDelReparto(
+  projects: ProyectoParaReparto[],
+  desde: string,
+): string[] {
+  const cortes = new Set<string>([desde]);
+  for (const p of projects) {
+    if (p.fecha_inicio) cortes.add(p.fecha_inicio);
+    if (p.fecha_fin) cortes.add(addDays(p.fecha_fin, 1));
+  }
+  return [...cortes].filter((f) => f >= desde).sort();
 }
 
 /**

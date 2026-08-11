@@ -50,8 +50,9 @@ import {
   marcarEnviado,
   type DescarteInput,
 } from "@/lib/actions/presupuestos";
-import { addDays, todayISO } from "@/lib/dates";
+import { todayISO } from "@/lib/dates";
 import {
+  cortesDelReparto,
   participacionesEnFecha,
   type ProyectoParaReparto,
 } from "@/lib/prorrateo";
@@ -79,10 +80,12 @@ import type { EstadoPresupuesto } from "@/lib/presupuestos-server";
  *
  * Y dentro de esa ventana el efecto **no tiene por qué ser uno solo**:
  * si hay proyectos que abren o cierran en el medio, el reparto cambia
- * varias veces. `efectoDelProyectoNuevo()` los recorre todos, para que
- * la lista sea la unión de los afectados —si no, uno que abre después de
- * la fecha elegida perdía su parte sin aparecer— y para que los números
- * salgan como rango en vez de fingir una foto única.
+ * varias veces y ningún par "antes → después" lo representa.
+ * `cortesDelReparto()` detecta ese caso y ahí el panel lo dice en
+ * palabras. Hubo un intento de mostrarlo como rangos y **se descartó
+ * midiendo**: el 01/04 alcanza a los 15 compartidos y el 01/06 a 7, y
+ * los dos imprimían exactamente los mismos porcentajes. Un número que no
+ * se mueve cuando movés la entrada parece una medición y no lo es.
  */
 
 /**
@@ -143,83 +146,6 @@ function inicioMasViejo(projects: { fecha_inicio: string | null }[]): string {
   return fechas.reduce((a, b) => (a < b ? a : b));
 }
 
-/**
- * Las fechas, de `desde` en adelante, donde el reparto **puede** cambiar:
- * el arranque, cada apertura de proyecto y el día siguiente a cada
- * cierre. Entre dos cortes consecutivos el conjunto de proyectos vivos es
- * el mismo, así que el reparto también.
- *
- * Se calcula sobre los bordes de los proyectos y no sobre las fechas de
- * los gastos compartidos porque este componente no tiene movimientos —ni
- * los tiene su página—, y traerlos para previsualizar sería una consulta
- * nueva por un recuadro. La diferencia es que un tramo sin ningún gasto
- * compartido igual cuenta como cambio: falla avisando de más, que es el
- * lado barato.
- */
-function cortesDelReparto(
-  projects: ProyectoParaReparto[],
-  desde: string | null,
-): string[] {
-  const cortes = new Set<string>([desde ?? inicioMasViejo(projects)]);
-  for (const p of projects) {
-    if (p.fecha_inicio) cortes.add(p.fecha_inicio);
-    if (p.fecha_fin) cortes.add(addDays(p.fecha_fin, 1));
-  }
-  return [...cortes].filter((f) => desde === null || f >= desde).sort();
-}
-
-/**
- * Qué le pasa al reparto si nace este proyecto, mirado en **todas** las
- * fechas donde el reparto cambia dentro de su ventana y no en una sola.
- *
- * Una foto sola miente por omisión: con una fecha de inicio retroactiva
- * el proyecto nuevo entra en varios repartos distintos, y los proyectos
- * que abren después de esa fecha —Gentius, hoy— no aparecerían en la
- * lista aunque pierdan su parte igual. Por eso cada proyecto junta
- * **todas** sus fracciones, y `varios` avisa cuando no hay un único par
- * "antes → después" que contar.
- */
-function efectoDelProyectoNuevo(
-  projects: ProyectoParaReparto[],
-  nuevo: ProyectoParaReparto,
-): {
-  porProyecto: Map<string, { antes: number[]; despues: number[] }>;
-  varios: boolean;
-} {
-  const conNuevo = [...projects, nuevo];
-  const porProyecto = new Map<string, { antes: number[]; despues: number[] }>();
-
-  for (const fecha of cortesDelReparto(conNuevo, nuevo.fecha_inicio)) {
-    const antes = participacionesEnFecha(projects, fecha);
-    const despues = participacionesEnFecha(conNuevo, fecha);
-
-    // Se recorre `despues` para que la lista sea la unión de los que
-    // participan en alguna de esas fechas, no los de una en particular.
-    for (const [id, participacion] of despues) {
-      const acc = porProyecto.get(id) ?? { antes: [], despues: [] };
-      acc.antes.push(antes.get(id)?.fraccion ?? 0);
-      acc.despues.push(participacion.fraccion);
-      porProyecto.set(id, acc);
-    }
-  }
-
-  const varios = [...porProyecto.values()].some(
-    (v) => new Set(v.antes).size > 1 || new Set(v.despues).size > 1,
-  );
-
-  return { porProyecto, varios };
-}
-
-/** Un valor, o el rango cuando el reparto no es el mismo en todo el tramo. */
-function porcentajes(fracciones: number[]): string {
-  if (fracciones.length === 0) return porcentaje(0);
-  const min = Math.min(...fracciones);
-  const max = Math.max(...fracciones);
-  return min === max
-    ? porcentaje(min)
-    : `${porcentaje(min)} a ${porcentaje(max)}`;
-}
-
 export function AccionesPresupuesto({
   presupuestoId,
   estado,
@@ -258,15 +184,28 @@ export function AccionesPresupuesto({
   // La ventana la abre la fecha del campo de arriba —la misma que se
   // inserta— y no hoy: con una fecha retroactiva el proyecto nuevo entra
   // al reparto de gastos que ya pasaron.
-  const efecto = efectoDelProyectoNuevo(projects, {
-    id: "__nuevo__",
-    // Tal cual lo inserta `aceptarPresupuesto`: el campo vacío es
-    // `null`, y sin fecha de cierre el proyecto queda abierto.
-    fecha_inicio: fechaInicio || null,
-    fecha_fin: null,
-    peso_prorrateo: 1,
-  });
-  const activos = projects.filter((p) => efecto.porProyecto.has(p.id));
+  const conNuevo: ProyectoParaReparto[] = [
+    ...projects,
+    {
+      id: "__nuevo__",
+      // Tal cual lo inserta `aceptarPresupuesto`: el campo vacío es
+      // `null`, y sin fecha de cierre el proyecto queda abierto.
+      fecha_inicio: fechaInicio || null,
+      fecha_fin: null,
+      peso_prorrateo: 1,
+    },
+  ];
+  const desde = fechaInicio || inicioMasViejo(projects);
+  const antes = participacionesEnFecha(projects, desde);
+  const despues = participacionesEnFecha(conNuevo, desde);
+  const participantes = projects.filter((p) => despues.has(p.id));
+
+  // Los cortes se usan **solo como detector**. Si el reparto cambia más
+  // de una vez en la ventana, no hay un par "antes → después" que
+  // mostrar: los porcentajes de una sola fecha no son el efecto: el 01/04
+  // y el 01/06 alcanzan a 15 y a 7 gastos, y darían los mismos números.
+  // Ahí el panel dice lo que pasa en palabras y no finge una medición.
+  const variosRepartos = cortesDelReparto(conNuevo, desde).length > 1;
 
   const proyectoVinculado = projectId
     ? (projects.find((p) => p.id === projectId) ?? null)
@@ -468,58 +407,51 @@ export function AccionesPresupuesto({
                 */}
                 <div className="space-y-2 rounded-md border border-[var(--mango)] p-3 text-xs">
                   <p className="font-medium text-[var(--mango)]">
-                    Un proyecto activo más cambia el reparto de los gastos
-                    compartidos, y hacia atrás.
+                    Un proyecto más cambia el reparto de los gastos
+                    compartidos.
                   </p>
                   <p className="text-muted-foreground">
-                    El prorrateo reparte entre los proyectos activos de hoy y
-                    ese reparto se aplica a todo el histórico. Tu balance
-                    general no se mueve —suma el compartido una sola vez—, pero
-                    los balances por proyecto sí.
+                    Cada gasto compartido se reparte entre los proyectos que
+                    estaban abiertos el día que lo cargaste, así que este toca
+                    solo los que caen dentro de su ventana: con la fecha de
+                    arriba, de ahí en adelante. Tu balance general no se mueve
+                    —suma el compartido una sola vez—, pero los balances por
+                    proyecto sí.
                   </p>
-                  {activos.length > 0 ? (
-                    <>
-                      <ul className="space-y-0.5">
-                        {activos.map((p) => (
-                          <li key={p.id} className="flex justify-between gap-4">
-                            <span className="truncate">{p.nombre}</span>
-                            <span className="cifra shrink-0">
-                              {porcentajes(
-                                efecto.porProyecto.get(p.id)?.antes ?? [],
-                              )}{" "}
-                              →{" "}
-                              {porcentajes(
-                                efecto.porProyecto.get(p.id)?.despues ?? [],
-                              )}
-                            </span>
-                          </li>
-                        ))}
-                        <li className="flex justify-between gap-4 font-medium">
-                          <span className="truncate">
-                            {nombreProyecto || "el proyecto nuevo"}
-                          </span>
+                  {variosRepartos ? (
+                    <p className="text-muted-foreground">
+                      Con esa fecha de inicio no hay un reparto solo que
+                      mostrarte: entre esa fecha y hoy hay proyectos que abren
+                      y otros que cierran, y cada gasto compartido se reparte
+                      según cómo estaban las cosas ese día. Se van a mover los
+                      balances de todos los que estuvieron abiertos en el
+                      medio.
+                    </p>
+                  ) : participantes.length > 0 ? (
+                    <ul className="space-y-0.5">
+                      {participantes.map((p) => (
+                        <li key={p.id} className="flex justify-between gap-4">
+                          <span className="truncate">{p.nombre}</span>
                           <span className="cifra shrink-0">
-                            — →{" "}
-                            {porcentajes(
-                              efecto.porProyecto.get("__nuevo__")?.despues ?? [],
-                            )}
+                            {porcentaje(antes.get(p.id)?.fraccion ?? 0)} →{" "}
+                            {porcentaje(despues.get(p.id)?.fraccion ?? 0)}
                           </span>
                         </li>
-                      </ul>
-                      {efecto.varios ? (
-                        <p className="text-muted-foreground">
-                          Con esa fecha de inicio el reparto no es uno solo:
-                          hay proyectos que abren o cierran en el medio, así
-                          que cada gasto compartido se reparte según cómo
-                          estaban las cosas el día que lo cargaste. Por eso
-                          los números van como rango.
-                        </p>
-                      ) : null}
-                    </>
+                      ))}
+                      <li className="flex justify-between gap-4 font-medium">
+                        <span className="truncate">
+                          {nombreProyecto || "el proyecto nuevo"}
+                        </span>
+                        <span className="cifra shrink-0">
+                          — → {porcentaje(despues.get("__nuevo__")?.fraccion ?? 0)}
+                        </span>
+                      </li>
+                    </ul>
                   ) : (
                     <p className="text-muted-foreground">
-                      Hoy no hay proyectos activos, así que el compartido no se
-                      reparte entre nadie. Con este, pasa a llevárselo entero.
+                      Con esa fecha de inicio no hay ningún otro proyecto
+                      abierto, así que el compartido no se reparte entre nadie.
+                      Con este, pasa a llevárselo entero.
                     </p>
                   )}
                 </div>
