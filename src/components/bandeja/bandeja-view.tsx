@@ -199,7 +199,8 @@ function leerZombie(payload: Json): Zombie | null {
  *
  * `compartido` y "no vino `project_id`" son dos cosas distintas y por eso
  * son dos campos: el primero es una decisión —se reparte entre los
- * proyectos activos— y el segundo es que Claude no supo a cuál va. En la
+ * proyectos que estaban abiertos en la fecha del gasto— y el segundo es
+ * que Claude no supo a cuál va. En la
  * base los dos terminan en `project_id = null`, así que confundirlos
  * guardaría "no sé de quién es" como "es de todos", en silencio.
  */

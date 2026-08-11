@@ -364,8 +364,8 @@ export async function aceptarNotaDeAdjunto(
  *
  * `compartido: true` es distinto de "no vino `project_id`": el primero
  * es una decisión —el gasto se reparte entre los proyectos que estaban
- * abiertos en su fecha— y el
- * segundo es una pregunta sin responder. En la base los dos terminan en
+ * abiertos en su fecha— y el segundo es una pregunta sin responder. En
+ * la base los dos terminan en
  * `project_id = null`, así que si se confundieran, "no sé de quién es"
  * se guardaría como "es de todos" sin que nadie lo note.
  */
