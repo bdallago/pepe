@@ -1,8 +1,10 @@
-import { monthKey, monthRange } from "@/lib/dates";
+import { monthKey, monthRange, todayISO } from "@/lib/dates";
 import { montoEnMoneda, round2 } from "@/lib/fx";
 import {
-  calcularParticipaciones,
+  estaVivo,
+  participacionesEnFecha,
   type ParticipacionProyecto,
+  type ProyectoParaReparto,
 } from "@/lib/prorrateo";
 import type {
   Category,
@@ -79,10 +81,17 @@ export interface Balances {
   ingresosPorCategoria: TotalPorCategoria[];
   porProyecto: TotalPorProyecto[];
   /**
-   * Egresos compartidos que no se pudieron repartir por no haber
-   * proyectos activos. Si es > 0, la suma por proyecto no llega al general.
+   * Neto de los egresos compartidos que no se pudieron repartir porque su
+   * fecha no cae en la ventana de ningún proyecto. Si es distinto de 0,
+   * la suma por proyecto no llega al general.
    */
   compartidoSinRepartir: number;
+  /**
+   * Cuáles fueron. Antes este caso era todo o nada y alcanzaba con el
+   * monto; ahora es por movimiento, y un aviso que dice "hay $27.000 sin
+   * repartir" sin decir de qué no se puede accionar.
+   */
+  movimientosSinRepartir: Movement[];
   cantidadMovimientos: number;
 }
 
@@ -149,33 +158,60 @@ export function repartirPorRestoMayor(
 }
 
 /**
- * Reparte los movimientos compartidos entre los proyectos activos y
- * devuelve, por proyecto, el monto imputado de cada movimiento.
+ * Reparte los movimientos compartidos y devuelve, por proyecto, lo que le
+ * tocó — más los que no encontraron a nadie.
+ *
+ * El conjunto de participantes se calcula **por fecha**, no una vez para
+ * todos: es el punto entero de este módulo. Se memoiza porque los 15
+ * compartidos de hoy caen en muchas menos fechas distintas, y recalcular
+ * el mapa por movimiento sería trabajo repetido sin ninguna ganancia.
+ *
+ * Un movimiento cuya fecha no cae en la ventana de ningún proyecto sale
+ * por `sinRepartir` en vez de desaparecer. Antes ese caso era global —o
+ * había proyectos activos o no los había—; ahora es por movimiento, así
+ * que la UI puede decir **cuáles** y no solo cuánto.
  */
 function repartirCompartidos(
   compartidos: Movement[],
-  participaciones: Map<string, ParticipacionProyecto>,
+  projects: ProyectoParaReparto[],
   moneda: Moneda,
-): Map<string, { ingresos: number; egresos: number }> {
+): {
+  porProyecto: Map<string, { ingresos: number; egresos: number }>;
+  sinRepartir: Movement[];
+} {
   const porProyecto = new Map<string, { ingresos: number; egresos: number }>();
+  const sinRepartir: Movement[] = [];
 
-  const ids = [...participaciones.keys()];
-  if (ids.length === 0) return porProyecto;
-
-  for (const id of ids) porProyecto.set(id, { ingresos: 0, egresos: 0 });
-
-  const fracciones = ids.map((id) => participaciones.get(id)!.fraccion);
+  const cache = new Map<string, Map<string, ParticipacionProyecto>>();
+  const participacionesDe = (fecha: string) => {
+    let p = cache.get(fecha);
+    if (!p) {
+      p = participacionesEnFecha(projects, fecha);
+      cache.set(fecha, p);
+    }
+    return p;
+  };
 
   for (const movement of compartidos) {
+    const participaciones = participacionesDe(movement.fecha);
+    const ids = [...participaciones.keys()];
+
+    if (ids.length === 0) {
+      sinRepartir.push(movement);
+      continue;
+    }
+
+    const fracciones = ids.map((id) => participaciones.get(id)!.fraccion);
     const partes = repartirPorRestoMayor(
       montoEnMoneda(movement, moneda),
       fracciones,
     );
 
     ids.forEach((id, i) => {
-      const acc = porProyecto.get(id)!;
+      const acc = porProyecto.get(id) ?? { ingresos: 0, egresos: 0 };
       if (movement.tipo === "ingreso") acc.ingresos += partes[i];
       else acc.egresos += partes[i];
+      porProyecto.set(id, acc);
     });
   }
 
@@ -184,7 +220,7 @@ function repartirCompartidos(
     acc.egresos = round2(acc.egresos);
   }
 
-  return porProyecto;
+  return { porProyecto, sinRepartir };
 }
 
 function agruparPorCategoria(
@@ -273,14 +309,9 @@ export function calcularBalances(
   const filtrados = filtrarMovimientos(movements, filtros);
 
   const efectuados = filtrados.filter((m) => m.estado === "efectuado");
-  const participaciones = calcularParticipaciones(projects);
 
   const compartidos = filtrados.filter((m) => m.project_id === null);
-  const repartoCompartidos = repartirCompartidos(
-    compartidos,
-    participaciones,
-    moneda,
-  );
+  const reparto = repartirCompartidos(compartidos, projects, moneda);
 
   const directosPorProyecto = new Map<
     string,
@@ -304,7 +335,7 @@ export function calcularBalances(
       ingresos: 0,
       egresos: 0,
     };
-    const compartido = repartoCompartidos.get(project.id) ?? {
+    const compartido = reparto.porProyecto.get(project.id) ?? {
       ingresos: 0,
       egresos: 0,
     };
@@ -316,23 +347,21 @@ export function calcularBalances(
       projectId: project.id,
       nombre: project.nombre,
       color: project.color,
-      activo: project.activo,
+      activo: estaVivo(project),
       ingresos,
       egresos,
       balance: round2(ingresos - egresos),
     };
   });
 
-  // Si no hay proyectos activos, lo compartido queda sin imputar.
-  const compartidoSinRepartir =
-    participaciones.size === 0
-      ? round2(
-          compartidos.reduce((sum, m) => {
-            const monto = montoEnMoneda(m, moneda);
-            return sum + (m.tipo === "ingreso" ? -monto : monto);
-          }, 0),
-        )
-      : 0;
+  // Los que no encontraron dueño, netos: los egresos suman y los ingresos
+  // restan, igual que en un balance.
+  const compartidoSinRepartir = round2(
+    reparto.sinRepartir.reduce((sum, m) => {
+      const monto = montoEnMoneda(m, moneda);
+      return sum + (m.tipo === "ingreso" ? -monto : monto);
+    }, 0),
+  );
 
   return {
     efectuado: sumarTotales(efectuados, moneda),
@@ -352,6 +381,7 @@ export function calcularBalances(
     ),
     porProyecto: porProyecto.sort((a, b) => b.balance - a.balance),
     compartidoSinRepartir,
+    movimientosSinRepartir: reparto.sinRepartir,
     cantidadMovimientos: filtrados.length,
   };
 }
@@ -368,9 +398,23 @@ export function calcularBalancesProyecto(
   moneda: Moneda,
   filtros: FiltrosBalance,
 ): Balances & { participacion: ParticipacionProyecto | undefined } {
-  const participaciones = calcularParticipaciones(projects);
-  const participacion = participaciones.get(projectId);
   const filtrados = filtrarMovimientos(movements, filtros);
+
+  const cache = new Map<string, Map<string, ParticipacionProyecto>>();
+  const participacionesDe = (fecha: string) => {
+    let p = cache.get(fecha);
+    if (!p) {
+      p = participacionesEnFecha(projects, fecha);
+      cache.set(fecha, p);
+    }
+    return p;
+  };
+
+  // La participación de HOY, para la etiqueta "Compartido (1/3)" del
+  // encabezado. Ojo: con reparto por fecha, dos movimientos de la misma
+  // pantalla pueden haberse repartido entre conjuntos distintos, así que
+  // esta etiqueta describe el presente y no cada fila.
+  const participacion = participacionesDe(todayISO()).get(projectId);
 
   // Se materializan los movimientos imputados al proyecto: los directos
   // enteros y los compartidos escalados por su fracción. Son objetos
@@ -382,13 +426,16 @@ export function calcularBalancesProyecto(
       imputados.push(m);
       continue;
     }
-    if (m.project_id === null && participacion) {
-      imputados.push({
-        ...m,
-        monto_ars: round2(Number(m.monto_ars) * participacion.fraccion),
-        monto_usd: round2(Number(m.monto_usd) * participacion.fraccion),
-      });
-    }
+    if (m.project_id !== null) continue;
+
+    const parte = participacionesDe(m.fecha).get(projectId);
+    if (!parte) continue;
+
+    imputados.push({
+      ...m,
+      monto_ars: round2(Number(m.monto_ars) * parte.fraccion),
+      monto_usd: round2(Number(m.monto_usd) * parte.fraccion),
+    });
   }
 
   const efectuados = imputados.filter((m) => m.estado === "efectuado");
@@ -411,6 +458,7 @@ export function calcularBalancesProyecto(
     ),
     porProyecto: [],
     compartidoSinRepartir: 0,
+    movimientosSinRepartir: [],
     cantidadMovimientos: imputados.length,
     participacion,
   };
