@@ -762,6 +762,66 @@ export async function aceptarProyectoDictado(itemId: string): Promise<
   return ok({ projectId: creado.data.id, quoteNumero, avisoPresupuesto });
 }
 
+/**
+ * Acepta un presupuesto dictado: lo crea de verdad, en `borrador`.
+ *
+ * Toda la lógica está en `crearPresupuestoDesdeDictado()`, compartida con
+ * `aceptarProyectoDictado()`: acá solo se valida el ítem y se lo cierra.
+ */
+export async function aceptarPresupuestoDictado(
+  itemId: string,
+): Promise<ActionResult<{ numero: number }>> {
+  const idParseado = uuid.safeParse(itemId);
+  if (!idParseado.success) return fail("Identificador inválido.");
+
+  const { supabase } = await requireSession();
+
+  const { data: item, error: errorLectura } = await supabase
+    .from("inbox")
+    .select("id, tipo, estado, payload")
+    .eq("id", idParseado.data)
+    .maybeSingle();
+
+  if (errorLectura) return fail(mensajeDeError(errorLectura));
+  if (!item) return fail("No encontré esa propuesta.");
+  if (item.tipo !== "presupuesto_dictado") {
+    return fail("Esa propuesta no es un presupuesto.");
+  }
+  if (item.estado !== "pendiente" && item.estado !== "pospuesto") {
+    return fail("Esa propuesta ya estaba resuelta.");
+  }
+
+  const payload = presupuestoDictadoPayloadSchema.safeParse(item.payload);
+  if (!payload.success) {
+    return fail("La propuesta guardada está incompleta. Rechazala.");
+  }
+
+  const creado = await crearPresupuestoDesdeDictado(payload.data);
+  // El mensaje de "no cargaste tu tarifa hora" llega tal cual: es
+  // accionable y Beno está a un click de Ajustes. Y el ítem **queda en la
+  // bandeja**, porque el cierre viene después de este return.
+  if (!creado.ok) return fail(creado.error);
+
+  const { error: errorCierre } = await supabase
+    .from("inbox")
+    .update({
+      estado: "aceptado",
+      resuelto_en: new Date().toISOString(),
+      payload: {
+        ...(item.payload as Record<string, unknown>),
+        quote_id: creado.data.id,
+        quote_numero: creado.data.numero,
+      },
+      clave_dedupe: null,
+    })
+    .eq("id", idParseado.data);
+
+  if (errorCierre) return fail(mensajeDeError(errorCierre));
+
+  revalidatePath("/", "layout");
+  return ok({ numero: creado.data.numero });
+}
+
 /** Descarta la propuesta. La entrada de bitácora queda intacta. */
 export async function rechazarItemBandeja(
   itemId: string,

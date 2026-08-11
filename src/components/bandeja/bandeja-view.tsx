@@ -20,6 +20,7 @@ import {
   aceptarLeccion,
   aceptarMovimientoDictado,
   aceptarNotaDeAdjunto,
+  aceptarPresupuestoDictado,
   aceptarProyectoDictado,
   aceptarZombie,
   descartarErrorBandeja,
@@ -605,8 +606,14 @@ export function BandejaView({
   const esNotaDictada = actual?.tipo === "nota_dictada";
   const esMovimiento = actual?.tipo === "movimiento_dictado";
   const esProyecto = actual?.tipo === "proyecto_dictado";
+  const esPresupuesto = actual?.tipo === "presupuesto_dictado";
   const propuesta =
-    actual && !esZombie && !esNota && !esMovimiento && !esProyecto
+    actual &&
+    !esZombie &&
+    !esNota &&
+    !esMovimiento &&
+    !esProyecto &&
+    !esPresupuesto
       ? leerPropuesta(actual.payload)
       : null;
   const zombie = actual && esZombie ? leerZombie(actual.payload) : null;
@@ -615,6 +622,8 @@ export function BandejaView({
     actual && esMovimiento ? leerMovimiento(actual.payload) : null;
   const proyectoDictado =
     actual && esProyecto ? leerProyectoDictado(actual.payload) : null;
+  const presupuestoDictado =
+    actual && esPresupuesto ? leerPresupuestoDictado(actual.payload) : null;
   const esError = actual?.estado === "error";
 
   // Falta el proyecto y hay que elegirlo. Pasa solo con lo que entró por
@@ -631,6 +640,10 @@ export function BandejaView({
     // proyecto. Sin esta línea el selector aparecería y bloquearía el
     // botón de aceptar para siempre.
     !esProyecto &&
+    // Un presupuesto en borrador NO cuelga de ningún proyecto: el check
+    // `(estado = 'aceptado') = (project_id is not null)` lo prohíbe. El
+    // proyecto se elige al aceptarlo, desde su pantalla.
+    !esPresupuesto &&
     (esNota ? Boolean(nota) : Boolean(propuesta)) &&
     !proyectoDelPayload;
   const projectId = proyectoDelPayload ?? proyectoElegido ?? null;
@@ -747,6 +760,16 @@ export function BandejaView({
       return;
     }
 
+    if (esPresupuesto) {
+      if (!presupuestoDictado) return;
+      resolver(
+        actual,
+        () => aceptarPresupuestoDictado(actual.id),
+        "Presupuesto creado en borrador.",
+      );
+      return;
+    }
+
     // Falta elegir el proyecto: el botón está apagado, pero la tecla A no
     // pasa por el botón.
     if (faltaProyecto && !proyectoElegido) return;
@@ -807,12 +830,14 @@ export function BandejaView({
     esError,
     esMovimiento,
     esNota,
+    esPresupuesto,
     esProyecto,
     esZombie,
     faltaProyecto,
     movimiento,
     movimientoCompleto,
     nota,
+    presupuestoDictado,
     propuesta,
     proyectoActual,
     proyectoDictado,
@@ -1227,6 +1252,14 @@ export function BandejaView({
               Esta propuesta quedó incompleta y no se puede aceptar. Rechazala.
             </p>
           )
+        ) : esPresupuesto ? (
+          presupuestoDictado ? (
+            <PresupuestoPropuesto p={presupuestoDictado} />
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Esta propuesta quedó incompleta y no se puede aceptar. Rechazala.
+            </p>
+          )
         ) : esNota ? (
           nota ? (
             <div className="grid gap-6 md:grid-cols-2">
@@ -1535,7 +1568,9 @@ export function BandejaView({
                       // lección.
                       esProyecto
                       ? !proyectoDictado
-                      : !mostrada) || (faltaProyecto && !projectId)
+                      : esPresupuesto
+                        ? !presupuestoDictado
+                        : !mostrada) || (faltaProyecto && !projectId)
             }
             className="gap-1.5"
           >

@@ -6,6 +6,7 @@ import { registrarBitacora } from "@/lib/mcp/tools/bitacora";
 import { registrarLecciones } from "@/lib/mcp/tools/lecciones";
 import { registrarMovimientos } from "@/lib/mcp/tools/movimientos";
 import { registrarNotas } from "@/lib/mcp/tools/notas";
+import { registrarPresupuestos } from "@/lib/mcp/tools/presupuestos";
 import { registrarProyectos } from "@/lib/mcp/tools/proyectos";
 import { verificarAccessToken } from "@/lib/oauth/almacen";
 import { RUTA_MCP } from "@/lib/oauth/protocolo";
@@ -17,7 +18,7 @@ import { RUTA_MCP } from "@/lib/oauth/protocolo";
  * más. Las tools viven en `lib/mcp/tools/`, una familia por archivo, y
  * el único acceso a la base es `lib/mcp/datos.ts`.
  *
- * ## Las nueve tools, y el corte que las ordena
+ * ## Las once tools, y el corte que las ordena
  *
  * El corte no es por tema, es por **quién termina escribiendo en la
  * base** (AGENTS.md §8):
@@ -25,7 +26,7 @@ import { RUTA_MCP } from "@/lib/oauth/protocolo";
  * | Tool | Qué hace |
  * |---|---|
  * | `listar_proyectos`, `listar_movimientos`, `balance`, `buscar_lecciones`, `leer_bitacora` | leen |
- * | `registrar_movimiento`, `registrar_leccion`, `registrar_nota` | dejan una propuesta en `inbox` |
+ * | `registrar_movimiento`, `registrar_leccion`, `registrar_nota`, `registrar_proyecto`, `registrar_presupuesto` | dejan una propuesta en `inbox` |
  * | `escribir_bitacora` | escribe directo |
  *
  * Las del medio **no violan la regla 6**: sigue siendo Beno el que
@@ -111,6 +112,7 @@ const handler = createMcpHandler(
     registrarLecciones(server);
     registrarBitacora(server);
     registrarNotas(server);
+    registrarPresupuestos(server);
   },
   {
     // Sin esto el servidor se presenta como "mcp-typescript server on
