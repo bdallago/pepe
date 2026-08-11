@@ -839,16 +839,20 @@ export async function despachar(
 
       // Mismo criterio que el formulario de Bitácora, y de un solo lugar
       // para que no se separen: el proyecto de estudio y si no, el
-      // primero activo. `daily_log.project_id` es NOT NULL, así que sin
-      // ninguno no hay entrada posible.
+      // primero de la lista, abierto o cerrado.
+      // `daily_log.project_id` es NOT NULL, así que sin ninguno no hay
+      // entrada posible.
       const proyecto = porNombre ?? proyectoPorDefectoDeBitacora(todos);
 
+      // Ojo con el texto: esto dispara cuando no hay NINGÚN proyecto, no
+      // cuando no hay ninguno abierto. Un proyecto cerrado sirve igual
+      // para colgarle una entrada.
       if (!proyecto) {
         return {
           clase: "aviso",
-          titulo: "No tenés ningún proyecto activo",
+          titulo: "Todavía no tenés ningún proyecto",
           cuerpo:
-            "Una entrada de bitácora cuelga siempre de un proyecto. Creá o reactivá uno desde Ajustes y te la guardo ahí.",
+            "Una entrada de bitácora cuelga siempre de un proyecto. Creá uno desde Ajustes y te la guardo ahí.",
         };
       }
 

@@ -369,8 +369,9 @@ function ProyectoDialog({
             </div>
           </div>
           <p className="text-muted-foreground -mt-2 text-xs">
-            Sin cierre el proyecto sigue abierto y se lleva su parte de los
-            gastos compartidos de hoy en adelante.
+            Se lleva su parte de los gastos compartidos que caigan dentro
+            de la ventana. Sin inicio, desde siempre; sin cierre, para
+            siempre.
           </p>
 
           <div className="flex gap-2">

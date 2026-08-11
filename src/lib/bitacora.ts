@@ -42,18 +42,21 @@ export const SLUG_PROYECTO_BITACORA = "gentius";
 /**
  * A qué proyecto va una entrada cuando no se eligió ninguno.
  *
- * El de estudio primero, **esté activo o no**, y recién si no existe, el
- * primero de la lista (que llega ordenada por nombre). Devuelve `null`
- * solo si no hay ningún proyecto, caso en el que no hay nada que elegir y
- * quien llama tiene que decirlo: `daily_log.project_id` es NOT NULL.
+ * El de estudio primero, **esté abierto o cerrado**, y recién si no
+ * existe, el primero de la lista (que llega ordenada por nombre).
+ * Devuelve `null` solo si no hay ningún proyecto, caso en el que no hay
+ * nada que elegir y quien llama tiene que decirlo:
+ * `daily_log.project_id` es NOT NULL.
  *
- * ⚠ **No filtres por `activo` acá.** Es tentador y está mal: `activo`
- * decide si un proyecto **participa del prorrateo de los gastos
- * compartidos** (regla 2), no si se puede escribir sobre él. Gentius está
- * inactivo **a propósito**, justamente para no mover los balances
- * históricos al crearse — y es, al mismo tiempo, donde va todo el estudio.
- * Filtrando por activo, las anotaciones de estudio caen en el primer
- * proyecto de finanzas que aparezca por orden alfabético, en silencio.
+ * ⚠ **No filtres por la ventana de vida acá** (ni con `estaVivo()`, ni
+ * con `fecha_fin`). Es tentador y está mal: la ventana decide **entre
+ * quiénes se reparte cada gasto compartido** (regla 2), no sobre cuáles
+ * se puede escribir. Un proyecto que se cerró en julio se sigue
+ * estudiando y se sigue anotando en agosto — se cerró para dejar de
+ * llevarse gastos, no para dejar de existir.
+ *
+ * Filtrando, las anotaciones de estudio caen en el primer proyecto de
+ * finanzas que aparezca por orden alfabético, en silencio.
  *
  * Pasó: al extraer esta función del formulario se agregó el filtro y el
  * selector dejó de arrancar en Gentius sin que nada lo avisara.

@@ -245,8 +245,12 @@ async function main() {
   console.log(`  usuario: ${usuarios.users[0].email} (${userId})\n`);
 
   // --- Proyecto Gentius ---------------------------------------
-  // Inactivo a propósito: no está en marcha hoy, así que no debe entrar en
-  // el prorrateo de gastos compartidos.
+  // Nace sin ventana (`fecha_inicio` y `fecha_fin` en null, que es el
+  // default de la tabla): "existió desde siempre y sigue abierto". El
+  // importador no sabe cuándo arrancó de verdad —el export de la app de
+  // estudio no trae esa fecha— y adivinarla acá le movería el prorrateo
+  // de todo el histórico. Si hace falta acotarla, se hace a mano en
+  // Ajustes, que es donde se ve el efecto.
   const { data: proyectoPrevio } = await supabase
     .from("projects")
     .select("id")
@@ -262,7 +266,6 @@ async function main() {
         slug: "gentius",
         nombre: "Gentius",
         color: COLOR_GENTIUS,
-        activo: false,
         peso_prorrateo: 1,
       },
       { onConflict: "user_id,slug" },

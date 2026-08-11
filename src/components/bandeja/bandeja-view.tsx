@@ -932,12 +932,13 @@ export function BandejaView({
                     <SelectContent>
                       {/*
                         "Compartido" no es un proyecto: es project_id
-                        null, el gasto que se reparte entre los activos.
-                        Va primero porque es lo que son casi todas las
+                        null, el gasto que se reparte entre los proyectos
+                        que estaban abiertos en SU fecha. Va primero
+                        porque es lo que son casi todas las
                         suscripciones.
                       */}
                       <SelectItem value={COMPARTIDO}>
-                        Compartido (entre los activos)
+                        Compartido (se reparte)
                       </SelectItem>
                       {projects.map((p) => (
                         <SelectItem key={p.id} value={p.id}>

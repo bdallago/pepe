@@ -127,18 +127,25 @@ export async function alternarProyectoActivo(
 ): Promise<ActionResult> {
   const { supabase } = await requireSession();
 
+  // Se lee siempre, incluso para reabrir, y no solo cuando hace falta
+  // `fecha_inicio`: un `update` sobre cero filas **no devuelve error**,
+  // así que sin esta lectura la action contestaría `ok()` para un
+  // proyecto que no existe. Es una consulta por clave primaria.
+  const { data: proyecto, error: errorLectura } = await supabase
+    .from("projects")
+    .select("fecha_inicio")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errorLectura) return fail(mensajeDeError(errorLectura));
+  if (!proyecto) return fail("No se encontró el proyecto.");
+
   let fecha_fin: string | null = null;
 
   if (!abierto) {
-    const { data: proyecto } = await supabase
-      .from("projects")
-      .select("fecha_inicio")
-      .eq("id", id)
-      .single();
-
     const hoy = todayISO();
     fecha_fin =
-      proyecto?.fecha_inicio && proyecto.fecha_inicio > hoy
+      proyecto.fecha_inicio && proyecto.fecha_inicio > hoy
         ? proyecto.fecha_inicio
         : hoy;
   }

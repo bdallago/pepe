@@ -132,7 +132,12 @@ async function armarContexto(supabase: Cliente): Promise<string | null> {
 
   const [proyectos, movimientos, categorias, lecciones, tracks, sesiones, bitacora] =
     await Promise.all([
-      supabase.from("projects").select("id, nombre, activo").is("archivado_en", null),
+      // Solo `id` y `nombre`: es un mapa de id → nombre y nada más. Pedir
+      // una columna de más acá no lo nota nadie —este call site ignora
+      // `.error` y usa `data ?? []`—, así que una columna que no existe
+      // no rompe la pantalla: la deja sin nombres, con el contexto
+      // diciendo "Proyecto archivado" para todos.
+      supabase.from("projects").select("id, nombre").is("archivado_en", null),
       supabase
         .from("movements")
         .select("project_id, category_id, tipo, monto_ars, fecha")

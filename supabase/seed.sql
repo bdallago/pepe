@@ -52,11 +52,17 @@ begin
   end loop;
 
   -- ── Proyectos ─────────────────────────────────────────────
-  insert into public.projects (user_id, nombre, slug, color, activo, peso_prorrateo)
+  -- La ventana fecha_inicio/fecha_fin es lo que decide quién se lleva
+  -- parte de cada gasto compartido, y se pregunta contra la fecha DEL
+  -- GASTO. Por eso la landing vieja se cierra a mitad del año simulado y
+  -- no "hace un año": así el seed muestra el caso interesante —un
+  -- proyecto que participa del reparto de enero a junio y deja de
+  -- participar después— en vez de uno que nunca participó de nada.
+  insert into public.projects (user_id, nombre, slug, color, fecha_inicio, fecha_fin, peso_prorrateo)
   values
-    (v_user_id, '[demo] Facturador', 'demo-facturador', '#2a78d6', true, 1),
-    (v_user_id, '[demo] Scraper API', 'demo-scraper-api', '#1baf7a', true, 2),
-    (v_user_id, '[demo] Landing vieja', 'demo-landing-vieja', '#eb6834', false, 1)
+    (v_user_id, '[demo] Facturador', 'demo-facturador', '#2a78d6', current_date - 365, null, 1),
+    (v_user_id, '[demo] Scraper API', 'demo-scraper-api', '#1baf7a', current_date - 365, null, 2),
+    (v_user_id, '[demo] Landing vieja', 'demo-landing-vieja', '#eb6834', current_date - 365, current_date - 180, 1)
   on conflict (user_id, slug) do nothing;
 
   select id into v_proyecto_a from public.projects where user_id = v_user_id and slug = 'demo-facturador';
@@ -136,7 +142,8 @@ begin
     );
 
     -- GASTO COMPARTIDO: la herramienta que usan todos los proyectos.
-    -- project_id = null. Se prorratea al vuelo entre los activos.
+    -- project_id = null. Se prorratea al vuelo entre los proyectos que
+    -- estaban abiertos EN LA FECHA de este movimiento.
     insert into public.movements (
       user_id, project_id, category_id, fecha, descripcion, tipo,
       monto_origen, moneda_origen, monto_ars, monto_usd, tasa_usada, tasa_fecha, estado

@@ -477,8 +477,9 @@ export function AccionesPresupuesto({
                   </SelectContent>
                 </Select>
                 <p className="text-muted-foreground text-xs">
-                  Vincular a uno que ya existe y está activo no mueve el
-                  prorrateo: la cantidad de proyectos activos no cambia.
+                  Vincular a uno que ya existe no mueve el prorrateo: no
+                  aparece ningún proyecto nuevo entre los que se reparten
+                  los gastos compartidos.
                 </p>
               </div>
             )}
