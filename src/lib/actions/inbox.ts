@@ -10,9 +10,14 @@ import {
   requireSession,
   type ActionResult,
 } from "./shared";
+import { crearPresupuesto, type PresupuestoCreado } from "./presupuestos";
+import { crearProyecto } from "./projects";
 import { crearEntradaDeBitacora } from "@/lib/bitacora";
+import { todayISO } from "@/lib/dates";
 import { congelarMontos } from "@/lib/fx";
 import { getTasaParaFecha } from "@/lib/fx-server";
+import { getAjustesPresupuesto } from "@/lib/presupuestos-server";
+import { COLOR_POR_DEFECTO_DE_PROYECTO } from "@/lib/schemas";
 import type {
   OrigenLeccion,
   TipoBandeja,
@@ -540,6 +545,221 @@ export async function aceptarMovimientoDictado(
 
   revalidatePath("/", "layout");
   return ok({ movementId: movimiento.id });
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Presupuestos y proyectos dictados por el conector MCP
+ * ──────────────────────────────────────────────────────────── */
+
+/**
+ * Lo que un modelo puede decir de un presupuesto. **Es el mismo esquema
+ * que declara la tool** (`lib/mcp/tools/presupuesto-schema.ts`),
+ * revalidado acá porque el payload es `jsonb` y la base no garantiza su
+ * forma.
+ */
+const presupuestoDictadoPayloadSchema = z.object({
+  cliente_nombre: z.string().trim().min(1).max(120),
+  cliente_tipo: z.enum(["particular", "pyme", "empresa"]),
+  titulo: z.string().trim().min(1).max(160),
+  resumen_alcance: z.string().trim().max(2000).default(""),
+  pedido_texto: z.string().trim().max(60000).default(""),
+  items: z
+    .array(
+      z.object({
+        titulo: z.string().trim().min(1).max(160),
+        detalle: z.string().trim().max(600).default(""),
+        horas: z.number().nonnegative().max(400),
+        ancla: z.string().trim().max(400).nullable().default(null),
+      }),
+    )
+    .min(1)
+    .max(50),
+  supuestos: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
+  preguntas: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
+});
+
+type PresupuestoDictadoPayload = z.infer<typeof presupuestoDictadoPayloadSchema>;
+
+/**
+ * Crea el presupuesto de un dictado, en `borrador`.
+ *
+ * ## Lo que el modelo NO decide
+ *
+ * ⚠ **El precio.** El modelo manda entregables con horas; el monto sale de
+ * multiplicar horas por la tarifa de Ajustes y el multiplicador del tipo de
+ * cliente, que es lo que ya hace `crearPresupuesto()` → `armarFila()` →
+ * `calcularPresupuesto()`. Por eso `total_origen` va en `0` y
+ * `total_editado` en `false`: con `false`, `armarFila()` **ignora** el
+ * número que le pasan y usa el calculado. Es el caso concreto del fallo 3
+ * —Beno mencionó "los 2.400.000 ARS y las 110/120h"—: las horas entran, el
+ * monto sale de la cuenta, y si no coincide **gana la app**.
+ *
+ * ⚠ **`ancla_verificada` va en `false` sin excepción.** Es la marca de que
+ * la cita se comprobó contra el pedido, y del lado del conector nadie la
+ * comprobó. Ponerla en `true` porque "el modelo dijo que la sacó de ahí"
+ * es justo la clase de mentira que el campo existe para impedir.
+ *
+ * ## Lo que no hace falta escribir
+ *
+ * **El estado.** `quoteSchema` no tiene `estado` y `armarFila()` no lo
+ * manda: lo pone el default `'borrador'` de la columna
+ * (`20260810002000_presupuestos.sql:155`). No hay una línea que se pueda
+ * olvidar.
+ *
+ * **El proyecto.** Un borrador **no cuelga de ninguno** y no puede: el
+ * check `(estado = 'aceptado') = (project_id is not null)` lo prohíbe. El
+ * vínculo se hace al aceptar el presupuesto, desde su pantalla, que es
+ * donde se elige o se crea el proyecto.
+ *
+ * La moneda del presupuesto se pone igual a la de la tarifa, a propósito:
+ * así no hay conversión, y por lo tanto no hay forma de que salga con
+ * `sin_cotizacion` y un total en una moneda que nadie pidió.
+ */
+async function crearPresupuestoDesdeDictado(
+  dictado: PresupuestoDictadoPayload,
+): Promise<ActionResult<PresupuestoCreado>> {
+  const ajustes = await getAjustesPresupuesto();
+
+  return await crearPresupuesto({
+    cliente_nombre: dictado.cliente_nombre,
+    cliente_tipo: dictado.cliente_tipo,
+    titulo: dictado.titulo,
+    resumen_alcance: dictado.resumen_alcance,
+    pedido_texto: dictado.pedido_texto,
+    moneda: ajustes.tarifa_moneda,
+    fecha: todayISO(),
+    // Los dos defaults de la columna, escritos: `quoteSchema` los pide.
+    validez_dias: 15,
+    mostrar_horas: false,
+    condiciones: ajustes.condiciones_default ?? "",
+    total_origen: 0,
+    total_editado: false,
+    items: dictado.items.map((i) => ({
+      titulo: i.titulo,
+      detalle: i.detalle,
+      horas: i.horas,
+      // Igual que los que salen de `estimarEsfuerzo()`: se apaga a
+      // "manual" apenas Beno toca un campo del ítem.
+      origen: "modelo" as const,
+      ancla: i.ancla,
+      ancla_verificada: false,
+      confianza: null,
+    })),
+    supuestos: dictado.supuestos,
+    preguntas: dictado.preguntas,
+    modelo: "conector",
+    reemplaza_a: null,
+  });
+}
+
+const payloadProyectoSchema = z.object({
+  nombre: z.string().trim().min(1).max(80),
+  de_que_se_trata: z.string().optional(),
+  fecha_inicio: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  fecha_fin: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  presupuesto: presupuestoDictadoPayloadSchema.optional(),
+});
+
+/**
+ * Acepta un proyecto dictado: lo crea de verdad, y si trae presupuesto
+ * adentro lo crea también, en `borrador`.
+ *
+ * ⚠ **Si el proyecto se crea y el presupuesto falla, el ítem queda
+ * aceptado igual y se avisa.** Deshacer la creación sería peor: el
+ * proyecto es lo que Beno acaba de aprobar, y el presupuesto se rehace
+ * desde su pantalla. Es el mismo criterio que ya aplica
+ * `aceptarPresupuesto()` cuando crea el proyecto y después falla el
+ * update.
+ */
+export async function aceptarProyectoDictado(itemId: string): Promise<
+  ActionResult<{
+    projectId: string;
+    quoteNumero: number | null;
+    avisoPresupuesto: string | null;
+  }>
+> {
+  const idParseado = uuid.safeParse(itemId);
+  if (!idParseado.success) return fail("Identificador inválido.");
+
+  const { supabase } = await requireSession();
+
+  const { data: item, error: errorLectura } = await supabase
+    .from("inbox")
+    .select("id, tipo, estado, payload")
+    .eq("id", idParseado.data)
+    .maybeSingle();
+
+  if (errorLectura) return fail(mensajeDeError(errorLectura));
+  if (!item) return fail("No encontré esa propuesta.");
+  if (item.tipo !== "proyecto_dictado") {
+    return fail("Esa propuesta no es un proyecto.");
+  }
+  if (item.estado !== "pendiente" && item.estado !== "pospuesto") {
+    return fail("Esa propuesta ya estaba resuelta.");
+  }
+
+  const payload = payloadProyectoSchema.safeParse(item.payload);
+  if (!payload.success) {
+    return fail("La propuesta guardada está incompleta. Rechazala.");
+  }
+
+  // El proyecto por `crearProyecto()` y no con un insert a mano: esa
+  // action resuelve el slug disponible y valida contra `projectSchema`,
+  // que tiene el refine del check `projects_fechas_coherentes`. Por ahí es
+  // por donde un cierre anterior al inicio vuelve en castellano.
+  const creado = await crearProyecto({
+    nombre: payload.data.nombre,
+    color: COLOR_POR_DEFECTO_DE_PROYECTO,
+    fecha_inicio: payload.data.fecha_inicio ?? null,
+    fecha_fin: payload.data.fecha_fin ?? null,
+    peso_prorrateo: 1,
+  });
+
+  if (!creado.ok) return fail(creado.error);
+
+  let quoteNumero: number | null = null;
+  let avisoPresupuesto: string | null = null;
+
+  if (payload.data.presupuesto) {
+    const presupuesto = await crearPresupuestoDesdeDictado(
+      payload.data.presupuesto,
+    );
+    if (presupuesto.ok) quoteNumero = presupuesto.data.numero;
+    // ⚠ El mensaje viaja TAL CUAL. `crearPresupuesto()` devuelve uno
+    // accionable si falta la tarifa ("Todavía no cargaste tu tarifa
+    // hora…"); envolverlo en un "no se pudo guardar" lo convierte en un
+    // error sin salida.
+    else avisoPresupuesto = presupuesto.error;
+  }
+
+  const { error: errorCierre } = await supabase
+    .from("inbox")
+    .update({
+      estado: "aceptado",
+      resuelto_en: new Date().toISOString(),
+      // El vínculo hacia adelante va en el payload, igual que el
+      // `lesson_id` de `aceptarLeccion()`. `entidad_tabla`/`entidad_id`
+      // vienen en null —la propuesta no salió de ninguna fila— así que no
+      // hay nada que preservar.
+      payload: {
+        ...(item.payload as Record<string, unknown>),
+        project_id: creado.data.id,
+        ...(quoteNumero !== null ? { quote_numero: quoteNumero } : {}),
+      },
+      clave_dedupe: null,
+    })
+    .eq("id", idParseado.data);
+
+  if (errorCierre) return fail(mensajeDeError(errorCierre));
+
+  revalidatePath("/", "layout");
+  return ok({ projectId: creado.data.id, quoteNumero, avisoPresupuesto });
 }
 
 /** Descarta la propuesta. La entrada de bitácora queda intacta. */

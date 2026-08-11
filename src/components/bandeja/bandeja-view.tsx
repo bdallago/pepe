@@ -20,6 +20,7 @@ import {
   aceptarLeccion,
   aceptarMovimientoDictado,
   aceptarNotaDeAdjunto,
+  aceptarProyectoDictado,
   aceptarZombie,
   descartarErrorBandeja,
   posponerItemBandeja,
@@ -290,6 +291,212 @@ function leerPropuesta(payload: Json): Propuesta | null {
  * La URL se firma en el browser y dura una hora, igual que en
  * `comprobante-input.tsx`. El bucket es privado y nunca hay URL pública.
  */
+/** Lo que propone `registrar_proyecto`. */
+interface ProyectoDictado {
+  nombre: string;
+  de_que_se_trata?: string;
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  presupuesto?: PresupuestoDictado;
+}
+
+/** Lo que propone `registrar_presupuesto`, y lo que viaja adentro del otro. */
+interface PresupuestoDictado {
+  cliente_nombre: string;
+  cliente_tipo: "particular" | "pyme" | "empresa";
+  titulo: string;
+  resumen_alcance?: string;
+  items: {
+    titulo: string;
+    detalle?: string;
+    horas: number;
+    ancla?: string | null;
+  }[];
+  supuestos?: string[];
+  preguntas?: string[];
+}
+
+function leerPresupuestoDictado(valor: unknown): PresupuestoDictado | null {
+  if (typeof valor !== "object" || valor === null || Array.isArray(valor)) {
+    return null;
+  }
+  const p = valor as Record<string, unknown>;
+  if (typeof p.cliente_nombre !== "string" || typeof p.titulo !== "string") {
+    return null;
+  }
+  if (!Array.isArray(p.items) || p.items.length === 0) return null;
+
+  return {
+    cliente_nombre: p.cliente_nombre,
+    cliente_tipo:
+      p.cliente_tipo === "empresa" || p.cliente_tipo === "pyme"
+        ? p.cliente_tipo
+        : "particular",
+    titulo: p.titulo,
+    resumen_alcance:
+      typeof p.resumen_alcance === "string" ? p.resumen_alcance : undefined,
+    items: (p.items as Record<string, unknown>[]).map((i) => ({
+      titulo: typeof i.titulo === "string" ? i.titulo : "Sin título",
+      detalle: typeof i.detalle === "string" ? i.detalle : undefined,
+      horas: Number(i.horas ?? 0),
+      ancla: typeof i.ancla === "string" ? i.ancla : null,
+    })),
+    supuestos: Array.isArray(p.supuestos)
+      ? (p.supuestos as string[])
+      : undefined,
+    preguntas: Array.isArray(p.preguntas)
+      ? (p.preguntas as string[])
+      : undefined,
+  };
+}
+
+function leerProyectoDictado(payload: Json): ProyectoDictado | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+  const p = payload as Record<string, unknown>;
+  if (typeof p.nombre !== "string") return null;
+
+  return {
+    nombre: p.nombre,
+    de_que_se_trata:
+      typeof p.de_que_se_trata === "string" ? p.de_que_se_trata : undefined,
+    fecha_inicio: typeof p.fecha_inicio === "string" ? p.fecha_inicio : undefined,
+    fecha_fin: typeof p.fecha_fin === "string" ? p.fecha_fin : undefined,
+    presupuesto: leerPresupuestoDictado(p.presupuesto) ?? undefined,
+  };
+}
+
+/**
+ * El presupuesto propuesto, con **las horas y ningún precio**.
+ *
+ * ⚠ El precio no está y no es un olvido: lo calcula la app al aceptar, con
+ * la tarifa de Ajustes y el multiplicador del tipo de cliente. Mostrar acá
+ * un número que dijo el modelo sería mostrar un precio que no es el que se
+ * va a guardar.
+ */
+function PresupuestoPropuesto({ p }: { p: PresupuestoDictado }) {
+  const horas = p.items.reduce((total, i) => total + i.horas, 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className="text-sm font-semibold">{p.titulo}</p>
+        <span className="text-muted-foreground text-xs">
+          {p.cliente_nombre} · {p.cliente_tipo}
+        </span>
+      </div>
+
+      {p.resumen_alcance && <p className="text-sm">{p.resumen_alcance}</p>}
+
+      <ul className="space-y-2">
+        {p.items.map((i, indice) => (
+          <li key={indice} className="text-sm">
+            <span className="font-medium">{i.titulo}</span>{" "}
+            <span className="cifra text-muted-foreground">{i.horas} h</span>
+            {i.detalle && (
+              <p className="text-muted-foreground text-xs">{i.detalle}</p>
+            )}
+            {/*
+              La cita del pedido al lado del entregable es la salvaguarda
+              contra el ítem inventado, igual que el `ancla` de las
+              sugerencias de estudio. Se guarda SIN verificar —del lado del
+              conector nadie la comprobó contra el pedido— y por eso se
+              muestra como cita y no como respaldo.
+            */}
+            {i.ancla && (
+              <p className="text-muted-foreground border-l-2 pl-2 text-xs italic">
+                “{i.ancla}”
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <p className="text-muted-foreground text-xs">
+        <span className="cifra">{horas}</span> horas en total.{" "}
+        <strong>El precio no lo puso Claude</strong>: lo calcula Pepe con tu
+        tarifa de Ajustes y el multiplicador de “{p.cliente_tipo}” cuando
+        aceptes. Nace en borrador y no queda colgado de ningún proyecto hasta
+        que lo aceptes desde Presupuestos.
+      </p>
+
+      {p.supuestos && p.supuestos.length > 0 && (
+        <div className="text-muted-foreground text-xs">
+          <p className="font-medium">Supuestos</p>
+          <ul className="list-disc pl-4">
+            {p.supuestos.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {p.preguntas && p.preguntas.length > 0 && (
+        <div className="text-muted-foreground text-xs">
+          <p className="font-medium">Preguntas para el cliente</p>
+          <ul className="list-disc pl-4">
+            {p.preguntas.map((q, i) => (
+              <li key={i}>{q}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProyectoPropuesto({ p }: { p: ProyectoDictado }) {
+  const desde = p.fecha_inicio ? formatDate(p.fecha_inicio) : "siempre";
+  const hasta = p.fecha_fin ? formatDate(p.fecha_fin) : "sigue abierto";
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-semibold">{p.nombre}</p>
+        <p className="text-muted-foreground cifra text-xs">
+          De {desde} a {hasta}
+        </p>
+      </div>
+
+      {p.de_que_se_trata && <p className="text-sm">{p.de_que_se_trata}</p>}
+
+      {/*
+        ⚠ El aviso más importante de esta tarjeta. Un proyecto sin
+        `fecha_inicio` está vivo DESDE SIEMPRE (`estaVivo()` con la punta
+        nula es "desde siempre"), así que entra en el reparto de TODOS los
+        gastos compartidos del histórico y reescribe cuánto costó cada uno
+        de los otros. Sin decirlo acá, se descubre tres pantallas después.
+      */}
+      {!p.fecha_inicio && (
+        <p className="text-muted-foreground border-l-2 pl-3 text-xs">
+          Sin fecha de inicio, este proyecto cuenta como abierto{" "}
+          <strong>desde siempre</strong>: entra en el reparto de todos los
+          gastos compartidos que ya tenés cargados y cambia cuánto costó cada
+          uno de los otros. Si arrancó en una fecha, ponésela en Ajustes
+          después de aceptar.
+        </p>
+      )}
+
+      {p.presupuesto && (
+        <div className="border-t border-dashed pt-3">
+          <h3 className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
+            Con este presupuesto adentro
+          </h3>
+          <PresupuestoPropuesto p={p.presupuesto} />
+        </div>
+      )}
+
+      <p className="text-muted-foreground border-t border-dashed pt-3 text-xs">
+        Aceptar <strong>crea el proyecto</strong>
+        {p.presupuesto ? " y su presupuesto en borrador" : ""}. El color y el
+        peso de prorrateo quedan en los valores por defecto: se cambian desde
+        Ajustes.
+      </p>
+    </div>
+  );
+}
+
 function MiniaturaAdjunto({ path, alt }: { path: string; alt: string }) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -397,14 +604,17 @@ export function BandejaView({
     actual?.tipo === "nota_de_adjunto" || actual?.tipo === "nota_dictada";
   const esNotaDictada = actual?.tipo === "nota_dictada";
   const esMovimiento = actual?.tipo === "movimiento_dictado";
+  const esProyecto = actual?.tipo === "proyecto_dictado";
   const propuesta =
-    actual && !esZombie && !esNota && !esMovimiento
+    actual && !esZombie && !esNota && !esMovimiento && !esProyecto
       ? leerPropuesta(actual.payload)
       : null;
   const zombie = actual && esZombie ? leerZombie(actual.payload) : null;
   const nota = actual && esNota ? leerNota(actual.payload) : null;
   const movimiento =
     actual && esMovimiento ? leerMovimiento(actual.payload) : null;
+  const proyectoDictado =
+    actual && esProyecto ? leerProyectoDictado(actual.payload) : null;
   const esError = actual?.estado === "error";
 
   // Falta el proyecto y hay que elegirlo. Pasa solo con lo que entró por
@@ -417,6 +627,10 @@ export function BandejaView({
     !esError &&
     !esZombie &&
     !esMovimiento &&
+    // Un proyecto dictado no tiene proyecto que elegir: **es** el
+    // proyecto. Sin esta línea el selector aparecería y bloquearía el
+    // botón de aceptar para siempre.
+    !esProyecto &&
     (esNota ? Boolean(nota) : Boolean(propuesta)) &&
     !proyectoDelPayload;
   const projectId = proyectoDelPayload ?? proyectoElegido ?? null;
@@ -510,6 +724,29 @@ export function BandejaView({
       return;
     }
 
+    // Un proyecto dictado crea el proyecto y, si viene adentro, su
+    // presupuesto en borrador. Va antes del chequeo de `faltaProyecto`
+    // porque no hay proyecto que elegir: **es** el proyecto.
+    if (esProyecto) {
+      if (!proyectoDictado) return;
+      resolver(
+        actual,
+        async () => {
+          const r = await aceptarProyectoDictado(actual.id);
+          if (r.ok && r.data.avisoPresupuesto) {
+            // El proyecto se creó igual: no es un fallo del ítem, es una
+            // mitad que no salió, y se dice en vez de tragársela.
+            toast.warning(
+              `El proyecto quedó creado, pero el presupuesto no: ${r.data.avisoPresupuesto}`,
+            );
+          }
+          return r;
+        },
+        "Proyecto creado.",
+      );
+      return;
+    }
+
     // Falta elegir el proyecto: el botón está apagado, pero la tecla A no
     // pasa por el botón.
     if (faltaProyecto && !proyectoElegido) return;
@@ -570,6 +807,7 @@ export function BandejaView({
     esError,
     esMovimiento,
     esNota,
+    esProyecto,
     esZombie,
     faltaProyecto,
     movimiento,
@@ -577,6 +815,7 @@ export function BandejaView({
     nota,
     propuesta,
     proyectoActual,
+    proyectoDictado,
     proyectoElegido,
     resolver,
   ]);
@@ -980,6 +1219,14 @@ export function BandejaView({
               Esta propuesta quedó incompleta y no se puede aceptar. Rechazala.
             </p>
           )
+        ) : esProyecto ? (
+          proyectoDictado ? (
+            <ProyectoPropuesto p={proyectoDictado} />
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Esta propuesta quedó incompleta y no se puede aceptar. Rechazala.
+            </p>
+          )
         ) : esNota ? (
           nota ? (
             <div className="grid gap-6 md:grid-cols-2">
@@ -1282,12 +1529,24 @@ export function BandejaView({
                   ? !nota
                   : esMovimiento
                     ? !movimiento || !movimientoCompleto
-                    : !mostrada) || (faltaProyecto && !projectId)
+                    : // ⚠ Sin esta rama el botón queda apagado para
+                      // siempre: `mostrada` es `borrador ?? propuesta`, y
+                      // `propuesta` es null para todo lo que no sea una
+                      // lección.
+                      esProyecto
+                      ? !proyectoDictado
+                      : !mostrada) || (faltaProyecto && !projectId)
             }
             className="gap-1.5"
           >
             <Check className="size-4" aria-hidden="true" />
-            {esZombie ? "La doy de baja" : esMovimiento ? "Cargarlo" : "Aceptar"}
+            {esZombie
+              ? "La doy de baja"
+              : esMovimiento
+                ? "Cargarlo"
+                : esProyecto
+                  ? "Crearlo"
+                  : "Aceptar"}
           </Button>
         )}
         <Button onClick={rechazar} variant="outline" className="gap-1.5">
