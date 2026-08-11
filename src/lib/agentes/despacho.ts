@@ -1245,6 +1245,38 @@ export async function despachar(
       const nuevo = despues.find((p) => p.id === encontrado.id)!;
 
       /*
+        ⚠ **Si no cambió nada, decirlo. No escribir y contestar "Cambié la
+        ventana".**
+
+        Es la clase de fallo que más caro sale acá: la respuesta suena a
+        éxito, el usuario da por hecho que la ventana se movió y el error
+        aparece tres pantallas después, cuando los balances no dan lo que
+        esperaba. Medido contra la app el 2026-08-11 con el fallo 1: el
+        cierre no se movía —el lector se comía la segunda fecha— y la
+        respuesta decía igual "Cambié la ventana de Proder".
+
+        El arreglo del lector está en `agentes/proyectos.ts`, pero este
+        chequeo va igual y se queda: es la red que hace que el próximo
+        agujero del lector se vea en la respuesta en vez de esconderse
+        detrás de un "listo".
+      */
+      const cambio =
+        nuevo.nombre !== encontrado.nombre ||
+        nuevo.fecha_inicio !== encontrado.fecha_inicio ||
+        nuevo.fecha_fin !== encontrado.fecha_fin;
+
+      if (!cambio) {
+        return {
+          clase: "aviso",
+          titulo: `${encontrado.nombre} ya estaba así`,
+          cuerpo: [
+            describirVentana(encontrado),
+            "No cambié nada: de lo que me dijiste no salió ninguna fecha distinta a la que ya tenía. Si querías otra, decímela con la marca adelante — “cerrá X el 31/07” o “X va desde el 01/04 hasta el 31/07”.",
+          ].join("\n"),
+        };
+      }
+
+      /*
         `actualizarProyecto()` solo regenera el slug **si cambió el
         nombre**, para que los links viejos a `/proyectos/<slug>` sigan
         andando. Por eso se le manda el proyecto entero y no un parche: no

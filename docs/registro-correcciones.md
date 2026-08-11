@@ -45,6 +45,14 @@ respaldando. Del lado de Pepe está todo hecho desde hace días.
 
 ## Historial
 
+- **2026-08-11 — El destino `proyecto` decía "Cambié la ventana" sin haber cambiado nada.** Corriendo
+  el criterio de aceptación contra la app: la frase del fallo 1 dejaba el cierre en 20/07 cuando pedía
+  31/07, y contestaba igual que si lo hubiera movido. Dos causas apiladas. Una, el lector se comía la
+  **segunda** fecha: Beno escribe las dos marcas ("…01/04/26 apertura y 31/07/26…") pero **el
+  recepcionista reformatea el argumento** a `"Proder 01/04/26 - 31/07/26"`, sin ninguna, y sin marcas
+  se leía una sola. Dos, y peor: la respuesta no comparaba contra lo que había. Ahora dos fechas
+  sueltas se leen como apertura y cierre, y si nada cambió la respuesta lo dice — esa red se queda
+  aunque el lector esté arreglado. *(En la rama `operar-conversando`.)*
 - **2026-08-11 — El fallo 3 del conector no fue un error del modelo, y por eso la corrección fue
   darle capacidad.** Ante *"cargá todo lo que charlamos sobre el Agente de RRHH"*, Claude **se frenó
   solo**: explicó que ese proyecto no existía y que el conector no podía crearlo, y avisó que lo que

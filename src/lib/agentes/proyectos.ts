@@ -298,6 +298,30 @@ function leerLasDosFechas(
   if (iCierre === -1 && iApertura === -1) {
     if (CREAR.test(texto)) return { apertura: null, cierre: null };
 
+    /*
+      ⚠ **Dos fechas sueltas y ninguna marca: la primera abre y la segunda
+      cierra.** Sin esto se leía solo la primera y la segunda se perdía en
+      silencio — y el caso no es hipotético, es el fallo 1 entero. Beno
+      escribió "…01/04/26 apertura y 31/07/26 para las dos", que tiene las
+      dos marcas, pero **el recepcionista reformatea el argumento** y lo
+      devuelve como `"Proder 01/04/26 - 31/07/26"`, sin ninguna. Medido
+      contra la app el 2026-08-11: el cierre no se movía y la respuesta
+      igual decía "Cambié la ventana".
+
+      Las fechas se buscan con `EXPRESIONES_DE_FECHA`, que es la misma
+      lista de la que salen las `REGLAS` de `leerFecha()`: no hay una
+      segunda definición de qué parece una fecha.
+    */
+    const sueltas = [...texto.matchAll(EXPRESIONES_DE_FECHA)].map((m) => m[0]);
+
+    if (sueltas.length >= 2) {
+      const abre = leerFecha(sueltas[0]!, hoy, { futuro: true });
+      const cierra = leerFecha(sueltas[1]!, hoy, { futuro: true });
+      if (abre.explicita && cierra.explicita) {
+        return { apertura: abre.fecha, cierre: cierra.fecha };
+      }
+    }
+
     const sola = leerFecha(texto, hoy, { futuro: true });
     if (!sola.explicita) return { apertura: null, cierre: null };
     return CERRAR.test(texto)
