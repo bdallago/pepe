@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { resolverTasa, type TasaAplicable } from "@/lib/fx";
+import { estaVivo } from "@/lib/prorrateo";
 import type {
   Category,
   FxRate,
@@ -110,7 +111,7 @@ export function AppDataProvider({
       ultimoProyecto,
       recordarProyecto,
       tasaPara,
-      proyectosActivos: projects.filter((p) => p.activo),
+      proyectosActivos: projects.filter((p) => estaVivo(p)),
       categoriasVigentes: categories.filter((c) => !c.archivada),
     }),
     [

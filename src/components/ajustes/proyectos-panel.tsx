@@ -36,7 +36,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   actualizarProyecto,
   borrarProyecto,
@@ -44,7 +43,7 @@ import {
 } from "@/lib/actions/projects";
 import { projectSchema, type ProjectInput } from "@/lib/schemas";
 import { todayISO } from "@/lib/dates";
-import { calcularParticipaciones } from "@/lib/prorrateo";
+import { calcularParticipaciones, estaVivo } from "@/lib/prorrateo";
 import type { Project } from "@/lib/supabase/database.types";
 
 /**
@@ -64,6 +63,15 @@ const COLORES = [
   "#4a3aa7", // violeta
   "#e34948", // rojo
 ] as const;
+
+/**
+ * Un `<input type="date">` vacío devuelve `""`, y `""` no es una fecha ni
+ * es null: no pasa el regex de `isoDate` y el formulario se traba con un
+ * "Fecha inválida" para un campo que el usuario dejó en blanco a
+ * propósito, que es un estado válido de las dos puntas de la ventana.
+ */
+const vacioEsNull = (valor: unknown) =>
+  typeof valor === "string" && valor.trim() === "" ? null : valor;
 
 export function ProyectosPanel() {
   const router = useRouter();
@@ -94,7 +102,8 @@ export function ProyectosPanel() {
         <div>
           <CardTitle className="text-base">Proyectos</CardTitle>
           <CardDescription>
-            Los activos se reparten los gastos compartidos según su peso.
+            Cada gasto compartido se reparte, según su peso, entre los que
+            estaban abiertos ese día.
           </CardDescription>
         </div>
         <Button size="sm" onClick={() => setCreando(true)}>
@@ -133,8 +142,8 @@ export function ProyectosPanel() {
                   </p>
                 </div>
 
-                {!proyecto.activo ? (
-                  <Badge variant="outline">inactivo</Badge>
+                {!estaVivo(proyecto) ? (
+                  <Badge variant="outline">cerrado</Badge>
                 ) : null}
 
                 <Button
@@ -186,8 +195,10 @@ export function ProyectosPanel() {
             <AlertDialogTitle>¿Borrar «{borrando?.nombre}»?</AlertDialogTitle>
             <AlertDialogDescription>
               Los movimientos del proyecto no se borran: pasan a contar como
-              gastos compartidos. Si solo querés sacarlo del prorrateo,
-              marcalo como inactivo en vez de borrarlo.
+              gastos compartidos. Si solo querés sacarlo del prorrateo de
+              acá en adelante, ponele una fecha de cierre en vez de
+              borrarlo: así conserva la parte que le tocó mientras estuvo
+              abierto.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -218,7 +229,12 @@ function ProyectoDialog({
     defaultValues: {
       nombre: proyecto?.nombre ?? "",
       color: proyecto?.color ?? COLORES[0],
-      activo: proyecto?.activo ?? true,
+      // Un proyecto nuevo nace hoy y sin cierre. Dejar `fecha_inicio` en
+      // null sería "existió desde siempre", que para uno que se crea
+      // ahora es falso: se llevaría su parte de gastos compartidos de
+      // años anteriores a que existiera.
+      fecha_inicio: proyecto?.fecha_inicio ?? todayISO(),
+      fecha_fin: proyecto?.fecha_fin ?? null,
       peso_prorrateo: proyecto ? Number(proyecto.peso_prorrateo) : 1,
     },
   });
@@ -242,7 +258,6 @@ function ProyectoDialog({
   }
 
   const color = watch("color");
-  const activo = watch("activo");
 
   return (
     <Dialog
@@ -316,19 +331,47 @@ function ProyectoDialog({
             ) : null}
           </div>
 
-          <div className="flex items-center justify-between rounded-md border p-3">
-            <div>
-              <Label htmlFor="p-activo">Activo</Label>
-              <p className="text-muted-foreground text-xs">
-                Solo los activos participan del prorrateo.
-              </p>
+          {/* La ventana reemplazó a la vieja bandera `activo`, y no es lo
+              mismo con otra forma: un gasto compartido se reparte entre
+              los proyectos que estaban vivos EN SU FECHA, así que mover
+              estas dos fechas reescribe el pasado a propósito. Vaciar el
+              inicio es "desde siempre" y vaciar el cierre es "sigue
+              abierto"; los dos bordes son inclusivos. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="p-inicio">Inicio</Label>
+              <Input
+                id="p-inicio"
+                type="date"
+                className="cifra"
+                {...register("fecha_inicio", { setValueAs: vacioEsNull })}
+              />
+              {formState.errors.fecha_inicio ? (
+                <p className="text-destructive text-xs">
+                  {formState.errors.fecha_inicio.message}
+                </p>
+              ) : null}
             </div>
-            <Switch
-              id="p-activo"
-              checked={activo}
-              onCheckedChange={(v) => setValue("activo", v)}
-            />
+
+            <div className="space-y-2">
+              <Label htmlFor="p-fin">Cierre</Label>
+              <Input
+                id="p-fin"
+                type="date"
+                className="cifra"
+                {...register("fecha_fin", { setValueAs: vacioEsNull })}
+              />
+              {formState.errors.fecha_fin ? (
+                <p className="text-destructive text-xs">
+                  {formState.errors.fecha_fin.message}
+                </p>
+              ) : null}
+            </div>
           </div>
+          <p className="text-muted-foreground -mt-2 text-xs">
+            Sin cierre el proyecto sigue abierto y se lleva su parte de los
+            gastos compartidos de hoy en adelante.
+          </p>
 
           <div className="flex gap-2">
             <Button

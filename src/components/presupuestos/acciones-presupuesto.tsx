@@ -54,6 +54,7 @@ import { todayISO } from "@/lib/dates";
 import {
   cortesDelReparto,
   calcularParticipaciones,
+  estaVivo,
   type ProyectoParaReparto,
 } from "@/lib/prorrateo";
 import type { EstadoPresupuesto } from "@/lib/presupuestos-server";
@@ -470,7 +471,7 @@ export function AccionesPresupuesto({
                     {projects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.nombre}
-                        {p.activo ? "" : " (inactivo)"}
+                        {estaVivo(p) ? "" : " (cerrado)"}
                       </SelectItem>
                     ))}
                   </SelectContent>

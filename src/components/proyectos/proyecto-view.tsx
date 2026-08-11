@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/card";
 import { calcularBalancesProyecto, filtrarMovimientos } from "@/lib/balances";
 import { todayISO } from "@/lib/dates";
-import { etiquetaProrrateo, imputarAProyecto } from "@/lib/prorrateo";
+import { estaVivo, etiquetaProrrateo, imputarAProyecto } from "@/lib/prorrateo";
 import { calcularParticipaciones, pesosSonUniformes } from "@/lib/prorrateo";
 import type { Movement, Project } from "@/lib/supabase/database.types";
 
@@ -113,7 +113,7 @@ export function ProyectoView({
             <h1 className="text-2xl font-semibold tracking-tight">
               {proyecto.nombre}
             </h1>
-            {!proyecto.activo ? (
+            {!estaVivo(proyecto) ? (
               <Badge variant="outline">inactivo</Badge>
             ) : participacion ? (
               <Badge variant="secondary" className="font-normal">

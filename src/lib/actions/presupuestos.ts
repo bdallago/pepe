@@ -505,9 +505,9 @@ export async function aceptarPresupuesto(
         nombre: parsedDestino.data.nombre,
         slug,
         color: parsedDestino.data.color,
-        activo: true,
         peso_prorrateo: 1,
         fecha_inicio: parsedDestino.data.fecha_inicio,
+        fecha_fin: null,
       })
       .select("id")
       .single();

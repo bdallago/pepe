@@ -38,9 +38,8 @@ export type ProyectoParaReparto = Pick<
  * fecha en vez de contra el presente. Las dos puntas abiertas tienen
  * significado y no son un caso degenerado: `fecha_inicio` nula es "desde
  * siempre" y `fecha_fin` nula es "sigue abierto". Un proyecto sin ninguna
- * de las dos participa de todo, que es exactamente el comportamiento
- * anterior a este cambio — y por eso la migración de datos puede ser
- * incremental sin romper nada en el medio.
+ * de las dos participa de todo. Eso es lo que permitió cargar las
+ * ventanas proyecto por proyecto, sin ningún estado intermedio roto.
  *
  * Las dos comparaciones son inclusivas: el día que abrís y el día que
  * cerrás el proyecto está vivo.
@@ -59,9 +58,11 @@ export function estaVivo(
  * proyecto.
  *
  * ⚠ **La fecha no tiene default, y es a propósito.** Un default a hoy
- * dejaría compilar cualquier call site que se olvide de pasarla,
- * exactamente con el bug que este cambio viene a arreglar. Sin default,
- * el compilador obliga a mirar los ocho.
+ * dejaría compilar cualquier call site que se olvide de pasarla, y ese
+ * call site repartiría el histórico entero con la foto de los proyectos
+ * vivos hoy: justo el bug que el reparto por fecha vino a eliminar, y
+ * de los que no se ven — no falla, contesta números plausibles. Sin
+ * default no compila, que es la única forma de que no vuelva a entrar.
  *
  * Si no hay ningún proyecto vivo esa fecha devuelve un mapa vacío: el
  * gasto sigue contando en el balance general, simplemente no se reparte.

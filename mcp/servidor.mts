@@ -13,6 +13,7 @@ import {
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
 import { formatMoney } from "@/lib/format";
 import { formatDate } from "@/lib/dates";
+import { estaVivo } from "@/lib/prorrateo";
 
 import {
   buscarLecciones,
@@ -89,7 +90,7 @@ server.registerTool(
     const lineas = proyectos.map(
       (p) =>
         `- ${p.nombre} (slug: ${p.slug})` +
-        ` — ${p.activo ? "activo" : "inactivo"}` +
+        ` — ${estaVivo(p) ? "activo" : "cerrado"}` +
         `, peso de prorrateo ${p.peso_prorrateo}` +
         (p.archivado_en ? " [archivado]" : ""),
     );

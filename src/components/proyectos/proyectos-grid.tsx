@@ -91,6 +91,8 @@ export function ProyectosGrid({ movements }: { movements: Movement[] }) {
                   </div>
 
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {/* `TotalPorProyecto.activo`, que ya viene resuelto
+                        con `estaVivo()` contra hoy. */}
                     {!proyecto.activo ? (
                       <Badge variant="outline" className="h-5 text-[10px]">
                         inactivo

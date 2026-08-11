@@ -17,7 +17,7 @@ import {
   avisoProyectoDesconocido,
   resolverProyecto,
 } from "@/lib/mcp/resolver";
-import { etiquetaProrrateo, pesosSonUniformes } from "@/lib/prorrateo";
+import { estaVivo, etiquetaProrrateo, pesosSonUniformes } from "@/lib/prorrateo";
 import type { Moneda } from "@/lib/supabase/database.types";
 
 /**
@@ -159,10 +159,10 @@ export function registrarBalance(server: McpServer) {
             `- De los gastos compartidos le toca ${etiquetaProrrateo(b.participacion, pesosSonUniformes(projs, todayISO()))}, y ya está adentro de los números de arriba.`,
           );
         } else {
-          // Un proyecto inactivo no participa del reparto, y si no se
-          // dice se lee como si los compartidos no existieran.
+          // Un proyecto cerrado no participa del reparto de hoy, y si no
+          // se dice se lee como si los compartidos no existieran.
           lineas.push(
-            `- No participa del reparto de los gastos compartidos${objetivo.proyecto.activo ? "" : ": está marcado como inactivo"}.`,
+            `- No participa del reparto de los gastos compartidos${estaVivo(objetivo.proyecto) ? "" : ": está cerrado"}.`,
           );
         }
 

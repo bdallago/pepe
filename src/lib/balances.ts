@@ -66,6 +66,8 @@ export interface TotalPorProyecto {
   projectId: string;
   nombre: string;
   color: string;
+  /** Vivo HOY (`estaVivo`), para atenuarlo en la lista. El reparto de
+   *  cada movimiento, en cambio, se resuelve contra su propia fecha. */
   activo: boolean;
   ingresos: number;
   egresos: number;

@@ -500,8 +500,13 @@ export async function despachar(
         .order("nombre");
 
       const nombrado = resolverProyecto(descripcion, proyectos ?? []);
-      const proyecto =
-        nombrado !== "ambiguo" && nombrado?.activo ? nombrado : null;
+      // Sin filtro por estado, y es deliberado: que un proyecto esté
+      // cerrado no impide imputarle un gasto. Al revés — un gasto de un
+      // proyecto cerrado va a ese proyecto, que para eso se cerró en esa
+      // fecha y no en otra. Filtrar acá mandaba el movimiento a
+      // "Compartido" en silencio, que es lo que le pasó a Beno el
+      // 2026-08-10 al cargar un gasto en Gentius.
+      const proyecto = nombrado !== "ambiguo" ? nombrado : null;
 
       const procedencia = {
         descripcion: describirFuente(leido.fuentes.descripcion),

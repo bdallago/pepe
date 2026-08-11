@@ -16,19 +16,30 @@ export const frecuenciaSchema = z.enum(["mensual", "anual"]);
 // ─────────────────────────────────────────────────────────────
 // Proyectos
 // ─────────────────────────────────────────────────────────────
-export const projectSchema = z.object({
-  nombre: z
-    .string()
-    .trim()
-    .min(1, "Poné un nombre.")
-    .max(80, "Máximo 80 caracteres."),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color inválido."),
-  activo: z.boolean(),
-  peso_prorrateo: z
-    .number()
-    .positive("El peso tiene que ser mayor a cero.")
-    .max(9999, "Peso demasiado grande."),
-});
+export const projectSchema = z
+  .object({
+    nombre: z
+      .string()
+      .trim()
+      .min(1, "Poné un nombre.")
+      .max(80, "Máximo 80 caracteres."),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color inválido."),
+    fecha_inicio: isoDate.nullable(),
+    fecha_fin: isoDate.nullable(),
+    peso_prorrateo: z
+      .number()
+      .positive("El peso tiene que ser mayor a cero.")
+      .max(9999, "Peso demasiado grande."),
+  })
+  // La base tiene `projects_fechas_coherentes` desde
+  // `20260810000001_proyectos_fechas.sql:46`. Sin este refine, cerrar un
+  // proyecto antes de su inicio no lo frena el formulario: lo frena
+  // Postgres, y lo que ve Beno es el texto crudo de una violación de
+  // check constraint. Validar acá es decirle lo mismo en castellano.
+  .refine(
+    (p) => !p.fecha_inicio || !p.fecha_fin || p.fecha_fin >= p.fecha_inicio,
+    { message: "El cierre no puede ser anterior al inicio.", path: ["fecha_fin"] },
+  );
 
 export type ProjectInput = z.infer<typeof projectSchema>;
 

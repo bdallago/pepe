@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { todayISO } from "@/lib/dates";
 import { projectSchema, type ProjectInput } from "@/lib/schemas";
 import type { Project } from "@/lib/supabase/database.types";
 
@@ -32,7 +33,8 @@ export async function crearProyecto(
       nombre: parsed.data.nombre,
       slug,
       color: parsed.data.color,
-      activo: parsed.data.activo,
+      fecha_inicio: parsed.data.fecha_inicio,
+      fecha_fin: parsed.data.fecha_fin,
       peso_prorrateo: parsed.data.peso_prorrateo,
     })
     .select()
@@ -74,7 +76,8 @@ export async function actualizarProyecto(
       nombre: parsed.data.nombre,
       slug,
       color: parsed.data.color,
-      activo: parsed.data.activo,
+      fecha_inicio: parsed.data.fecha_inicio,
+      fecha_fin: parsed.data.fecha_fin,
       peso_prorrateo: parsed.data.peso_prorrateo,
     })
     .eq("id", id)
@@ -102,15 +105,47 @@ export async function borrarProyecto(id: string): Promise<ActionResult> {
   return ok();
 }
 
+/**
+ * El botón de abrir/cerrar un proyecto.
+ *
+ * No escribe una bandera porque ya no hay ninguna: **edita la ventana**.
+ * Cerrar pone `fecha_fin` en hoy; reabrir la vuelve a `null`. Así no
+ * puede existir un proyecto marcado abierto con el cierre vencido.
+ *
+ * Reabrir no toca `fecha_inicio`: si el proyecto arrancó el 01/04 y se
+ * cerró por error, tiene que volver a arrancar el 01/04 y no hoy.
+ *
+ * El cierre se corre al inicio cuando el proyecto todavía no arrancó.
+ * Cerrar hoy un proyecto que empieza el mes que viene violaría
+ * `projects_fechas_coherentes` y devolvería un error de Postgres para
+ * algo que tiene una respuesta obvia: un proyecto que se cierra antes de
+ * arrancar duró cero días, y su ventana es su día de inicio.
+ */
 export async function alternarProyectoActivo(
   id: string,
-  activo: boolean,
+  abierto: boolean,
 ): Promise<ActionResult> {
   const { supabase } = await requireSession();
 
+  let fecha_fin: string | null = null;
+
+  if (!abierto) {
+    const { data: proyecto } = await supabase
+      .from("projects")
+      .select("fecha_inicio")
+      .eq("id", id)
+      .single();
+
+    const hoy = todayISO();
+    fecha_fin =
+      proyecto?.fecha_inicio && proyecto.fecha_inicio > hoy
+        ? proyecto.fecha_inicio
+        : hoy;
+  }
+
   const { error } = await supabase
     .from("projects")
-    .update({ activo })
+    .update({ fecha_fin })
     .eq("id", id);
 
   if (error) return fail(mensajeDeError(error));

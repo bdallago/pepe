@@ -11,6 +11,7 @@ import {
   paginaVacia,
   respuesta,
 } from "@/lib/mcp/formato";
+import { estaVivo } from "@/lib/prorrateo";
 
 export function registrarProyectos(server: McpServer) {
   server.registerTool(
@@ -73,7 +74,7 @@ export function registrarProyectos(server: McpServer) {
       }
 
       const lineas = listado.filas.map((p) => {
-        const estado = p.activo ? "activo" : "inactivo";
+        const estado = estaVivo(p) ? "activo" : "cerrado";
         const archivado = p.archivado_en ? ", archivado" : "";
         return `- ${p.nombre} (slug: ${p.slug}) — ${estado}${archivado}`;
       });
@@ -84,8 +85,11 @@ export function registrarProyectos(server: McpServer) {
           ...lineas,
           "",
           // Sin esto, "activo" se lee como "no archivado", y no es eso.
-          "Solo los activos participan del reparto de los gastos compartidos " +
-            "(los movimientos que no tienen proyecto).",
+          // Y "cerrado" tampoco es "no participa": participa de los
+          // gastos compartidos anteriores a su cierre.
+          "Cada gasto compartido (los movimientos que no tienen proyecto) " +
+            "se reparte entre los proyectos que estaban abiertos ese día; " +
+            "\"cerrado\" solo quiere decir que ya no entra en los de hoy.",
         ].join("\n"),
       );
     },

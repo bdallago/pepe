@@ -20,6 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { crearEntradaBitacora } from "@/lib/actions/journal";
 import { alternarAplicacion, alternarTeoria } from "@/lib/actions/study";
+import { estaVivo } from "@/lib/prorrateo";
 import type { Block, StudySession, Track } from "@/lib/supabase/database.types";
 
 /**
@@ -55,7 +56,7 @@ export function SessionCard({
   const router = useRouter();
   const { projects } = useAppData();
 
-  const proyectosDisponibles = projects.filter((p) => p.activo);
+  const proyectosDisponibles = projects.filter((p) => estaVivo(p));
   const porDefecto =
     proyectosDisponibles.find((p) => p.slug === SLUG_PROYECTO_ESTUDIO) ??
     proyectosDisponibles[0] ??
