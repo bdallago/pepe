@@ -51,21 +51,25 @@ import {
   type DescarteInput,
 } from "@/lib/actions/presupuestos";
 import { todayISO } from "@/lib/dates";
-import { calcularParticipaciones } from "@/lib/prorrateo";
+import { estaVivo, participacionesEnFecha } from "@/lib/prorrateo";
 import type { EstadoPresupuesto } from "@/lib/presupuestos-server";
 
 /**
  * Enviar, aceptar, descartar y archivar.
  *
- * ⚠ **Aceptar crea un proyecto activo, y eso mueve el prorrateo hacia
- * atrás.** `calcularParticipaciones()` reparte los gastos compartidos
- * entre los proyectos **activos de hoy** y aplica ese reparto a todo el
- * histórico, así que un proyecto más le cambia a Beno los balances por
- * proyecto que viene mirando (el general no se toca: suma el compartido
- * una sola vez). Está advertido en el encabezado de
- * `20260810000001_proyectos_fechas.sql` y **acá la pantalla lo dice antes
- * de crear**, con los porcentajes de antes y de después. Que un número
- * cambie es tolerable; que cambie sin que nadie lo dijera, no.
+ * ⚠ **Aceptar crea un proyecto, y eso mueve el prorrateo.** Un proyecto
+ * más se lleva su parte de los gastos compartidos, así que le cambia a
+ * Beno los balances por proyecto que viene mirando (el general no se
+ * toca: suma el compartido una sola vez). Está advertido en el
+ * encabezado de `20260810000001_proyectos_fechas.sql` y **acá la
+ * pantalla lo dice antes de crear**, con los porcentajes de antes y de
+ * después. Que un número cambie es tolerable; que cambie sin que nadie
+ * lo dijera, no.
+ *
+ * Los dos repartos se simulan **en la fecha de hoy**, que es la ventana
+ * en la que nace el proyecto: `participacionesEnFecha()` reparte entre
+ * los que estaban vivos en cada fecha, así que un proyecto que empieza
+ * hoy no toca el reparto de lo que ya pasó.
  */
 
 /**
@@ -138,16 +142,24 @@ export function AccionesPresupuesto({
   const resuelto = estado === "aceptado" || estado === "descartado";
 
   // ── El aviso del prorrateo, con números concretos ─────────────────
-  const activos = projects.filter((p) => p.activo);
-  const antes = calcularParticipaciones(projects);
-  const despues = calcularParticipaciones([
-    ...projects,
-    {
-      id: "__nuevo__",
-      activo: true,
-      peso_prorrateo: 1,
-    },
-  ]);
+  const hoy = todayISO();
+  const activos = projects.filter((p) => estaVivo(p));
+  const antes = participacionesEnFecha(projects, hoy);
+  const despues = participacionesEnFecha(
+    [
+      ...projects,
+      {
+        id: "__nuevo__",
+        // El proyecto nace hoy y sin fecha de cierre: es con lo que
+        // viene cargado el campo de arriba y lo que inserta
+        // `aceptarPresupuesto`.
+        fecha_inicio: hoy,
+        fecha_fin: null,
+        peso_prorrateo: 1,
+      },
+    ],
+    hoy,
+  );
 
   const proyectoVinculado = projectId
     ? (projects.find((p) => p.id === projectId) ?? null)

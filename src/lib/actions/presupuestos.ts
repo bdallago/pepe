@@ -442,13 +442,13 @@ export interface ResultadoAceptacion {
  * cambia nada.
  *
  * ⚠ Y hay un efecto que la pantalla avisa **antes** de llegar acá: un
- * proyecto activo más **cambia el reparto de los gastos compartidos hacia
- * atrás**. `calcularParticipaciones()` reparte por `peso_prorrateo` entre
- * los proyectos activos **de hoy** y aplica ese reparto a todo el
- * histórico (lo explica largo el encabezado de
- * `20260810000001_proyectos_fechas.sql`). O sea que aceptar le mueve a
- * Beno los balances por proyecto que viene mirando. El balance general no
- * se toca: suma el compartido una sola vez.
+ * proyecto más **cambia el reparto de los gastos compartidos**.
+ * `participacionesEnFecha()` reparte por `peso_prorrateo` entre los que
+ * estaban vivos en la fecha de cada gasto (lo explica largo el
+ * encabezado de `20260810000001_proyectos_fechas.sql`), así que uno que
+ * nace hoy se lleva su parte de lo que venga de hoy en adelante y le
+ * mueve a Beno los balances por proyecto que viene mirando. El balance
+ * general no se toca: suma el compartido una sola vez.
  *
  * ⚠ `resuelto_en` no es opcional: hay un check
  * `(estado in ('aceptado','descartado')) = (resuelto_en is not null)` y

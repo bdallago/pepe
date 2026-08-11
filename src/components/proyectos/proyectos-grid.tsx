@@ -13,10 +13,11 @@ import { useAppData } from "@/components/providers/app-data-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { calcularBalances } from "@/lib/balances";
+import { todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import {
-  calcularParticipaciones,
   etiquetaProrrateo,
+  participacionesEnFecha,
   pesosSonUniformes,
 } from "@/lib/prorrateo";
 import type { Moneda, Movement } from "@/lib/supabase/database.types";
@@ -36,10 +37,13 @@ export function ProyectosGrid({ movements }: { movements: Movement[] }) {
   );
 
   const participaciones = useMemo(
-    () => calcularParticipaciones(projects),
+    () => participacionesEnFecha(projects, todayISO()),
     [projects],
   );
-  const uniformes = useMemo(() => pesosSonUniformes(projects), [projects]);
+  const uniformes = useMemo(
+    () => pesosSonUniformes(projects, todayISO()),
+    [projects],
+  );
 
   const slugPorId = useMemo(
     () => new Map(projects.map((p) => [p.id, p.slug])),

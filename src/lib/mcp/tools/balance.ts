@@ -8,7 +8,7 @@ import {
   calcularBalancesProyecto,
   type Totales,
 } from "@/lib/balances";
-import { formatDate } from "@/lib/dates";
+import { formatDate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { datosDelPedido } from "@/lib/mcp/contexto";
 import { SOLO_LECTURA, respuesta } from "@/lib/mcp/formato";
@@ -156,7 +156,7 @@ export function registrarBalance(server: McpServer) {
 
         if (b.participacion) {
           lineas.push(
-            `- De los gastos compartidos le toca ${etiquetaProrrateo(b.participacion, pesosSonUniformes(projs))}, y ya está adentro de los números de arriba.`,
+            `- De los gastos compartidos le toca ${etiquetaProrrateo(b.participacion, pesosSonUniformes(projs, todayISO()))}, y ya está adentro de los números de arriba.`,
           );
         } else {
           // Un proyecto inactivo no participa del reparto, y si no se

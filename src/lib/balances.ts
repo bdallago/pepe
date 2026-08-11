@@ -2,7 +2,7 @@ import { monthKey, monthRange, todayISO } from "@/lib/dates";
 import { montoEnMoneda, round2 } from "@/lib/fx";
 import {
   estaVivo,
-  participacionesEnFecha,
+  memoParticipaciones,
   type ParticipacionProyecto,
   type ProyectoParaReparto,
 } from "@/lib/prorrateo";
@@ -182,15 +182,7 @@ function repartirCompartidos(
   const porProyecto = new Map<string, { ingresos: number; egresos: number }>();
   const sinRepartir: Movement[] = [];
 
-  const cache = new Map<string, Map<string, ParticipacionProyecto>>();
-  const participacionesDe = (fecha: string) => {
-    let p = cache.get(fecha);
-    if (!p) {
-      p = participacionesEnFecha(projects, fecha);
-      cache.set(fecha, p);
-    }
-    return p;
-  };
+  const participacionesDe = memoParticipaciones(projects);
 
   for (const movement of compartidos) {
     const participaciones = participacionesDe(movement.fecha);
@@ -400,15 +392,7 @@ export function calcularBalancesProyecto(
 ): Balances & { participacion: ParticipacionProyecto | undefined } {
   const filtrados = filtrarMovimientos(movements, filtros);
 
-  const cache = new Map<string, Map<string, ParticipacionProyecto>>();
-  const participacionesDe = (fecha: string) => {
-    let p = cache.get(fecha);
-    if (!p) {
-      p = participacionesEnFecha(projects, fecha);
-      cache.set(fecha, p);
-    }
-    return p;
-  };
+  const participacionesDe = memoParticipaciones(projects);
 
   // La participación de HOY, para la etiqueta "Compartido (1/3)" del
   // encabezado. Ojo: con reparto por fecha, dos movimientos de la misma

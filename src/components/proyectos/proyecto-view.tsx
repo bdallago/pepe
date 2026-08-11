@@ -30,8 +30,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { calcularBalancesProyecto, filtrarMovimientos } from "@/lib/balances";
+import { todayISO } from "@/lib/dates";
 import { etiquetaProrrateo, imputarAProyecto } from "@/lib/prorrateo";
-import { calcularParticipaciones, pesosSonUniformes } from "@/lib/prorrateo";
+import { participacionesEnFecha, pesosSonUniformes } from "@/lib/prorrateo";
 import type { Movement, Project } from "@/lib/supabase/database.types";
 
 /**
@@ -71,10 +72,13 @@ export function ProyectoView({
   );
 
   const participaciones = useMemo(
-    () => calcularParticipaciones(projects),
+    () => participacionesEnFecha(projects, todayISO()),
     [projects],
   );
-  const uniformes = useMemo(() => pesosSonUniformes(projects), [projects]);
+  const uniformes = useMemo(
+    () => pesosSonUniformes(projects, todayISO()),
+    [projects],
+  );
   const participacion = participaciones.get(proyecto.id);
 
   const imputados = useMemo(
@@ -82,10 +86,10 @@ export function ProyectoView({
       imputarAProyecto(
         filtrarMovimientos(movements, filtros),
         proyecto.id,
-        participaciones,
+        projects,
         moneda,
       ),
-    [movements, filtros, proyecto.id, participaciones, moneda],
+    [movements, filtros, proyecto.id, projects, moneda],
   );
 
   return (

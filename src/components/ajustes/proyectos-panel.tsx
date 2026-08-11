@@ -43,7 +43,8 @@ import {
   crearProyecto,
 } from "@/lib/actions/projects";
 import { projectSchema, type ProjectInput } from "@/lib/schemas";
-import { calcularParticipaciones } from "@/lib/prorrateo";
+import { todayISO } from "@/lib/dates";
+import { participacionesEnFecha } from "@/lib/prorrateo";
 import type { Project } from "@/lib/supabase/database.types";
 
 /**
@@ -72,7 +73,7 @@ export function ProyectosPanel() {
   const [creando, setCreando] = useState(false);
   const [borrando, setBorrando] = useState<Project | null>(null);
 
-  const participaciones = calcularParticipaciones(projects);
+  const participaciones = participacionesEnFecha(projects, todayISO());
 
   async function confirmarBorrado() {
     if (!borrando) return;
