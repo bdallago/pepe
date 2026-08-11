@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   actualizarProyecto,
+  alternarProyectoActivo,
   borrarProyecto,
   crearProyecto,
 } from "@/lib/actions/projects";
@@ -80,8 +81,33 @@ export function ProyectosPanel() {
   const [editando, setEditando] = useState<Project | null>(null);
   const [creando, setCreando] = useState(false);
   const [borrando, setBorrando] = useState<Project | null>(null);
+  const [alternando, setAlternando] = useState<string | null>(null);
 
   const participaciones = calcularParticipaciones(projects, todayISO());
+  const abiertos = projects.filter((p) => estaVivo(p)).length;
+
+  /**
+   * Cerrar y reabrir no escriben una bandera: mueven `fecha_fin`. Por eso
+   * el aviso de más abajo importa —cerrar el último proyecto abierto deja
+   * los gastos compartidos futuros sin entre quiénes repartirse— y por eso
+   * el resultado se muestra: la action no lanza, contesta `ActionResult`,
+   * así que sin este `toast` un cierre fallido no se vería en ningún lado.
+   */
+  async function alternar(proyecto: Project) {
+    const vivo = estaVivo(proyecto);
+
+    setAlternando(proyecto.id);
+    const resultado = await alternarProyectoActivo(proyecto.id, !vivo);
+    setAlternando(null);
+
+    if (!resultado.ok) {
+      toast.error(resultado.error);
+      return;
+    }
+
+    toast.success(vivo ? "Proyecto cerrado." : "Proyecto reabierto.");
+    router.refresh();
+  }
 
   async function confirmarBorrado() {
     if (!borrando) return;
@@ -120,6 +146,7 @@ export function ProyectosPanel() {
         ) : (
           projects.map((proyecto) => {
             const participacion = participaciones.get(proyecto.id);
+            const vivo = estaVivo(proyecto);
 
             return (
               <div
@@ -140,12 +167,28 @@ export function ProyectosPanel() {
                       ? ` · ${(participacion.fraccion * 100).toFixed(1)}% de lo compartido`
                       : ""}
                   </p>
+                  {vivo && abiertos === 1 ? (
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      Es el único abierto: al cerrarlo, los gastos
+                      compartidos posteriores a hoy no van a tener entre
+                      quiénes repartirse.
+                    </p>
+                  ) : null}
                 </div>
 
-                {!estaVivo(proyecto) ? (
-                  <Badge variant="outline">cerrado</Badge>
-                ) : null}
+                {!vivo ? <Badge variant="outline">cerrado</Badge> : null}
 
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={alternando === proyecto.id}
+                  onClick={() => void alternar(proyecto)}
+                >
+                  {alternando === proyecto.id ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  {vivo ? "Cerrar" : "Reabrir"}
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
