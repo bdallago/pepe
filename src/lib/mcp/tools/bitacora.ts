@@ -215,9 +215,9 @@ export function registrarBitacora(server: McpServer) {
 
         // ⚠ La regla de a qué proyecto va una entrada sin proyecto vive
         // en `lib/bitacora.ts` y la comparten el formulario, la caja y
-        // esto. No la reimplementes acá: filtrar por `activo` es la
-        // tentación de siempre y está mal, porque el proyecto de estudio
-        // está inactivo a propósito.
+        // esto. No la reimplementes acá: filtrar por los que siguen
+        // abiertos hoy es la tentación de siempre y está mal, porque el
+        // proyecto de estudio está cerrado a propósito.
         elegido = proyectoPorDefectoDeBitacora(proyectos ?? []);
       }
 

@@ -22,8 +22,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { calcularBalances } from "@/lib/balances";
+import { formatDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import type { Movement } from "@/lib/supabase/database.types";
+
+/**
+ * Cuántos gastos sin repartir se nombran antes de resumir en "y N más".
+ * El aviso tiene que caber en el bloque sin empujar los gráficos.
+ */
+const MAX_SIN_REPARTIR = 5;
 
 /**
  * Balance general.
@@ -59,16 +66,40 @@ export function DashboardView({ movements }: { movements: Movement[] }) {
       <StatCards balances={balances} moneda={moneda} />
 
       {balances.compartidoSinRepartir !== 0 ? (
-        <p className="border-destructive/40 bg-destructive/5 text-destructive flex items-start gap-2 rounded-md border p-3 text-sm">
+        <div className="border-destructive/40 bg-destructive/5 text-destructive flex items-start gap-2 rounded-md border p-3 text-sm">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          <span>
-            Hay{" "}
-            {formatMoney(Math.abs(balances.compartidoSinRepartir), moneda)} en
-            gastos compartidos que no se están repartiendo porque no tenés
-            ningún proyecto activo. Cuentan en el balance general pero no en
-            los balances por proyecto.
-          </span>
-        </p>
+          <div className="min-w-0">
+            <p>
+              Hay{" "}
+              <span className="cifra">
+                {formatMoney(Math.abs(balances.compartidoSinRepartir), moneda)}
+              </span>{" "}
+              en gastos compartidos que no se repartieron: no había ningún
+              proyecto abierto en esas fechas. Cuentan en el balance general
+              pero no en los balances por proyecto.
+            </p>
+            {/* Cuáles fueron. Antes el caso era todo o nada y alcanzaba con
+                el monto; ahora depende de la fecha de cada gasto, y un
+                aviso que no dice de qué habla no se puede accionar. */}
+            <ul className="mt-2 space-y-0.5 text-xs">
+              {balances.movimientosSinRepartir.slice(0, MAX_SIN_REPARTIR).map(
+                (m) => (
+                  <li key={m.id} className="truncate">
+                    <span className="cifra">{formatDate(m.fecha)}</span> ·{" "}
+                    {m.descripcion}
+                  </li>
+                ),
+              )}
+              {balances.movimientosSinRepartir.length > MAX_SIN_REPARTIR ? (
+                <li>
+                  y{" "}
+                  {balances.movimientosSinRepartir.length - MAX_SIN_REPARTIR}{" "}
+                  más.
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        </div>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">

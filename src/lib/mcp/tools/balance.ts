@@ -73,7 +73,9 @@ export function registrarBalance(server: McpServer) {
         "da el balance general de Pepe; con `proyecto`, el de ese " +
         "proyecto **incluyendo la parte que le toca de los gastos " +
         "compartidos** (los que no tienen proyecto se reparten entre los " +
-        "activos). Devuelve dos totales que no son lo mismo: *efectuado* " +
+        "que estaban abiertos en la fecha de cada gasto, así que un " +
+        "proyecto cerrado sigue llevándose la parte que le tocó mientras " +
+        "estuvo vivo). Devuelve dos totales que no son lo mismo: *efectuado* " +
         "es plata que ya se movió y *proyectado* suma además lo " +
         "planificado. Cada movimiento se convierte con la cotización que " +
         "quedó congelada el día que se cargó, nunca con la de hoy.",
@@ -108,7 +110,7 @@ export function registrarBalance(server: McpServer) {
       // pozo que se reparte. Decirlo es más útil que devolver ceros.
       if (objetivo?.tipo === "compartido") {
         return respuesta(
-          `"${COMPARTIDO}" no es un proyecto, así que no tiene balance propio: los movimientos sin proyecto se reparten entre los proyectos activos y ya están contados adentro del balance de cada uno. Pedime el balance general, o el de un proyecto puntual. Para verlos sueltos, \`listar_movimientos\` con proyecto "${COMPARTIDO}".`,
+          `"${COMPARTIDO}" no es un proyecto, así que no tiene balance propio: cada movimiento sin proyecto se reparte entre los proyectos que estaban abiertos ese día y ya está contado adentro del balance de cada uno. Pedime el balance general, o el de un proyecto puntual. Para verlos sueltos, \`listar_movimientos\` con proyecto "${COMPARTIDO}".`,
         );
       }
 
@@ -154,15 +156,26 @@ export function registrarBalance(server: McpServer) {
           `- Movimientos imputados: ${b.cantidadMovimientos}`,
         ];
 
-        if (b.participacion) {
+        // La pregunta que contesta esta línea no es "¿participa hoy?"
+        // sino "¿los números de arriba llevan parte de algún compartido?".
+        // Con reparto por fecha las dos se separan: Proder está cerrado
+        // —no participa del reparto de hoy— y sin embargo el 94 % de sus
+        // egresos es su parte de los compartidos de cuando estaba
+        // abierto. Decidirlo por `participacion` le decía al modelo lo
+        // contrario de lo que dicen los números dos renglones más arriba.
+        const cerrado = !estaVivo(objetivo.proyecto);
+
+        if (b.incluyeCompartidos && b.participacion) {
           lineas.push(
-            `- De los gastos compartidos le toca ${etiquetaProrrateo(b.participacion, pesosSonUniformes(projs, todayISO()))}, y ya está adentro de los números de arriba.`,
+            `- Los números de arriba ya incluyen su parte de los gastos compartidos. Hoy le toca ${etiquetaProrrateo(b.participacion, pesosSonUniformes(projs, todayISO()))}; los de fechas anteriores se repartieron entre los proyectos que estaban abiertos ese día, que pueden ser otros.`,
+          );
+        } else if (b.incluyeCompartidos) {
+          lineas.push(
+            `- Los números de arriba ya incluyen la parte de los gastos compartidos que le tocó mientras estuvo abierto${cerrado ? ". Está cerrado, así que no entra en el reparto de los de hoy" : ", pero hoy no entra en el reparto"}.`,
           );
         } else {
-          // Un proyecto cerrado no participa del reparto de hoy, y si no
-          // se dice se lee como si los compartidos no existieran.
           lineas.push(
-            `- No participa del reparto de los gastos compartidos${estaVivo(objetivo.proyecto) ? "" : ": está cerrado"}.`,
+            `- En este rango no lleva parte de ningún gasto compartido${cerrado ? ", y está cerrado, así que tampoco entra en el reparto de los de hoy" : ""}.`,
           );
         }
 
@@ -199,7 +212,10 @@ export function registrarBalance(server: McpServer) {
       if (b.compartidoSinRepartir !== 0) {
         lineas.push(
           "",
-          `⚠ Hay ${formatMoney(Math.abs(b.compartidoSinRepartir), moneda)} de gastos compartidos sin repartir, porque no hay ningún proyecto activo entre quiénes hacerlo. Están contados en el balance general pero en ninguno de los balances por proyecto.`,
+          `⚠ Hay ${formatMoney(Math.abs(b.compartidoSinRepartir), moneda)} de gastos compartidos sin repartir: ningún proyecto estaba abierto en sus fechas. Están contados en el balance general pero en ninguno de los balances por proyecto.`,
+          ...b.movimientosSinRepartir
+            .slice(0, 5)
+            .map((m) => `  - ${formatDate(m.fecha)} · ${m.descripcion}`),
         );
       }
 

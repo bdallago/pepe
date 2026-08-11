@@ -32,7 +32,7 @@ export function registrarProyectos(server: McpServer) {
       // Ahora sí existen, así que las que nombra son ellas y no una
       // familia difusa.
       description:
-        "Los proyectos de Pepe, con su slug y si están activos. `projects` " +
+        "Los proyectos de Pepe, con su slug y si siguen abiertos hoy. `projects` " +
         "es la entidad raíz de la app: los movimientos, las lecciones y la " +
         "bitácora cuelgan de un proyecto. Devuelve el listado y nada más: " +
         "no trae balances ni movimientos. Para plata está `balance`; para " +

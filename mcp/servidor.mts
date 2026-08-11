@@ -79,9 +79,12 @@ server.registerTool(
   {
     title: "Listar proyectos",
     description:
-      "Los proyectos de Pepe con su peso de prorrateo y si están activos. " +
-      "`projects` es la entidad raíz de toda la app: las lecciones y la " +
-      "bitácora también cuelgan de un proyecto.",
+      "Los proyectos de Pepe con su peso de prorrateo y si siguen " +
+      "abiertos hoy. `projects` es la entidad raíz de toda la app: las " +
+      "lecciones y la bitácora también cuelgan de un proyecto. Ojo: " +
+      "\"cerrado\" no quiere decir que no participe del prorrateo — cada " +
+      "gasto compartido se reparte entre los que estaban abiertos ese " +
+      "día, así que un proyecto cerrado conserva la parte que le tocó.",
     inputSchema: {},
   },
   async () => {
@@ -170,9 +173,16 @@ server.registerTool(
               `  Ingresos:  ${formatMoney(b.efectuado.ingresos, moneda)}`,
               `  Egresos:   ${formatMoney(b.efectuado.egresos, moneda)}`,
               `  Balance:   ${formatMoney(b.efectuado.balance, moneda)}`,
-              b.participacion
-                ? `  Le toca el ${(b.participacion.fraccion * 100).toFixed(1)} % de los gastos compartidos.`
-                : `  No participa del prorrateo (proyecto inactivo).`,
+              // "¿Los números de arriba llevan parte de un compartido?",
+              // que no es lo mismo que "¿participa hoy?". Un proyecto
+              // cerrado puede tener casi todos sus egresos en compartidos
+              // de cuando estaba abierto; decir "no participa del
+              // prorrateo" ahí es afirmar lo contrario de los números.
+              b.incluyeCompartidos && b.participacion
+                ? `  Lleva su parte de los gastos compartidos; hoy le toca el ${(b.participacion.fraccion * 100).toFixed(1)} %.`
+                : b.incluyeCompartidos
+                  ? `  Lleva la parte de los gastos compartidos que le tocó mientras estuvo abierto; del reparto de hoy no entra${estaVivo(p) ? "" : " porque está cerrado"}.`
+                  : `  No lleva parte de ningún gasto compartido en este rango${estaVivo(p) ? "" : "; está cerrado"}.`,
               `  Sobre ${b.cantidadMovimientos} movimientos.`,
             ].join("\n"),
           },
@@ -186,11 +196,20 @@ server.registerTool(
       .map((x) => `  - ${x.nombre}: ${formatMoney(x.balance, moneda)}`)
       .join("\n");
 
+    // ⚠ La condición es `!== 0` y no `> 0`: con un ingreso compartido sin
+    // repartir el neto da negativo, y con `> 0` este aviso —el único que
+    // explica por qué la suma no cierra— era justo el que no salía.
     const aviso =
-      b.compartidoSinRepartir > 0
-        ? `\n⚠ ${formatMoney(b.compartidoSinRepartir, moneda)} de gastos compartidos no se` +
-          ` pudieron repartir: no hay proyectos activos. Por eso la suma por` +
-          ` proyecto no llega al general.`
+      b.compartidoSinRepartir !== 0
+        ? [
+            ``,
+            `⚠ ${formatMoney(Math.abs(b.compartidoSinRepartir), moneda)} de gastos compartidos no se` +
+              ` pudieron repartir: ningún proyecto estaba abierto en sus fechas.` +
+              ` Por eso la suma por proyecto no llega al general.`,
+            ...b.movimientosSinRepartir
+              .slice(0, 5)
+              .map((m) => `  - ${formatDate(m.fecha)} · ${m.descripcion}`),
+          ].join("\n")
         : "";
 
     return {

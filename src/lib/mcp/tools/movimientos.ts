@@ -276,7 +276,11 @@ export function registrarMovimientos(server: McpServer) {
         }
         if (resuelto.tipo === "compartido") {
           projectId = null;
-          etiquetaProyecto = "compartido entre los proyectos activos";
+          // El reparto se resuelve contra la fecha del movimiento, no
+          // contra la foto de hoy, así que la etiqueta no puede prometer
+          // un conjunto de proyectos: promete el criterio.
+          etiquetaProyecto =
+            "compartido, se reparte entre los proyectos que estaban abiertos en su fecha";
         } else {
           projectId = resuelto.proyecto.id;
           etiquetaProyecto = resuelto.proyecto.nombre;

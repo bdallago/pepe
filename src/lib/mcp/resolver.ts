@@ -24,7 +24,8 @@ export const COMPARTIDO = "compartido";
 
 export type ProyectoResuelto =
   | { tipo: "proyecto"; proyecto: Project }
-  /** `project_id = null`: el gasto se reparte entre los activos. */
+  /** `project_id = null`: el gasto se reparte entre los proyectos que
+   *  estaban abiertos en su fecha, no entre los de hoy. */
   | { tipo: "compartido" }
   | { tipo: "no-encontrado"; disponibles: Project[] };
 

@@ -13,7 +13,7 @@ import { useAppData } from "@/components/providers/app-data-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { calcularBalances } from "@/lib/balances";
-import { todayISO } from "@/lib/dates";
+import { formatDate, todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import {
   etiquetaProrrateo,
@@ -22,6 +22,9 @@ import {
 } from "@/lib/prorrateo";
 import type { Moneda, Movement } from "@/lib/supabase/database.types";
 import { cn } from "@/lib/utils";
+
+/** Cuántos gastos sin repartir se nombran antes de resumir en "y N más". */
+const MAX_SIN_REPARTIR = 5;
 
 export function ProyectosGrid({ movements }: { movements: Movement[] }) {
   const { projects, categories, moneda } = useAppData();
@@ -146,6 +149,7 @@ export function ProyectosGrid({ movements }: { movements: Movement[] }) {
         )}
         balanceGeneral={balances.proyectado.balance}
         sinRepartir={balances.compartidoSinRepartir}
+        movimientosSinRepartir={balances.movimientosSinRepartir}
         moneda={moneda}
       />
     </div>
@@ -156,11 +160,13 @@ function ComprobacionInvariante({
   sumaProyectos,
   balanceGeneral,
   sinRepartir,
+  movimientosSinRepartir,
   moneda,
 }: {
   sumaProyectos: number;
   balanceGeneral: number;
   sinRepartir: number;
+  movimientosSinRepartir: Movement[];
   moneda: Moneda;
 }) {
   const diferencia = Math.round((sumaProyectos - balanceGeneral) * 100) / 100;
@@ -179,12 +185,30 @@ function ComprobacionInvariante({
   }
 
   return (
-    <p className="text-xs text-amber-600 dark:text-amber-500">
-      La suma por proyecto difiere del balance general en{" "}
-      <span className="cifra">{formatMoney(diferencia, moneda)}</span>
-      {esperada
-        ? ": son los gastos compartidos que no se pueden repartir por no haber proyectos activos."
-        : "."}
-    </p>
+    <div className="text-xs text-amber-600 dark:text-amber-500">
+      <p>
+        La suma por proyecto difiere del balance general en{" "}
+        <span className="cifra">{formatMoney(diferencia, moneda)}</span>
+        {esperada
+          ? ": son gastos compartidos que no se repartieron porque no había ningún proyecto abierto en sus fechas."
+          : "."}
+      </p>
+      {/* Cuáles fueron. La diferencia dejó de ser un estado global —había
+          proyectos activos o no— y pasó a depender de la fecha de cada
+          gasto, así que el monto solo no alcanza para ir a arreglarlo. */}
+      {esperada && movimientosSinRepartir.length > 0 ? (
+        <ul className="mt-1 space-y-0.5">
+          {movimientosSinRepartir.slice(0, MAX_SIN_REPARTIR).map((m) => (
+            <li key={m.id} className="truncate">
+              <span className="cifra">{formatDate(m.fecha)}</span> ·{" "}
+              {m.descripcion}
+            </li>
+          ))}
+          {movimientosSinRepartir.length > MAX_SIN_REPARTIR ? (
+            <li>y {movimientosSinRepartir.length - MAX_SIN_REPARTIR} más.</li>
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
   );
 }

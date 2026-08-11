@@ -392,7 +392,10 @@ export function calcularBalancesProyecto(
   projectId: string,
   moneda: Moneda,
   filtros: FiltrosBalance,
-): Balances & { participacion: ParticipacionProyecto | undefined } {
+): Balances & {
+  participacion: ParticipacionProyecto | undefined;
+  incluyeCompartidos: boolean;
+} {
   const filtrados = filtrarMovimientos(movements, filtros);
 
   const participacionesDe = memoParticipaciones(projects);
@@ -400,13 +403,23 @@ export function calcularBalancesProyecto(
   // La participación de HOY, para la etiqueta "Compartido (1/3)" del
   // encabezado. Ojo: con reparto por fecha, dos movimientos de la misma
   // pantalla pueden haberse repartido entre conjuntos distintos, así que
-  // esta etiqueta describe el presente y no cada fila.
+  // esta etiqueta describe el presente y no cada fila. Para saber si los
+  // totales llevan algo de compartidos, `incluyeCompartidos`.
   const participacion = participacionesDe(todayISO()).get(projectId);
 
   // Se materializan los movimientos imputados al proyecto: los directos
   // enteros y los compartidos escalados por su fracción. Son objetos
   // efímeros para el cálculo, nunca se persisten.
   const imputados: Movement[] = [];
+
+  // ¿Alguno de los números que se van a mostrar lleva adentro la parte de
+  // un gasto compartido? Es la pregunta que hay que contestar antes de
+  // decir "no participa del reparto", y **no** es la misma que
+  // `participacion`: esa mira solo hoy, y con reparto por fecha un
+  // proyecto cerrado puede llevarse el 94 % de sus egresos en compartidos
+  // de cuando estaba abierto. Se decide durante el recorrido porque
+  // depende del rango filtrado, no solo de las ventanas.
+  let incluyeCompartidos = false;
 
   for (const m of filtrados) {
     if (m.project_id === projectId) {
@@ -417,6 +430,8 @@ export function calcularBalancesProyecto(
 
     const parte = participacionesDe(m.fecha).get(projectId);
     if (!parte) continue;
+
+    incluyeCompartidos = true;
 
     imputados.push({
       ...m,
@@ -448,5 +463,6 @@ export function calcularBalancesProyecto(
     movimientosSinRepartir: [],
     cantidadMovimientos: imputados.length,
     participacion,
+    incluyeCompartidos,
   };
 }

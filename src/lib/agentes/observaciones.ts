@@ -51,6 +51,12 @@ const TOLERADAS = 8;
 /** Cuántas categorías entran al contexto, por tipo. */
 const CATEGORIAS_EN_CONTEXTO = 8;
 
+/**
+ * Cuántos gastos sin repartir se nombran. Van pocos: son la excepción al
+ * invariante, no el material de la observación.
+ */
+const MOVIMIENTOS_SIN_REPARTIR_EN_CONTEXTO = 5;
+
 /** Cuántos meses de la serie entran. Diez años es más que cualquier rango real. */
 const MESES_EN_CONTEXTO = 120;
 
@@ -263,7 +269,12 @@ function armarContexto({
 
   if (balances.compartidoSinRepartir !== 0) {
     partes.push(
-      `Hay ${miles(balances.compartidoSinRepartir)} de gastos compartidos que no se repartieron entre proyectos porque no hay ninguno activo.`,
+      [
+        `Hay ${miles(balances.compartidoSinRepartir)} de gastos compartidos que no se repartieron: ningún proyecto estaba abierto en sus fechas.`,
+        ...balances.movimientosSinRepartir
+          .slice(0, MOVIMIENTOS_SIN_REPARTIR_EN_CONTEXTO)
+          .map((m) => `- ${m.fecha}: ${m.descripcion}`),
+      ].join("\n"),
     );
   }
 
