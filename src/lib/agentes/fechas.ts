@@ -35,6 +35,10 @@ import { addDays, formatDate, parseISODate, weekday } from "@/lib/dates";
  *
  * Lo que no cubre esto es cargar un movimiento *planificado* a futuro. Eso
  * se hace desde el formulario, que es donde está el selector de estado.
+ *
+ * Esto es el default, no una ley: `agentes/proyectos.ts` necesita lo
+ * contrario —una ventana se puede abrir el mes que viene— y por eso las
+ * dos reglas de acá son apagables con `{ futuro: true }`. Ver `OpcionesFecha`.
  */
 
 export interface FechaLeida {
@@ -44,6 +48,24 @@ export interface FechaLeida {
   etiqueta: string;
   /** El texto mencionaba una fecha. Si no, `fecha` es hoy por defecto. */
   explicita: boolean;
+}
+
+/**
+ * Opciones de lectura.
+ *
+ * `futuro` apaga las **dos** reglas de "nada cae adelante": la del año
+ * implícito (sin año escrito, una fecha adelante es del año pasado) y el
+ * recorte a hoy. Las dos existen porque lo que usa esto hoy —bitácora y
+ * movimientos— registra lo que ya pasó.
+ *
+ * ⚠ **Un proyecto no.** Un proyecto se puede abrir el mes que viene, y
+ * `alternarProyectoActivo()` ya contempla ese caso. Sin esta opción,
+ * "cerrá X el 30/12" escribiría **2025**-12-30 y "abrí X el 2027-01-15"
+ * escribiría hoy, las dos cosas en silencio y contra el check
+ * `projects_fechas_coherentes`. Medido el 2026-08-11.
+ */
+export interface OpcionesFecha {
+  futuro?: boolean;
 }
 
 /** Los meses escritos con letra, como los escribe cualquiera. */
@@ -82,6 +104,7 @@ interface ReglaFecha {
   armar: (
     m: RegExpMatchArray,
     hoy: string,
+    futuro: boolean,
   ) => { fecha: string; etiqueta: string } | null;
 }
 
@@ -111,16 +134,17 @@ const REGLAS: ReglaFecha[] = [
   // "5/8", "05/08/2026"
   {
     patron: /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/,
-    armar: (m, hoy) => {
+    armar: (m, hoy, futuro) => {
       const anio = m[3]
         ? Number(m[3].length === 2 ? `20${m[3]}` : m[3])
         : Number(hoy.slice(0, 4));
       const fecha = armarISO(anio, Number(m[2]), Number(m[1]));
       if (!fecha) return null;
       // Sin año escrito, una fecha que cae adelante es del año pasado:
-      // el 3 de enero, "el 28/12" es diciembre del año que se fue.
+      // el 3 de enero, "el 28/12" es diciembre del año que se fue. Salvo
+      // que quien llama diga que el futuro vale.
       const ajustada =
-        !m[3] && fecha > hoy
+        !futuro && !m[3] && fecha > hoy
           ? armarISO(anio - 1, Number(m[2]), Number(m[1]))
           : fecha;
       return ajustada
@@ -134,13 +158,15 @@ const REGLAS: ReglaFecha[] = [
     patron: new RegExp(
       `\\b(\\d{1,2})\\s+de\\s+(${NOMBRE_DE_MES})(?:\\s+de\\s+(\\d{4}))?\\b`,
     ),
-    armar: (m, hoy) => {
+    armar: (m, hoy, futuro) => {
       const mes = MESES[m[2]!]!;
       const anio = m[3] ? Number(m[3]) : Number(hoy.slice(0, 4));
       const fecha = armarISO(anio, mes, Number(m[1]));
       if (!fecha) return null;
       const ajustada =
-        !m[3] && fecha > hoy ? armarISO(anio - 1, mes, Number(m[1])) : fecha;
+        !futuro && !m[3] && fecha > hoy
+          ? armarISO(anio - 1, mes, Number(m[1]))
+          : fecha;
       return ajustada
         ? { fecha: ajustada, etiqueta: formatDate(ajustada) }
         : null;
@@ -202,22 +228,31 @@ const REGLAS: ReglaFecha[] = [
  * `explicita: false`, y quien llama decide si eso alcanza o si hay que
  * preguntar.
  */
-export function leerFecha(texto: string, hoy: string): FechaLeida {
+export function leerFecha(
+  texto: string,
+  hoy: string,
+  opciones: OpcionesFecha = {},
+): FechaLeida {
+  const futuro = opciones.futuro === true;
   const normalizado = normalizarConservandoFechas(texto);
 
   for (const regla of REGLAS) {
     const coincidencia = normalizado.match(regla.patron);
     if (!coincidencia) continue;
 
-    const armado = regla.armar(coincidencia, hoy);
+    const armado = regla.armar(coincidencia, hoy, futuro);
     if (!armado) continue;
 
+    const adelante = armado.fecha > hoy;
+
     return {
-      // Nada de esto puede ser de mañana: las dos cosas que lo usan
-      // registran lo que ya pasó. Si el texto trae una fecha futura se usa
-      // hoy, y la respuesta dice qué fecha quedó, así que se ve.
-      fecha: armado.fecha > hoy ? hoy : armado.fecha,
-      etiqueta: armado.fecha > hoy ? "hoy" : armado.etiqueta,
+      // Nada de esto puede ser de mañana, salvo que quien llama pida lo
+      // contrario: las dos cosas que lo usaban al principio —bitácora y
+      // movimientos— registran lo que ya pasó. Si el texto trae una fecha
+      // futura y `futuro` no está, se usa hoy, y la respuesta dice qué
+      // fecha quedó, así que se ve.
+      fecha: !futuro && adelante ? hoy : armado.fecha,
+      etiqueta: !futuro && adelante ? "hoy" : armado.etiqueta,
       explicita: true,
     };
   }
