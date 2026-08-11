@@ -1624,9 +1624,28 @@ function describirVentana(p: {
   fecha_inicio: string | null;
   fecha_fin: string | null;
 }): string {
-  const desde = p.fecha_inicio ? formatDate(p.fecha_inicio) : "siempre";
-  const hasta = p.fecha_fin ? formatDate(p.fecha_fin) : "sigue abierto";
-  return `${p.nombre} va de ${desde} a ${hasta}.`;
+  /*
+    Las cuatro combinaciones se dicen por separado y no con dos ternarios
+    metidos en una plantilla. La versión de una línea daba **"X va de
+    siempre a sigue abierto."** para las dos puntas nulas, que además de
+    no ser castellano es justo el caso que más importa: un proyecto sin
+    ninguna de las dos fechas está vivo en todo el histórico y entra en el
+    reparto de **todos** los gastos compartidos. Es la línea que el spec
+    pide que no se descubra tres pantallas después.
+  */
+  if (!p.fecha_inicio && !p.fecha_fin) {
+    return `${p.nombre} no tiene fechas, así que cuenta como vivo en todo el histórico.`;
+  }
+
+  if (!p.fecha_inicio) {
+    return `${p.nombre} va desde siempre hasta el ${formatDate(p.fecha_fin!)}.`;
+  }
+
+  if (!p.fecha_fin) {
+    return `${p.nombre} arrancó el ${formatDate(p.fecha_inicio)} y sigue abierto.`;
+  }
+
+  return `${p.nombre} va del ${formatDate(p.fecha_inicio)} al ${formatDate(p.fecha_fin)}.`;
 }
 
 /**
@@ -1638,6 +1657,14 @@ function describirVentana(p: {
  * que usan los balances y la pantalla de Proyectos— sobre los proyectos
  * de antes y los de después, así que no hay un segundo lugar donde viva
  * la regla del reparto.
+ *
+ * ⚠ **Compara QUIÉNES participan, no con qué fracción**, y para esta rama
+ * alcanza: lo único que se toca acá son las fechas, y una fecha solo puede
+ * mover el conjunto. **Un cambio de `peso_prorrateo` lo daría por
+ * inocuo**, y no lo es — verificado el 2026-08-11: duplicar el peso de un
+ * proyecto contesta "No cambia el reparto de ningún gasto compartido". Si
+ * alguna vez esto se reusa desde algo que pueda mover el peso, hay que
+ * comparar las fracciones y no las claves.
  */
 function efectoDelCambio(
   antes: ProyectoParaReparto[],
@@ -1677,6 +1704,21 @@ function efectoDelCambio(
  * puestas las fechas. Es el mismo problema que resolvió `"tema — slug"` en
  * `lecciones_tema`, pero acá el argumento tiene más de un dato adentro y
  * no alcanza con pegar el slug al final.
+ *
+ * ⚠ **El `replace` puede no encontrar nada, y sin la red de abajo eso deja
+ * la pregunta en un bucle sin salida.** `nombreLeido` viene de
+ * `limpiarNombre()`, que reemplaza `[.,;:]` por espacios y colapsa los
+ * espacios repetidos: contra `"cerrá  Mi   App  S.A."` el nombre leído es
+ * `"Mi App S A"`, que **no está literal** en el argumento. El `replace`
+ * devolvía el texto igualito, la respuesta volvía a no resolver y la app
+ * repreguntaba lo mismo para siempre. Medido el 2026-08-11.
+ *
+ * ⚠ **Y la red es prependear, no appendear.** Pegar el slug al final —lo
+ * que hacía la rama de nombre vacío— lo pierde apenas el texto tiene una
+ * marca de ventana: `limpiarNombre()` corta el nombre en la primera marca,
+ * así que en `"cerrá hasta el 31/07/26 proder"` el slug queda del lado que
+ * se descarta. Adelante sobrevive a los dos recortes —`CONECTOR_INICIAL`
+ * no saca slugs— y el resto del pedido llega intacto.
  */
 function reemplazarNombre(
   argumento: string | null,
@@ -1684,6 +1726,9 @@ function reemplazarNombre(
   slug: string,
 ): string {
   const texto = argumento ?? "";
-  if (!nombreLeido) return `${texto} ${slug}`.trim();
-  return texto.replace(nombreLeido, slug);
+  const reemplazado = nombreLeido ? texto.replace(nombreLeido, slug) : texto;
+
+  if (reemplazado !== texto) return reemplazado;
+
+  return `${slug} ${texto}`.trim();
 }
