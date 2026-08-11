@@ -1593,7 +1593,6 @@ export const Constants = {
   },
 } as const
 
-
 // ─────────────────────────────────────────────────────────────
 // Alias de conveniencia usados en toda la app.
 // Este bloque se escribe a mano: si regenerás el archivo, volvé a pegarlo.
