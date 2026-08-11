@@ -29,6 +29,7 @@ import { generarRetro } from "@/lib/retro";
 import { crearSesionAlFinalDelTrack } from "@/lib/sesiones";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
+import type { NombradoConTipo } from "@/lib/agentes/bitacora";
 import type { MovimientoLeido } from "@/lib/agentes/movimientos";
 import type { Observacion } from "@/lib/agentes/observaciones";
 import type { Balances } from "@/lib/balances";
@@ -826,44 +827,42 @@ export async function despachar(
         };
       }
 
-      const { data: proyectos } = await supabase
-        .from("projects")
-        .select("*")
-        .order("nombre");
+      const [{ data: proyectos }, { data: tracksParaNombres }] = await Promise.all([
+        supabase.from("projects").select("*").order("nombre"),
+        // No filtra `archivado_en`: el nombre de un track archivado sigue
+        // siendo un nombre que Beno puede tipear, y para este chequeo
+        // cuenta igual. Es el desvío a propósito de la regla general
+        // (todas las otras lecturas de `tracks` sí lo filtran).
+        supabase.from("tracks").select("nombre, slug"),
+      ]);
 
       const todos = proyectos ?? [];
 
       /*
-        ⚠ **Si lo que se va a anotar no parece una anotación, se pregunta
-        en vez de escribir.**
+        ⚠ Si lo que se va a anotar no parece una anotación, se
+        pregunta en vez de escribir. El porqué completo —el incidente
+        que lo originó, por qué el chequeo de nombre es exacto— está
+        en `agentes/bitacora.ts`.
 
-        `bitacora` es el destino con el gancho léxico más ancho y el único
-        que escribe directo: cuando un pedido no está cubierto por ningún
-        especialista, el recepcionista aterriza acá y lo que era un "no sé
-        hacer eso" se convierte en una fila escrita. Pasó el 2026-08-10 —
-        pedir las fechas de dos proyectos dejó dos entradas con el
-        contenido "Proder" y "El Prode"—. El desarrollo del test está en
-        `agentes/bitacora.ts`.
-
-        `confirmado` es la salida: cuando Beno aprieta "Sí, anotalo", la
-        opción vuelve con esa marca y esto no se vuelve a preguntar.
+        `confirmado` es la salida: cuando Beno aprieta “Sí, anotalo”,
+        la opción vuelve con esa marca y esto no se vuelve a preguntar.
       */
-      const { data: tracksParaChequeo } = await supabase
-        .from("tracks")
-        .select("nombre, slug");
-
-      const nombrados = [...todos, ...(tracksParaChequeo ?? [])];
+      const nombrados: NombradoConTipo[] = [
+        ...todos.map((p) => ({ ...p, tipo: "proyecto" as const })),
+        ...(tracksParaNombres ?? []).map((t) => ({ ...t, tipo: "track" as const })),
+      ];
 
       if (
         !decision.confirmado &&
         !pareceAnotacion(anotacion.contenido, nombrados)
       ) {
         const entidad = esNombreDeEntidad(anotacion.contenido, nombrados);
+        const esProyecto = entidad?.tipo === "proyecto";
 
         return {
           clase: "pregunta",
-          titulo: entidad
-            ? `¿“${anotacion.contenido}” querías anotarlo en la bitácora, o querías hacer algo con ${entidad.nombre}?`
+          titulo: esProyecto
+            ? `“${anotacion.contenido}” es el nombre de un proyecto. ¿Querías anotar eso en la bitácora, o ver sus números?`
             : `¿“${anotacion.contenido}” querías anotarlo en la bitácora?`,
           opciones: [
             {
@@ -872,15 +871,17 @@ export async function despachar(
               argumento: anotacion.contenido,
               confirmado: true,
             },
-            ...(entidad
-              ? [
-                  {
-                    etiqueta: `Ver los números de ${entidad.nombre}`,
-                    destino: "consultas" as const,
-                    argumento: entidad.nombre,
-                  },
-                ]
-              : []),
+            esProyecto
+              ? {
+                  etiqueta: `Ver los números de ${entidad.nombre}`,
+                  destino: "consultas" as const,
+                  argumento: entidad.nombre,
+                }
+              : {
+                  etiqueta: "No, buscá eso que anoté",
+                  destino: "buscador" as const,
+                  argumento: anotacion.contenido,
+                },
           ],
         };
       }

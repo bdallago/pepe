@@ -1,4 +1,5 @@
 import { leerFecha } from "@/lib/agentes/fechas";
+import { normalizar, type Nombrado } from "@/lib/agentes/nombres";
 import { todayISO } from "@/lib/dates";
 
 /**
@@ -91,12 +92,18 @@ export function leerAnotacion(
 }
 
 /**
- * Lo mínimo que necesita una fila para poder compararse por nombre.
- * Proyectos y tracks lo cumplen los dos.
+ * Un proyecto o un track, ya distinguidos.
+ *
+ * El discriminador vive acá y no en `agentes/nombres.ts`: `Nombrado` es
+ * genérico sobre lo que `resolverProyecto()`/`resolverTrack()` reciben de
+ * verdad —`Project[]` y `Track[]`, sin ningún campo `tipo`—, así que
+ * meterlo ahí les rompería el tipo a los dos por una necesidad que es
+ * solo de acá: decidir, después de encontrar la entidad, si la segunda
+ * opción de la pregunta tiene sentido (ver `pareceAnotacion()` más abajo
+ * y el `case "bitacora"` de `despacho.ts`).
  */
-interface Nombrado {
-  nombre: string;
-  slug: string;
+export interface NombradoConTipo extends Nombrado {
+  tipo: "proyecto" | "track";
 }
 
 /**
@@ -122,7 +129,7 @@ const MIN_PALABRAS = 3;
  * peor caso es "una propuesta basura que se rechaza con una tecla"; acá el
  * peor caso es **una fila escrita**, y pasó — el 2026-08-10, pedir las
  * fechas de dos proyectos dejó dos entradas con el contenido `"Proder"` y
- * `"El Prode"`—. El desarrollo del test está en `agentes/bitacora.ts`.
+ * `"El Prode"`—.
  *
  * ⚠ **Va en código y no en el prompt del recepcionista, a propósito.** Es
  * la misma regla que ya aplicó `textoDelMovimiento()`: si algo se puede
@@ -143,9 +150,9 @@ const MIN_PALABRAS = 3;
  * los dos filtros de largo y lo único que lo agarra es esto. Es uno de los
  * dos proyectos del fallo que originó la salvaguarda.
  */
-export function pareceAnotacion(
+export function pareceAnotacion<T extends Nombrado>(
   contenido: string,
-  nombrados: Nombrado[],
+  nombrados: T[],
 ): boolean {
   const limpio = contenido.trim();
 
@@ -156,34 +163,16 @@ export function pareceAnotacion(
 }
 
 /** Coincide **exactamente** con el nombre o el slug de un proyecto o un track. */
-export function esNombreDeEntidad(
+export function esNombreDeEntidad<T extends Nombrado>(
   texto: string,
-  nombrados: Nombrado[],
-): Nombrado | null {
-  const aguja = normalizarNombre(texto);
+  nombrados: T[],
+): T | null {
+  const aguja = normalizar(texto);
   if (!aguja) return null;
 
   return (
     nombrados.find(
-      (n) =>
-        normalizarNombre(n.nombre) === aguja ||
-        normalizarNombre(n.slug) === aguja,
+      (n) => normalizar(n.nombre) === aguja || normalizar(n.slug) === aguja,
     ) ?? null
   );
-}
-
-/**
- * El mismo criterio que `agentes/resolver.ts`: minúsculas, sin tildes y
- * sin puntuación. Está duplicado a propósito y son cinco líneas: lo de
- * allá es un módulo `server-only` y esto tiene que poder correrse desde un
- * script de verificación sin arrastrar medio Next.
- */
-function normalizarNombre(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }

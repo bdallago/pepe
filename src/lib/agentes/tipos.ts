@@ -92,16 +92,6 @@ const decisionBase = z.object({
    * análisis que pedir. Undefined y false valen lo mismo acá.
    */
   analizar: z.boolean().optional(),
-  /**
-   * Beno ya contestó que sí a una pregunta de confirmación.
-   *
-   * **No lo produce el modelo** —igual que `analizar` cuando el destino
-   * viene elegido a mano—: lo pone el route handler cuando Beno aprieta
-   * una opción que lo trae. Es lo único que le permite a una rama con
-   * salvaguarda distinguir "el recepcionista derivó esto acá" de "Beno
-   * dijo que sí". Sin él, la pregunta se vuelve a hacer para siempre.
-   */
-  confirmado: z.boolean().optional(),
 });
 
 /**
@@ -157,7 +147,27 @@ export const decisionSchema = z.preprocess(
   decisionBase,
 );
 
-export type Decision = z.infer<typeof decisionSchema>;
+/**
+ * Lo que devuelve el recepcionista, más `confirmado`.
+ *
+ * `confirmado` **no está en `decisionSchema`**, y no por olvido: ese
+ * esquema es el que valida la salida del modelo, y `zod` descarta claves
+ * desconocidas — si `confirmado` estuviera adentro, dejaría de ser
+ * desconocida. Sería la única guarda de una rama que escribe directo
+ * (ver `case "bitacora"` en `despacho.ts`) apagable por un modelo que la
+ * emita, y ese prompt es de vidrio: no se puede mitigar pidiéndole por
+ * texto que no lo haga (ver el bloque largo de `recepcionista.ts`).
+ *
+ * En cambio **sí lo produce el route handler**, igual que `analizar`
+ * cuando el destino viene elegido a mano: `interpretar/route.ts` arma la
+ * decisión sin pasar por el modelo cuando Beno aprieta una opción que lo
+ * trae. Es lo único que le permite a una rama con salvaguarda distinguir
+ * "el recepcionista derivó esto acá" de "Beno dijo que sí". Sin él, la
+ * pregunta se vuelve a hacer para siempre.
+ */
+export type Decision = z.infer<typeof decisionSchema> & {
+  confirmado?: boolean;
+};
 
 /**
  * Cuántas acciones como mucho se sacan de una sola frase.

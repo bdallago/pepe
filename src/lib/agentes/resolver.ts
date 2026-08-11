@@ -1,17 +1,7 @@
 import "server-only";
 
+import { normalizar, type Nombrado } from "@/lib/agentes/nombres";
 import type { Project, Track } from "@/lib/supabase/database.types";
-
-/**
- * Lo mínimo que necesita una fila para poder resolverse por texto: cómo
- * se llama y cómo se la nombra en una URL. Proyectos y tracks lo cumplen
- * los dos, y por eso comparten el criterio de abajo en vez de tener cada
- * uno el suyo.
- */
-interface Nombrado {
-  nombre: string;
-  slug: string;
-}
 
 /**
  * Encuentra el proyecto que menciona una frase.
@@ -70,15 +60,4 @@ function resolverNombrado<T extends Nombrado>(
   if (parciales.length > 1) return "ambiguo";
 
   return null;
-}
-
-/** Minúsculas, sin tildes y sin puntuación, para comparar nombres escritos a mano. */
-function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
