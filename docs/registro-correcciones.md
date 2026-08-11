@@ -14,12 +14,18 @@
 diciendo el mismo número y el invariante `suma(por proyecto) === balance general` cerrando exacto
 en ARS y en USD.
 
-**La ola 1 de `docs/superpowers/plans/2026-08-11-operar-conversando.md` está terminada en la rama
-`operar-conversando`, sin mergear ni desplegar** (tareas 1 a 6, con `typecheck`, `lint` y `build`
-limpios). Arregla dos bugs que **sí llegaron a producción** —el sumidero de bitácora y el proyecto
-del movimiento—, agrega el destino `proyecto` y recalibra el recepcionista midiendo. Las seis
-tareas quedaron revisadas corriendo el código. Falta **la ola 2 entera**: las tres tools del
-conector.
+**`docs/superpowers/plans/2026-08-11-operar-conversando.md` está TERMINADO —las once tareas— en la
+rama `operar-conversando`, sin mergear ni desplegar**, con `typecheck`, `lint` y `build` limpios.
+La ola 1 arregla dos bugs que **sí llegaron a producción** —el sumidero de bitácora y el proyecto
+del movimiento—, agrega el destino `proyecto` y recalibra el recepcionista midiendo. La ola 2 suma
+tres tools al conector (`registrar_nota`, `registrar_proyecto`, `registrar_presupuesto`) y sus
+tres tipos de bandeja. **La migración `20260812000000_bandeja_dictados.sql` ya está aplicada en
+producción**, y es inocua sin el deploy: agrega tres valores de enum que nada usa todavía.
+
+Todo verificado corriendo, no leyendo: las tres tarjetas nuevas renderizadas contra el server real
+con una sesión de admin, y las tres actions de aceptación invocadas por HTTP. El presupuesto
+dictado salió en **5.750.000 ARS = 115 h × 20.000 × 2,5**, calculado por la app y no por el modelo.
+Los datos de prueba se borraron y la base quedó como estaba.
 
 ⚠ **De esa rama salió el hallazgo metodológico de la sesión, y vale más que cualquiera de los
 bugs**: el plan se escribió midiendo y aun así trajo **ocho defectos**, todos silenciosos. Los
@@ -39,6 +45,19 @@ respaldando. Del lado de Pepe está todo hecho desde hace días.
 
 ## Historial
 
+- **2026-08-11 — El fallo 3 del conector no fue un error del modelo, y por eso la corrección fue
+  darle capacidad.** Ante *"cargá todo lo que charlamos sobre el Agente de RRHH"*, Claude **se frenó
+  solo**: explicó que ese proyecto no existía y que el conector no podía crearlo, y avisó que lo que
+  iba a cargar era **un resumen suyo y no la voz de Beno** — que es exactamente la condición bajo la
+  cual `escribir_bitacora` tiene permiso de escribir directo, detectada sola. Faltaba capacidad, no
+  criterio. De ahí salieron `registrar_proyecto`, `registrar_presupuesto` y `registrar_nota`; esta
+  última es la que **sostiene** la excepción de `escribir_bitacora`, porque hasta que existió un
+  resumen del modelo no tenía a dónde ir. *(En la rama `operar-conversando`.)*
+- **2026-08-11 — El botón de aceptar de una tarjeta nueva nace apagado para siempre.** El `disabled`
+  cae a `!mostrada`, que es `borrador ?? propuesta`, o sea `null` para todo lo que no sea una
+  lección. Lo mismo con `faltaProyecto`, que le pediría un proyecto a un ítem que **es** el proyecto.
+  Sumar un tipo de tarjeta toca cinco lugares y cuatro fallan en silencio; están listados en el
+  manual agéntico. *(En la rama.)*
 - **2026-08-11 — La pregunta de "¿de qué proyecto?" podía quedarse sin salida.** `reemplazarNombre()`
   hacía `.replace()` con el nombre **ya limpiado**, y `limpiarNombre()` cambia `[.,;:]` por espacios
   y colapsa los repetidos: contra `"cerrá  Mi   App  S.A."` el nombre leído es `"Mi App S A"`, que no

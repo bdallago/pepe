@@ -34,7 +34,9 @@ chequearlas rápido antes de escribir código.
 4. **Nada se escribe sin confirmación.** Lo que produce un modelo va a
    `inbox` como `pendiente`. Las excepciones son dos y tienen nombre:
    `agentes/bitacora.ts` y `escribir_bitacora` del conector, porque ahí el
-   texto es de Beno y no hay producción de modelo.
+   texto es de Beno y no hay producción de modelo. Del lado de la caja son
+   **tres** los destinos que escriben directo: `bitacora`, `tema_estudio` y
+   `proyecto`, los tres por el mismo motivo.
 5. **Ninguna feature de LLM puede ser bloqueante.** Si Groq está caído la
    app anda entera en manual. El buscador sin embedding no es un error.
 6. **Si se puede resolver sin modelo, se resuelve sin modelo.** Fechas,
@@ -178,9 +180,9 @@ recibe usuario**: desde el conector hay que filtrar después (ver
 |---|---|
 | **Qué hace** | El portón por donde entra **todo lo que propone un modelo**, para finanzas y aprendizaje por igual. |
 | **Dónde se usa** | `/bandeja`, más el icono con contador al lado de Ajustes. |
-| **Entrypoints** | `lib/actions/inbox.ts`: `aceptarLeccion`, `aceptarNotaDeAdjunto`, `aceptarMovimientoDictado`, `aceptarZombie`, `rechazarItemBandeja`, `posponerItemBandeja`, `descartarErrorBandeja`. |
+| **Entrypoints** | `lib/actions/inbox.ts`: `aceptarLeccion`, `aceptarNotaDeAdjunto`, `aceptarMovimientoDictado`, `aceptarProyectoDictado`, `aceptarPresupuestoDictado`, `aceptarZombie`, `rechazarItemBandeja`, `posponerItemBandeja`, `descartarErrorBandeja`. |
 | **Lógica** | `components/bandeja/bandeja-view.tsx` (una tarjeta por tipo). |
-| **Estado** | `inbox`. `tipo_bandeja` tiene 8 valores; `estado_bandeja`, 5. |
+| **Estado** | `inbox`. `tipo_bandeja` tiene **11** valores; `estado_bandeja`, 5. |
 
 **Trampas.** Su diseño es requisito del spec, no cosmética: **un ítem por
 vez, sin scroll, todo con teclado** (A/R/P/E, swipe en mobile) y la acción
@@ -190,6 +192,29 @@ la entidad creada — el vínculo hacia adelante va en el payload; repuntarlos
 rompió el pase de extracción una vez. `clave_dedupe` se libera al resolver,
 **salvo en los zombies**, donde se conserva a propósito.
 `categorizacion` es un valor del enum que **nada produce**.
+
+Los cinco tipos que entran por el conector, y qué crea aceptar cada uno:
+
+| `tipo_bandeja` | Aceptar crea |
+|---|---|
+| `movimiento_dictado` | Un movimiento. La cotización se congela **acá**, no al proponer |
+| `leccion_dictada` | Una lección, con `origen = 'manual'` |
+| `nota_dictada` | Una entrada de `daily_log`. **Usa `aceptarNotaDeAdjunto`**, que cubre los dos tipos de nota: mismo payload, mismo criterio, distinta procedencia |
+| `proyecto_dictado` | El proyecto **y su presupuesto en borrador** si el payload lo trae. Una tarjeta, una tecla |
+| `presupuesto_dictado` | El presupuesto en borrador, **sin proyecto** |
+
+⚠ **Al sumar un tipo de tarjeta hay que tocar cinco lugares**, y cuatro de
+ellos fallan en silencio si te los olvidás: el flag `esX`, la exclusión de
+`propuesta` y de `faltaProyecto`, la rama de `aceptar()` **con sus
+dependencias**, la rama de renderizado y **el `disabled` del botón** —que
+cae a `!mostrada`, o sea `borrador ?? propuesta`, que es `null` para todo
+lo que no sea una lección, así que sin su propia rama el botón queda
+apagado para siempre—.
+
+⚠ **El precio de un presupuesto dictado lo calcula la app**, no el
+modelo: `total_editado: false` hace que `armarFila()` ignore el número que
+le pasan. Y `ancla_verificada` entra siempre en `false`. Los dos están en
+`crearPresupuestoDesdeDictado()`, que comparten las dos actions.
 
 ---
 
@@ -313,7 +338,7 @@ original. No la vuelvas a copiar.
 | **Transporte** | stdio, lo arranca Claude Code | Streamable HTTP |
 | **Dónde** | `mcp/servidor.mts` (`npm run mcp`), declarado en `.mcp.json` | `/api/mcp` |
 | **Auth** | ninguna: no tiene URL, no tiene superficie | OAuth 2.1 con PKCE y registro dinámico |
-| **Tools** | 5 de lectura | **8**: 5 leen, 2 proponen a `inbox`, 1 escribe directo |
+| **Tools** | 5 de lectura | **11**: 5 leen, 5 proponen a `inbox`, 1 escribe directo |
 | **Datos** | `mcp/datos.mts` | `src/lib/mcp/datos.ts` |
 
 **Trampas del local.** ⚠ **No puede importar ningún módulo marcado con

@@ -585,15 +585,15 @@ La regla que ordena todo esto: **un tool de MCP que escriba en una tabla
 de dominio sin pasar por `inbox` es una violación de la regla 6**, no un
 atajo. Si aparece la tentación, la respuesta es proponer, no escribir.
 
-#### Las ocho del conector remoto, y la única que escribe
+#### Las once del conector remoto, y la única que escribe
 
-Al 2026-08-11 el conector remoto tiene ocho tools, repartidas por ese
+Al 2026-08-11 el conector remoto tiene once tools, repartidas por ese
 mismo corte (`lib/mcp/tools/`, una familia por archivo):
 
 | Escribe | Tools |
 |---|---|
 | nada | `listar_proyectos`, `listar_movimientos`, `balance`, `buscar_lecciones`, `leer_bitacora` |
-| `inbox` | `registrar_movimiento`, `registrar_leccion` |
+| `inbox` | `registrar_movimiento`, `registrar_leccion`, `registrar_nota`, `registrar_proyecto`, `registrar_presupuesto` |
 | directo | `escribir_bitacora` |
 
 **`escribir_bitacora` es la única excepción y no es una excepción a la
@@ -603,6 +603,40 @@ Beno. Es el mismo razonamiento que habilita a `agentes/bitacora.ts`, y
 tiene la misma condición de validez: **si alguien le agrega a la
 descripción de esa tool "resumí" o "mejorá", deja de valer y pasa a
 necesitar la bandeja.**
+
+⚠ **Y la mitad que faltaba de ese razonamiento es `registrar_nota`.**
+Hasta que existió, un resumen escrito por un modelo **no tenía a dónde
+ir**, y esa es exactamente la presión que termina aflojando la única
+regla que permite escribir sin confirmación: con una sola tool para
+escribir en la bitácora, tarde o temprano el resumen entra por ahí. Con
+las dos, la separación es nítida y verificable — el texto de Beno va
+directo, el del modelo va a la bandeja— y las descripciones de las dos se
+mandan mutuamente a la otra. Salió del fallo 3 del 2026-08-10, donde el
+modelo **detectó solo** que lo que iba a cargar era un resumen suyo y
+avisó: el criterio estaba, faltaba la capacidad.
+
+Tres cosas de las tools de presupuesto que no se negocian:
+
+- **El precio nunca lo calcula el modelo.** Manda entregables con horas y
+  el monto sale de multiplicar por la tarifa de Ajustes y el
+  multiplicador del tipo de cliente, igual que en el resto de la app. Lo
+  que produce el modelo termina en un PDF con el nombre de Beno. Si el
+  cliente mencionó un número y no coincide, **gana el de Pepe**. Lo que
+  lo sostiene en código es `total_editado: false`, que hace que
+  `armarFila()` ignore el número que le pasan. Verificado el 2026-08-11:
+  115 h × 20.000 ARS × 2,5 = 5.750.000, calculado por la app.
+- **`ancla_verificada` entra siempre en `false` desde el conector.** Es
+  la marca de que la cita se comprobó contra el pedido, y del lado del
+  conector nadie la comprobó. Ponerla en `true` porque el modelo dice que
+  la sacó de ahí es justo la mentira que el campo existe para impedir.
+- **Un presupuesto dictado nace en `borrador` y sin proyecto**, y no se
+  puede de otra manera: `quotes` tiene el check
+  `(estado = 'aceptado') = (project_id is not null)`. Por eso
+  `registrar_presupuesto` **no toma un proyecto**. El caso "proyecto
+  nuevo + su presupuesto" lo cubre `registrar_proyecto`, que lo lleva
+  **adentro del payload**: si fueran dos ítems, el presupuesto apuntaría
+  a un proyecto que todavía no existe y una frase costaría dos viajes a
+  la bandeja.
 
 `registrar_leccion` **no** entra en esa excepción aunque el contenido
 también sea de Beno, y la diferencia es dónde está la garantía. En la
@@ -615,14 +649,24 @@ prohíbe la vara de 6.3—. Sin garantía mecánica, vale la regla 6.
 
 Dos cosas más que no se ven leyendo un archivo suelto:
 
-1. **`movimiento_dictado` y `leccion_dictada` son valores nuevos de
-   `tipo_bandeja`**, no reusos. Tentaba reciclar `categorizacion`, que no
+1. **Los cinco `tipo_bandeja` del conector son valores nuevos**, no
+   reusos. Los dos primeros, `movimiento_dictado` y `leccion_dictada`: Tentaba reciclar `categorizacion`, que no
    lo produce nada; no alcanza, porque un ítem del conector trae un
    movimiento entero y no una categoría a confirmar. Y `leccion_sugerida`
    habría sido peor: nace con `origen = 'generada'`, o sea "hipótesis del
    modelo", que es lo contrario de lo que es. `leccion_dictada` nace
    **`manual`**. El desarrollo está en
    `20260811000000_bandeja_conector.sql`.
+
+   Los otros tres —`proyecto_dictado`, `presupuesto_dictado` y
+   `nota_dictada`— están en `20260812000000_bandeja_dictados.sql`. El que
+   más tentaba reciclar es `nota_dictada` contra `nota_de_adjunto`: el
+   camino de aceptación **es el mismo** —de hecho la action se generalizó
+   en vez de duplicarse— pero **de dónde vino no lo es**, y eso es justo
+   lo que la tarjeta muestra a la izquierda para poder juzgar la
+   propuesta: allá va la imagen de la que salió el texto, acá el aviso de
+   que lo escribió Claude. Con un solo valor, la tarjeta tendría que
+   adivinar mirando el payload.
 2. **La cotización se congela al aceptar, no al proponer.** La propuesta
    no lleva tasa: `aceptarMovimientoDictado()` la resuelve contra la
    fecha del movimiento recién cuando el movimiento pasa a existir.

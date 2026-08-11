@@ -23,7 +23,7 @@ En un chat nuevo, pedile *"listá mis proyectos de Pepe"*.
 
 ## Qué sabe hacer
 
-Ocho tools, ordenadas por **quién termina escribiendo en la base**. Ese
+Once tools, ordenadas por **quién termina escribiendo en la base**. Ese
 corte no es una etapa del desarrollo: es la regla que las gobierna.
 
 ### Leen y nada más
@@ -42,6 +42,9 @@ corte no es una etapa del desarrollo: es la regla que las gobierna.
 |---|---|
 | `registrar_movimiento` | Un movimiento propuesto, con la categoría que Pepe sugiere sola |
 | `registrar_leccion` | Una lección propuesta, que nace como **manual** (es tuya, no una hipótesis del modelo) |
+| `registrar_nota` | Una entrada de bitácora **escrita por Claude**: un resumen de lo que charlaron, notas de una reunión, un relevamiento |
+| `registrar_proyecto` | Un proyecto nuevo, con su presupuesto adentro si lo charlaron. Una tarjeta, una tecla |
+| `registrar_presupuesto` | Un presupuesto para un cliente, cuando el proyecto ya existe o cuando todavía no hay ninguno |
 
 **No cargan nada.** Dejan una fila en `inbox` y la bandeja de siempre es
 donde se aceptan o se descartan. Es la regla que ordena toda la app —nada
@@ -58,6 +61,28 @@ aceptar.
 La cotización **se congela al aceptar**, no al proponer: el par ARS/USD se
 arma contra la fecha del movimiento en el momento en que el movimiento
 pasa a existir.
+
+**El precio de un presupuesto no lo calcula Claude, nunca.** Manda los
+entregables con sus horas y el monto sale de multiplicar por tu tarifa de
+Ajustes y el multiplicador del tipo de cliente, igual que si lo cargaras
+vos. Si el cliente mencionó un número y no coincide, gana el de Pepe. Y
+las citas del pedido que justifican cada entregable llegan **sin
+verificar**: del lado del conector nadie las comprobó contra el texto, así
+que la tarjeta las muestra como cita y no como respaldo.
+
+Un presupuesto dictado nace en **borrador y sin proyecto**, y no puede ser
+de otra manera: un borrador no cuelga de ninguno. El proyecto se elige al
+aceptarlo desde su pantalla. Por eso `registrar_presupuesto` no te pide un
+proyecto, y por eso el caso "proyecto nuevo con su presupuesto" va por
+`registrar_proyecto`: adentro de un solo ítem, así una frase tuya no
+cuesta dos viajes a la bandeja.
+
+**Y `registrar_nota` es la que sostiene que `escribir_bitacora` pueda
+escribir directo.** Hasta que existió, un resumen escrito por Claude no
+tenía a dónde ir, y esa es la presión que termina metiéndolo por la puerta
+que no le corresponde. Ahora la separación es nítida: tu texto va directo,
+el suyo va a la bandeja — y la tarjeta te avisa que lo escribió él, para
+que lo edites si suena a otra persona.
 
 ### Escribe directo
 
