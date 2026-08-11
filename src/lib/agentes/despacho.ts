@@ -443,7 +443,22 @@ export async function despachar(
            se escribe acá.
       */
       const hoy = todayISO();
-      const texto = textoDelMovimiento(decision.argumento, frase);
+
+      /*
+        Cuando esto viene de la pregunta de proyecto de abajo, el argumento
+        vuelve como `"<texto del movimiento> — <slug>"`. Se parte acá,
+        explícito, con el mismo helper y el mismo formato que usan
+        `lecciones_tema` y `tema_estudio` para su pregunta de entidad.
+
+        La gracia es la misma: lo que vuelve del lado izquierdo es la
+        frase telegráfica original, así que `leerMovimiento()` la resuelve
+        con el regex y la segunda vuelta **no gasta ninguna llamada al
+        modelo** ni puede leer distinto lo que ya había leído bien.
+      */
+      const [argumentoCrudo, proyectoElegido] = partirArgumento(
+        decision.argumento,
+      );
+      const texto = textoDelMovimiento(argumentoCrudo || null, frase);
 
       if (!texto) {
         return {
@@ -496,22 +511,75 @@ export async function despachar(
       */
       const categoria = sugerencia && sugerencia.tipo === tipo ? sugerencia : null;
 
-      // El proyecto sale del texto de la descripción, igual que en la
-      // bitácora: "Venta Proder" nombra un proyecto. Si nombra más de uno o
-      // ninguno, va compartido, que es el default del formulario.
+      /*
+        ⚠ **El proyecto se busca en el texto de trabajo, no en la
+        descripción extraída.**
+
+        La descripción de "Anotame -20usd en Claude Code en el proyecto
+        Gentius" es `"Claude Code"`, así que buscando ahí la palabra
+        "Gentius" nunca entraba en la comparación y el movimiento se iba a
+        "Compartido". Le pasó a Beno el 2026-08-10.
+
+        Con el texto entero las dos reglas del spec salen de una sola
+        llamada, y eso está medido (2026-08-11, contra los tres proyectos
+        reales): lo explícito gana ("…en el proyecto Gentius" → Gentius) y
+        lo de la descripción sigue funcionando ("Venta Proder Keerian" →
+        Proder). Cuando las dos fuentes se contradicen —"Venta Proder
+        Keerian en el proyecto Gentius"— devuelve `"ambiguo"`, que es
+        exactamente cuando hay que preguntar en vez de elegir.
+
+        Sin filtro por estado, y es deliberado: que un proyecto esté
+        cerrado no impide imputarle un gasto. Al revés — un gasto de un
+        proyecto cerrado va a ese proyecto, que para eso se cerró en esa
+        fecha y no en otra.
+      */
       const { data: proyectos } = await supabase
         .from("projects")
         .select("*")
         .order("nombre");
 
-      const nombrado = resolverProyecto(descripcion, proyectos ?? []);
-      // Sin filtro por estado, y es deliberado: que un proyecto esté
-      // cerrado no impide imputarle un gasto. Al revés — un gasto de un
-      // proyecto cerrado va a ese proyecto, que para eso se cerró en esa
-      // fecha y no en otra. Filtrar acá mandaba el movimiento a
-      // "Compartido" en silencio, que es lo que le pasó a Beno el
-      // 2026-08-10 al cargar un gasto en Gentius.
+      const todosLosProyectos = proyectos ?? [];
+
+      const nombrado =
+        proyectoElegido === COMPARTIDO_EN_PREGUNTA
+          ? null
+          : proyectoElegido
+            ? resolverProyecto(proyectoElegido, todosLosProyectos)
+            : resolverProyecto(texto, todosLosProyectos);
+
       const proyecto = nombrado !== "ambiguo" ? nombrado : null;
+
+      /*
+        **Si no se sabe de qué proyecto es, se pregunta.** Lo pidió Beno:
+        hasta ahora se asumía "Compartido" en silencio, y eso es una
+        imputación que toma la app sin decirlo. Va al final de las
+        preguntas —después de monto, descripción y fecha— con el mismo
+        criterio de siempre: primero lo más caro de equivocar.
+
+        "Compartido" va **primero y con nombre**, porque es una elección
+        legítima y frecuente (las suscripciones), no un default.
+      */
+      if (!proyecto && !proyectoElegido && todosLosProyectos.length > 0) {
+        return {
+          clase: "pregunta",
+          titulo:
+            nombrado === "ambiguo"
+              ? `Nombraste más de un proyecto. ¿A cuál va “${descripcion}”?`
+              : `¿De qué proyecto es “${descripcion}”?`,
+          opciones: [
+            {
+              etiqueta: "Compartido (se reparte)",
+              destino: "movimientos" as const,
+              argumento: `${texto} — ${COMPARTIDO_EN_PREGUNTA}`,
+            },
+            ...todosLosProyectos.map((p) => ({
+              etiqueta: p.nombre,
+              destino: "movimientos" as const,
+              argumento: `${texto} — ${p.slug}`,
+            })),
+          ],
+        };
+      }
 
       const procedencia = {
         descripcion: describirFuente(leido.fuentes.descripcion),
@@ -531,7 +599,11 @@ export async function despachar(
               ? describirHistorico(sugerencia)
               : "por defecto: casi todo es egreso",
         categoria: categoria ? describirHistorico(categoria) : null,
-        proyecto: proyecto ? "lo nombraste en la descripción" : "compartido",
+        proyecto: proyecto
+          ? proyectoElegido
+            ? "lo elegiste vos"
+            : "lo nombraste en la frase"
+          : "compartido, lo elegiste vos",
       };
 
       const cuerpo = [
@@ -1092,6 +1164,16 @@ export async function despachar(
  * recepcionista está capado en 300.
  */
 const PEDIDO_EN_URL_CHARS = 1_500;
+
+/**
+ * El slug que manda la opción "Compartido" de la pregunta de proyecto.
+ *
+ * No puede ser el string vacío —el `— ` desaparecería y `partirArgumento`
+ * devolvería `null`, o sea "no eligió nada" y la pregunta volvería a
+ * salir—. Con un centinela que ningún slug puede tener, elegir compartido
+ * es una decisión que llega, no una ausencia.
+ */
+const COMPARTIDO_EN_PREGUNTA = "__compartido__";
 
 // ─────────────────────────────────────────────────────────────
 // Movimientos
