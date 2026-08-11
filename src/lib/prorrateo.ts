@@ -1,4 +1,4 @@
-import { montoEnMoneda, round2 } from "@/lib/fx";
+import { montoEnMoneda } from "@/lib/fx";
 import { addDays, todayISO } from "@/lib/dates";
 import type { Moneda, Movement, Project } from "@/lib/supabase/database.types";
 
@@ -88,6 +88,67 @@ export function calcularParticipaciones(
   });
 
   return map;
+}
+
+/**
+ * Reparte un monto entre participantes por resto mayor.
+ *
+ * Trabaja en centavos enteros para que las partes sumen exactamente el
+ * total, sin la deriva que produce redondear cada fracción por separado.
+ *
+ * Es aritmética pura y no depende de nada: vive acá, con el resto de la
+ * regla de prorrateo, para que el reparto tenga un solo lugar donde vive.
+ */
+export function repartirPorRestoMayor(
+  monto: number,
+  fracciones: number[],
+): number[] {
+  if (fracciones.length === 0) return [];
+
+  const totalCentavos = Math.round(monto * 100);
+  const crudos = fracciones.map((f) => totalCentavos * f);
+  const pisos = crudos.map((v) => Math.floor(v));
+
+  let restante = totalCentavos - pisos.reduce((a, b) => a + b, 0);
+
+  // Los centavos sobrantes van a los que tienen mayor parte fraccionaria.
+  const orden = crudos
+    .map((valor, indice) => ({ indice, resto: valor - Math.floor(valor) }))
+    .sort((a, b) => b.resto - a.resto);
+
+  const resultado = [...pisos];
+  let cursor = 0;
+  while (restante > 0 && orden.length > 0) {
+    resultado[orden[cursor % orden.length].indice] += 1;
+    restante -= 1;
+    cursor += 1;
+  }
+
+  return resultado.map((centavos) => centavos / 100);
+}
+
+/**
+ * Reparte un monto entre los participantes de una fecha y devuelve, por
+ * proyecto, lo que le tocó.
+ *
+ * Es el **único** lugar donde se emparejan proyecto y parte, y por eso
+ * existe: `repartirPorRestoMayor()` devuelve un array posicional que hay
+ * que mantener alineado con el de ids, y desalinearlo es la única forma
+ * de que la plata termine en el proyecto equivocado. Devolviendo un mapa,
+ * ningún call site puede desalinearlo.
+ *
+ * Lo usan los tres lugares que reparten: la vista general, la vista por
+ * proyecto y la lista de movimientos de esa vista. Que los tres pasen por
+ * acá es lo que hace que digan todos el mismo número.
+ */
+export function repartirEntreParticipantes(
+  participaciones: Map<string, ParticipacionProyecto>,
+  monto: number,
+): Map<string, number> {
+  const ids = [...participaciones.keys()];
+  const fracciones = ids.map((id) => participaciones.get(id)!.fraccion);
+  const partes = repartirPorRestoMayor(monto, fracciones);
+  return new Map(ids.map((id, i) => [id, partes[i]]));
 }
 
 /**
@@ -190,6 +251,14 @@ export interface MovimientoImputado {
  * depende de **la fecha de cada movimiento**: un compartido de marzo se
  * reparte entre los que estaban vivos en marzo, y uno de agosto entre
  * los de agosto. Un mapa único no puede representar eso.
+ *
+ * Reparte **por resto mayor**, igual que los balances, y eso es lo que
+ * hace que **la suma de las filas dé el encabezado** de la pantalla del
+ * proyecto: las dos cosas se calculan por caminos separados, así que si
+ * acá se redondeara cada fracción por su cuenta —como se hacía— el total
+ * de arriba y la lista de abajo se despegarían por centavos, en la misma
+ * pantalla. Medido: el encabezado decía US$ 330,96 y las filas sumaban
+ * US$ 330,91.
  */
 export function imputarAProyecto(
   movements: Movement[],
@@ -213,12 +282,16 @@ export function imputarAProyecto(
 
     if (movement.project_id !== null) continue;
 
-    const participacion = participacionesDe(movement.fecha).get(projectId);
+    const participaciones = participacionesDe(movement.fecha);
+    const participacion = participaciones.get(projectId);
     if (!participacion) continue;
 
     resultado.push({
       movement,
-      monto: round2(montoEnMoneda(movement, moneda) * participacion.fraccion),
+      monto: repartirEntreParticipantes(
+        participaciones,
+        montoEnMoneda(movement, moneda),
+      ).get(projectId)!,
       compartido: true,
       participacion,
     });

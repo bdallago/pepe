@@ -3,6 +3,7 @@ import { montoEnMoneda, round2 } from "@/lib/fx";
 import {
   estaVivo,
   memoParticipaciones,
+  repartirEntreParticipantes,
   type ParticipacionProyecto,
   type ProyectoParaReparto,
 } from "@/lib/prorrateo";
@@ -23,6 +24,12 @@ import type {
  * Redondear la porción de cada proyecto por separado lo rompe por
  * centavos. Por eso el reparto de gastos compartidos se hace por resto
  * mayor sobre centavos enteros: las partes suman exactamente el total.
+ *
+ * El reparto en sí no vive acá sino en `lib/prorrateo.ts`
+ * (`repartirEntreParticipantes()`), y este módulo lo usa igual que la
+ * lista de movimientos de la pantalla del proyecto. Son tres caminos de
+ * cálculo distintos sobre los mismos datos; que los tres pasen por la
+ * misma función es lo único que garantiza que digan el mismo número.
  *
  * Única excepción, y es real: si la fecha del gasto no cae en la ventana
  * de vigencia de ningún proyecto no hay entre quiénes repartir. El gasto
@@ -124,61 +131,6 @@ function sumarTotales(movements: Movement[], moneda: Moneda): Totales {
   ingresos = round2(ingresos);
   egresos = round2(egresos);
   return { ingresos, egresos, balance: round2(ingresos - egresos) };
-}
-
-/**
- * Reparte un monto entre participantes por resto mayor.
- *
- * Trabaja en centavos enteros para que las partes sumen exactamente el
- * total, sin la deriva que produce redondear cada fracción por separado.
- */
-export function repartirPorRestoMayor(
-  monto: number,
-  fracciones: number[],
-): number[] {
-  if (fracciones.length === 0) return [];
-
-  const totalCentavos = Math.round(monto * 100);
-  const crudos = fracciones.map((f) => totalCentavos * f);
-  const pisos = crudos.map((v) => Math.floor(v));
-
-  let restante = totalCentavos - pisos.reduce((a, b) => a + b, 0);
-
-  // Los centavos sobrantes van a los que tienen mayor parte fraccionaria.
-  const orden = crudos
-    .map((valor, indice) => ({ indice, resto: valor - Math.floor(valor) }))
-    .sort((a, b) => b.resto - a.resto);
-
-  const resultado = [...pisos];
-  let cursor = 0;
-  while (restante > 0 && orden.length > 0) {
-    resultado[orden[cursor % orden.length].indice] += 1;
-    restante -= 1;
-    cursor += 1;
-  }
-
-  return resultado.map((centavos) => centavos / 100);
-}
-
-/**
- * Reparte un monto entre los participantes de una fecha y devuelve, por
- * proyecto, lo que le tocó.
- *
- * Es el **único** lugar donde se emparejan proyecto y parte, y por eso
- * existe: `repartirPorRestoMayor()` devuelve un array posicional que hay
- * que mantener alineado con el de ids, y desalinearlo es la única forma
- * de que la plata termine en el proyecto equivocado. Devolviendo un mapa,
- * ningún call site puede desalinearlo — ni el de la vista general ni el
- * de la vista por proyecto.
- */
-function repartirEntreParticipantes(
-  participaciones: Map<string, ParticipacionProyecto>,
-  monto: number,
-): Map<string, number> {
-  const ids = [...participaciones.keys()];
-  const fracciones = ids.map((id) => participaciones.get(id)!.fraccion);
-  const partes = repartirPorRestoMayor(monto, fracciones);
-  return new Map(ids.map((id, i) => [id, partes[i]]));
 }
 
 /**
