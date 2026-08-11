@@ -5,10 +5,16 @@
 > concreto; reescribirlo lo destruiría. Lo que cambió desde entonces y
 > contradice partes de este informe:
 >
-> - El **conector MCP remoto** existe, tiene OAuth 2.1 y **ocho tools**
->   (`docs/conector-mcp.md`).
-> - `tipo_bandeja` ya no tiene cinco valores: se le sumaron
->   `nota_de_adjunto`, `movimiento_dictado` y `leccion_dictada`.
+> - El **conector MCP remoto** existe, tiene OAuth 2.1 y **once tools**
+>   (`docs/conector-mcp.md`). Las tres últimas —`registrar_nota`,
+>   `registrar_proyecto` y `registrar_presupuesto`— entraron el
+>   2026-08-11.
+> - `tipo_bandeja` ya no tiene cinco valores sino **once**: se le sumaron
+>   `nota_de_adjunto`, `movimiento_dictado`, `leccion_dictada`,
+>   `nota_dictada`, `proyecto_dictado` y `presupuesto_dictado`.
+> - La **capa de agentes tiene catorce destinos**, no trece: el
+>   catorceavo es `proyecto`, que crea, cierra, reabre y renombra
+>   proyectos y les pone las fechas.
 > - `sugerir_categoria_historico` toma un `p_user_id` opcional.
 > - ⚠ **La columna `projects.activo` ya no existe** (borrada el
 >   2026-08-11), así que el esquema y la tabla de datos que aparecen más

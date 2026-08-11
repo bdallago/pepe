@@ -267,13 +267,11 @@ completitud.
 | **Entrypoint** | `/api/agentes/interpretar`. |
 | **Lógica** | `lib/agentes/`: `tipos.ts` (14 destinos), `recepcionista.ts`, `cadena.ts`, `despacho.ts`, y la resolución determinística en `resolver.ts`, `nombres.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts`, `proyectos.ts`. |
 
-⚠ **Al 2026-08-11 la ola 1 está terminada en la rama `operar-conversando`,
-sin mergear ni desplegar; falta la ola 2 (las tres tools del conector).**
-Lo que sigue describe el estado **de la rama**; `main` todavía tiene 13
-destinos y no tiene salvaguarda de bitácora. El plan es
-`docs/superpowers/plans/2026-08-11-operar-conversando.md` y su sección
-"Correcciones de la ejecución" **gana sobre el código que figura en las
-tareas**.
+El plan que trajo esta forma es
+`docs/superpowers/plans/2026-08-11-operar-conversando.md`, mergeado el
+2026-08-11. ⚠ Su sección "Correcciones de la ejecución" **gana sobre el
+código que figura en las tareas**: si re-ejecutás desde el texto de una
+tarea sin leerla, reintroducís ocho defectos silenciosos.
 
 **Trampas.** ⚠ **El prompt del recepcionista es de vidrio: cuatro
 incidentes medidos** donde agregarle texto rompió casos que ni nombraba.

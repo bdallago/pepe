@@ -117,11 +117,28 @@ En la pantalla de inicio hay una caja, y desde cualquier otra pantalla se
 abre con **`Ctrl+J`** (no `Ctrl+K`: esa ya es la carga rápida de
 movimientos). Escribís una frase y un **recepcionista** la deriva al
 especialista que corresponde: plata, roadmap, buscador, retro,
-suscripciones, vencimientos, temas de estudio, bitácora.
+suscripciones, vencimientos, temas de estudio, presupuestos, bitácora y
+**proyectos** — abrirlos, cerrarlos, reabrirlos, renombrarlos o moverles
+las fechas.
 
 Una frase puede pedir **varias cosas a la vez** y se ejecutan en orden.
 Es seguro porque nada entra al dominio sin confirmación: tres pedidos son
 tres propuestas, y si una falla quedan las otras.
+
+Tres destinos son la excepción y escriben directo —bitácora, temas de
+estudio y proyectos—, y pueden hacerlo por lo mismo que
+`escribir_bitacora`: **no hay producción de un modelo**. El texto y el
+título los pone Beno, las fechas son aritmética de calendario y el nombre
+de un proyecto se busca contra tres filas.
+
+Con dos salvaguardas que salieron de usarlo. **La bitácora era el sumidero
+de todo lo que la app no sabe hacer** —tiene el gancho léxico más ancho y
+escribe directo—, así que un pedido no cubierto terminaba en una fila
+escrita; ahora, si lo que se va a anotar es apenas un nombre suelto o el
+nombre de un proyecto, pregunta. Y **cambiar la ventana de un proyecto
+mueve los balances de los otros**, así que la respuesta dice qué gastos
+compartidos se reparten distinto — y si no cambió nada, lo dice en vez de
+contestar "listo".
 
 Lo que se puede resolver **sin modelo, se resuelve sin modelo**: el signo
 de `-20usd Claude Code 06/08` dice que es un egreso, y las frases
@@ -152,12 +169,19 @@ Pepe se puede agregar a Claude.ai como conector remoto y operarlo
 conversando. OAuth 2.1 con PKCE y registro dinámico; Pepe es el
 authorization server y usa el login de Google solo para la identidad.
 
-Ocho tools, ordenadas por **quién termina escribiendo**: cinco que solo
-leen (proyectos, movimientos, balance, lecciones, bitácora), dos que
-**proponen** —dejan el ítem en la bandeja y lo aceptás con un botón, como
-todo lo demás— y una sola que escribe directo, `escribir_bitacora`, que
-puede hacerlo porque lo que se guarda es tu texto y no la producción de
-un modelo. Ver `docs/conector-mcp.md`.
+Once tools, ordenadas por **quién termina escribiendo**: cinco que solo
+leen (proyectos, movimientos, balance, lecciones, bitácora), cinco que
+**proponen** —un movimiento, una lección, una nota, un proyecto con su
+presupuesto adentro, o un presupuesto suelto: dejan el ítem en la bandeja
+y lo aceptás con un botón, como todo lo demás— y una sola que escribe
+directo, `escribir_bitacora`, que puede hacerlo porque lo que se guarda es
+tu texto y no la producción de un modelo.
+
+De las que proponen, dos merecen una línea. **`registrar_nota` es la que
+sostiene esa excepción**: es donde va un texto que redactó Claude, así que
+la bitácora directa no tiene que absorberlo. Y **el precio de un
+presupuesto no lo calcula el modelo nunca** — manda las horas y el monto
+sale de tu tarifa de Ajustes. Ver `docs/conector-mcp.md`.
 
 ## Las tres reglas que importan
 

@@ -23,7 +23,7 @@ lo mismo de corrido y sin rutas de archivos.
 |---|---|---|
 | [`dev/manual-agentico.md`](dev/manual-agentico.md) | Mapa denso para modelos: funcionalidad → entrypoints → estado → trampas | sí, a mano |
 | [`manual-humano.md`](manual-humano.md) | El mismo alcance, narrativo, para personas | sí, a mano |
-| [`conector-mcp.md`](conector-mcp.md) | Cómo dar de alta el conector de Claude.ai, sus 8 tools y cómo probarlo sin Claude | sí |
+| [`conector-mcp.md`](conector-mcp.md) | Cómo dar de alta el conector de Claude.ai, sus 11 tools y cómo probarlo sin Claude | sí |
 | [`informe-estado.md`](informe-estado.md) | **Foto** de la auditoría del 2026-08-09. No se reescribe; tiene un banner con lo que cambió desde entonces | congelado |
 | [`registro-correcciones.md`](registro-correcciones.md) | Estado + historial de bugs y correcciones. "Registro" y no "bitácora": Bitácora es una sección del producto | sí, a mano |
 | [`archivo/`](archivo/) | Detalle largo que no entra en los documentos vivos | según se necesite |
@@ -31,8 +31,8 @@ lo mismo de corrido y sin rutas de archivos.
 | [`superpowers/plans/`](superpowers/plans) | El plan de implementación, tarea por tarea | uno por spec |
 
 **El registro de correcciones** ([`registro-correcciones.md`](registro-correcciones.md))
-tiene su primera tanda desde el 2026-08-11: nueve entradas que salieron
-todas de implementar el reparto por fecha. Se llama "registro" y no
+arrancó el 2026-08-11 con las nueve entradas del reparto por fecha y
+sumó las de "operar conversando" el mismo día. Se llama "registro" y no
 "bitácora" porque en Pepe **Bitácora es una sección del producto**. El
 historial fino sigue en los mensajes de commit, largos a propósito y con
 el porqué de cada cambio: `git log` es el detalle; el registro guarda el

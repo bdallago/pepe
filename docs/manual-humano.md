@@ -113,7 +113,16 @@ pierde de verdad salvo que pidas explícitamente lo contrario.
 
 Es la pieza que explica el resto. **Todo lo que produce un modelo termina
 acá antes de existir**: una lección propuesta, una suscripción sospechosa,
-la nota que salió de una captura, un movimiento dictado desde afuera.
+la nota que salió de una captura, un movimiento dictado desde afuera, y
+—desde el 2026-08-11— un proyecto entero con su presupuesto adentro, un
+presupuesto suelto, o una nota que redactó Claude resumiendo una charla.
+
+Del presupuesto conviene saber una cosa: **el precio no lo pone Claude
+nunca**. Manda los entregables con las horas que estima y el monto lo saca
+Pepe con tu tarifa de Ajustes, igual que si lo cargaras vos. Si en la
+charla apareció otro número, gana el de Pepe. Y las citas del pedido que
+justifican cada entregable llegan sin verificar, así que la tarjeta te las
+muestra como cita y no como respaldo.
 
 Está diseñada para vaciarla rápido, y eso es un requisito y no un lujo: un
 ítem por vez, sin scroll, todo con el teclado, y la decisión se aplica al
@@ -145,9 +154,24 @@ avisa si tu tarifa quedó desfasada. **Avisa: nunca la cambia.**
 Hay una caja de texto en la pantalla de inicio, y un atajo de teclado para
 abrirla desde cualquier lado. Escribís una frase como se te ocurra y la app
 la deriva sola: cargar un gasto, anotar en la bitácora, buscar algo que
-escribiste, ver qué te toca estudiar hoy, armar un presupuesto.
+escribiste, ver qué te toca estudiar hoy, armar un presupuesto, o abrir y
+cerrar un proyecto.
 
-Dos cosas que conviene saber. **Si le falta un dato, pregunta en vez de
+Eso último es nuevo y arregla algo que molestaba: antes no había forma de
+tocar un proyecto hablando, así que un pedido de ese tipo aterrizaba en el
+vecino más parecido —casi siempre la bitácora, que es la que escribe
+directo— y terminabas con una anotación que decía "Proder" y nada más.
+Ahora hay un destino propio, y **cuando cambia una ventana la respuesta te
+dice qué gastos compartidos se reparten distinto**, porque mover las
+fechas de un proyecto mueve los balances de los otros. Si de lo que
+dijiste no sale ninguna fecha nueva, te avisa que no cambió nada en vez de
+contestarte "listo".
+
+Y la otra mitad del mismo arreglo: **lo que no sabe hacer ya no lo escribe
+igual**. Si le pedís que anote algo que es apenas un nombre suelto, o el
+nombre de un proyecto, pregunta antes en vez de guardarlo.
+
+Dos cosas más que conviene saber. **Si le falta un dato, pregunta en vez de
 inventarlo** — sobre todo la fecha, porque un gasto de la semana pasada
 anotado hoy cae en el mes equivocado y agarra la cotización equivocada. Y
 **si no está segura de qué le pediste, también pregunta**: un destino
@@ -156,9 +180,16 @@ es mucho peor que admitir la duda.
 
 También se puede operar desde afuera. Pepe se agrega a Claude.ai como
 conector: preguntarle cuánto gastaste, buscar entre tus lecciones, dictarle
-un movimiento. Lo que se dicta **queda propuesto en la bandeja**, no
-cargado — con una sola excepción, la bitácora, que escribe en firme porque
-lo que se guarda ahí es tu texto y no la producción de un modelo.
+un movimiento, dictarle un proyecto nuevo con su presupuesto. Lo que se
+dicta **queda propuesto en la bandeja**, no cargado — con una sola
+excepción, la bitácora, que escribe en firme porque lo que se guarda ahí
+es tu texto y no la producción de un modelo.
+
+Esa excepción tiene su contracara, y por eso son dos cosas distintas:
+cuando el texto lo **redactó Claude** —un resumen de lo que charlaron, las
+notas de una reunión— no entra por ahí, va a la bandeja como todo lo
+demás, y la tarjeta te avisa que no es tuyo para que lo edites si suena a
+otra persona.
 
 ---
 

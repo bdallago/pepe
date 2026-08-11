@@ -14,20 +14,19 @@
 diciendo el mismo número y el invariante `suma(por proyecto) === balance general` cerrando exacto
 en ARS y en USD.
 
-**`docs/superpowers/plans/2026-08-11-operar-conversando.md` está TERMINADO —las once tareas— en la
-rama `operar-conversando`, sin mergear ni desplegar**, con `typecheck`, `lint` y `build` limpios.
-La ola 1 arregla dos bugs que **sí llegaron a producción** —el sumidero de bitácora y el proyecto
-del movimiento—, agrega el destino `proyecto` y recalibra el recepcionista midiendo. La ola 2 suma
+**`docs/superpowers/plans/2026-08-11-operar-conversando.md` está TERMINADO —las once tareas— y
+MERGEADO A `main` el 2026-08-11**, con `typecheck`, `lint` y `build` limpios. La ola 1 arregla dos
+bugs que **sí llegaron a producción** —el sumidero de bitácora y el proyecto del movimiento—,
+agrega el destino `proyecto` y recalibra el recepcionista midiendo. La ola 2 suma
 tres tools al conector (`registrar_nota`, `registrar_proyecto`, `registrar_presupuesto`) y sus
-tres tipos de bandeja. **La migración `20260812000000_bandeja_dictados.sql` ya está aplicada en
-producción**, y es inocua sin el deploy: agrega tres valores de enum que nada usa todavía.
+tres tipos de bandeja. La migración `20260812000000_bandeja_dictados.sql` está aplicada.
 
 Todo verificado corriendo, no leyendo: las tres tarjetas nuevas renderizadas contra el server real
 con una sesión de admin, y las tres actions de aceptación invocadas por HTTP. El presupuesto
 dictado salió en **5.750.000 ARS = 115 h × 20.000 × 2,5**, calculado por la app y no por el modelo.
 Los datos de prueba se borraron y la base quedó como estaba.
 
-⚠ **De esa rama salió el hallazgo metodológico de la sesión, y vale más que cualquiera de los
+⚠ **De ese trabajo salió el hallazgo metodológico de la sesión, y vale más que cualquiera de los
 bugs**: el plan se escribió midiendo y aun así trajo **ocho defectos**, todos silenciosos. Los
 ocho los encontró una revisión que **corrió el código**; ninguno se veía leyendo. Están listados
 en la sección "Correcciones de la ejecución" del plan, que **gana sobre el código que figura en
@@ -52,7 +51,7 @@ respaldando. Del lado de Pepe está todo hecho desde hace días.
   recepcionista reformatea el argumento** a `"Proder 01/04/26 - 31/07/26"`, sin ninguna, y sin marcas
   se leía una sola. Dos, y peor: la respuesta no comparaba contra lo que había. Ahora dos fechas
   sueltas se leen como apertura y cierre, y si nada cambió la respuesta lo dice — esa red se queda
-  aunque el lector esté arreglado. *(En la rama `operar-conversando`.)*
+  aunque el lector esté arreglado.
 - **2026-08-11 — El fallo 3 del conector no fue un error del modelo, y por eso la corrección fue
   darle capacidad.** Ante *"cargá todo lo que charlamos sobre el Agente de RRHH"*, Claude **se frenó
   solo**: explicó que ese proyecto no existía y que el conector no podía crearlo, y avisó que lo que
@@ -60,37 +59,35 @@ respaldando. Del lado de Pepe está todo hecho desde hace días.
   cual `escribir_bitacora` tiene permiso de escribir directo, detectada sola. Faltaba capacidad, no
   criterio. De ahí salieron `registrar_proyecto`, `registrar_presupuesto` y `registrar_nota`; esta
   última es la que **sostiene** la excepción de `escribir_bitacora`, porque hasta que existió un
-  resumen del modelo no tenía a dónde ir. *(En la rama `operar-conversando`.)*
+  resumen del modelo no tenía a dónde ir.
 - **2026-08-11 — El botón de aceptar de una tarjeta nueva nace apagado para siempre.** El `disabled`
   cae a `!mostrada`, que es `borrador ?? propuesta`, o sea `null` para todo lo que no sea una
   lección. Lo mismo con `faltaProyecto`, que le pediría un proyecto a un ítem que **es** el proyecto.
   Sumar un tipo de tarjeta toca cinco lugares y cuatro fallan en silencio; están listados en el
-  manual agéntico. *(En la rama.)*
+  manual agéntico.
 - **2026-08-11 — La pregunta de "¿de qué proyecto?" podía quedarse sin salida.** `reemplazarNombre()`
   hacía `.replace()` con el nombre **ya limpiado**, y `limpiarNombre()` cambia `[.,;:]` por espacios
   y colapsa los repetidos: contra `"cerrá  Mi   App  S.A."` el nombre leído es `"Mi App S A"`, que no
   está literal en el argumento. El replace devolvía el texto igual, la respuesta volvía a no resolver
   y la app repreguntaba lo mismo **para siempre**. La red es prependear el slug, no appendearlo: al
-  final lo pierde la primera marca de ventana. *(En la rama `operar-conversando`.)*
+  final lo pierde la primera marca de ventana.
 - **2026-08-11 — El prompt del recepcionista mandaba `"cerrá Proder"` a `retro` a propósito.** El
   bullet decía textual `Ej: "cerrá Proder"`, así que la colisión con el destino `proyecto` no era
   previsible: estaba escrita. Corregido para que `retro` hable del documento y no del cierre.
   Medido antes y después con dieciséis frases: el piso quedó intacto y las tres frases que fallaron
-  el 2026-08-10 se arreglaron juntas. *(En la rama `operar-conversando`.)*
+  el 2026-08-10 se arreglaron juntas.
 - **2026-08-11 — `leerFecha()` recortaba al pasado las fechas de un proyecto.** `"30/12"` volvía
   como diciembre **del año pasado** y `"2027-01-15"` como hoy, las dos en silencio. Está bien para
   bitácora y movimientos —registran lo que ya pasó— y mal para una ventana, que se puede abrir el
   mes que viene: ahora hay `{ futuro: true }` y el destino `proyecto` es el único que lo pasa.
-  *(En la rama.)*
 - **2026-08-11 — La bitácora era el sumidero de todo lo que la app no sabe hacer.** Tiene el gancho
   léxico más ancho y es el único destino que escribe directo: un pedido no cubierto terminaba en una
   fila escrita, y pasó — pedir las fechas de dos proyectos dejó dos entradas con el contenido
-  `"Proder"` y `"El Prode"`. Ahora `pareceAnotacion()` pregunta en vez de escribir. *(En la rama
-  `operar-conversando`.)*
+  `"Proder"` y `"El Prode"`. Ahora `pareceAnotacion()` pregunta en vez de escribir.
 - **2026-08-11 — El movimiento buscaba el proyecto solo en la descripción extraída.** "Anotame
   -20usd en Claude Code en el proyecto Gentius" tiene descripción `"Claude Code"`, así que "Gentius"
   nunca entraba en la comparación y el gasto se iba a Compartido en silencio. Ahora se busca en el
-  texto entero y, si no se sabe, se pregunta. *(En la rama.)*
+  texto entero y, si no se sabe, se pregunta.
 - **2026-08-11 — Ocho defectos del plan de "operar conversando", todos silenciosos y todos hallados
   corriendo código.** Los más caros: los regex de verbos no matcheaban **ninguna forma acentuada**
   (`\b` de JS se define contra `\w`, que excluye "á"), así que `cerrar`/`reabrir`/`crear`/`renombrar`
@@ -99,7 +96,7 @@ respaldando. Del lado de Pepe está todo hecho desde hace días.
   está en el plan.
 - **2026-08-11 — El argumento de una pregunta podía tirar el movimiento a la basura.** Viaja como
   `"<texto> — <slug>"` y `route.ts` lo capaba en 300: una frase de 298 producía un argumento de 317
-  → HTTP 400 → "No pude procesar eso", y había que retipear todo. Subido a 1100. *(En la rama.)*
+  → HTTP 400 → "No pude procesar eso", y había que retipear todo. Subido a 1100.
 - **2026-08-11 — Tres caminos de cálculo daban tres números distintos.** La grilla decía que Proder
   tenía US$ 330,96, el encabezado de su pantalla 330,91 y la suma de las filas 330,91: la grilla
   repartía centavos enteros y los otros dos redondeaban por fracción. Se unificó moviendo el reparto
