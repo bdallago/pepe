@@ -680,6 +680,7 @@ const ETIQUETA_DESTINO: Record<Destino, string> = {
   estudio: "Estudio",
   tema_estudio: "Tema nuevo",
   retro: "Retro",
+  proyecto: "Proyecto",
   lecciones_tema: "Lecciones",
   suscripciones: "Suscripciones",
   vencimientos: "Vencimientos",

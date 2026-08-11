@@ -47,6 +47,22 @@ import type {
  * `movimientos`, y por el mismo motivo — la estimación es producción de un
  * modelo que termina en un documento que se le manda a un cliente, así que
  * no arranca sola desde una caja de texto.
+ *
+ * `proyecto` es el catorceavo y salió de un fallo, no de una idea: hasta
+ * que existió **no había ningún destino que escribiera en `projects`**, y
+ * cuando un pedido no está cubierto el recepcionista aterriza en el vecino
+ * léxico más cercano. "Anotá las fechas de apertura y cierre de Proder y
+ * El Prode" (2026-08-10) terminó en dos entradas de bitácora con el
+ * contenido "Proder" y "El Prode", más una retro que nadie pidió.
+ *
+ * Escribe directo, por lo mismo que `bitacora` y `tema_estudio`: **no hay
+ * producción de un modelo**. Las fechas las dice Beno, leerlas es
+ * aritmética de calendario (`agentes/proyectos.ts`) y el nombre se
+ * resuelve contra tres filas.
+ *
+ * ⚠ Con una obligación que la bitácora no tiene: **mover una ventana mueve
+ * balances**, así que la respuesta dice qué cambió Y qué efecto tuvo. Sin
+ * eso, el efecto se descubre tres pantallas después.
  */
 export const DESTINOS = [
   "consultas",
@@ -56,6 +72,7 @@ export const DESTINOS = [
   "estudio",
   "tema_estudio",
   "retro",
+  "proyecto",
   "lecciones_tema",
   "suscripciones",
   "vencimientos",

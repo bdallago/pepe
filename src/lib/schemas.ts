@@ -43,6 +43,18 @@ export const projectSchema = z
 
 export type ProjectInput = z.infer<typeof projectSchema>;
 
+/**
+ * El color con el que nace un proyecto que no se creó desde el formulario
+ * (por conversación, o aceptando una propuesta de la bandeja).
+ *
+ * Es `--chart-1`, el primero de los ocho tonos validados. **No es un color
+ * libre**: el selector de Ajustes ofrece esos ocho justamente para que los
+ * gráficos no se llenen de colores sin validar (`AGENTS.md`, "Gráficos"), y
+ * un alta que no pasa por ese selector no puede ser la puerta por la que
+ * entre uno que no está en la lista.
+ */
+export const COLOR_POR_DEFECTO_DE_PROYECTO = "#008F8F";
+
 // ─────────────────────────────────────────────────────────────
 // Categorías
 // ─────────────────────────────────────────────────────────────

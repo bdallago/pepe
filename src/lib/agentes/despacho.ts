@@ -1,5 +1,6 @@
 import "server-only";
 
+import { crearProyecto, actualizarProyecto } from "@/lib/actions/projects";
 import {
   esNombreDeEntidad,
   leerAnotacion,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/agentes/bitacora";
 import { leerMovimiento } from "@/lib/agentes/movimientos";
 import { observarBalances } from "@/lib/agentes/observaciones";
+import { leerPedidoDeProyecto } from "@/lib/agentes/proyectos";
 import {
   describirRango,
   resolverMesDeVencimientos,
@@ -24,8 +26,10 @@ import { addDays, compareISO, formatDate, formatDayMonth, todayISO } from "@/lib
 import { formatMoney } from "@/lib/format";
 import { generarLecciones } from "@/lib/generacion";
 import { mensajeDeErrorLLM } from "@/lib/llm";
+import { memoParticipaciones } from "@/lib/prorrateo";
 import { proximoVencimiento } from "@/lib/recurrences";
 import { generarRetro } from "@/lib/retro";
+import { COLOR_POR_DEFECTO_DE_PROYECTO } from "@/lib/schemas";
 import { crearSesionAlFinalDelTrack } from "@/lib/sesiones";
 import { sugerirQueEstudiar } from "@/lib/sugerencias";
 import { escanearZombies } from "@/lib/zombies";
@@ -35,6 +39,7 @@ import type { Observacion } from "@/lib/agentes/observaciones";
 import type { Balances } from "@/lib/balances";
 import type { Sugerencia } from "@/lib/clasificacion";
 import type { ItemDeHoy } from "@/lib/aprendizaje";
+import type { ProyectoParaReparto } from "@/lib/prorrateo";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type {
   Moneda,
@@ -936,7 +941,7 @@ export async function despachar(
         return {
           clase: "pregunta",
           titulo: esProyecto
-            ? `“${anotacion.contenido}” es el nombre de un proyecto. ¿Querías anotar eso en la bitácora, o ver sus números?`
+            ? `“${anotacion.contenido}” es el nombre de un proyecto. ¿Querías anotar eso en la bitácora, o hacer algo con el proyecto?`
             : `¿“${anotacion.contenido}” querías anotarlo en la bitácora?`,
           opciones: [
             {
@@ -945,10 +950,15 @@ export async function despachar(
               argumento: anotacion.contenido,
               confirmado: true,
             },
+            // Antes esta opción llevaba a "consultas" ("Ver los números de
+            // X"). Ahora que el destino `proyecto` existe, apunta ahí: es
+            // el mismo caso de siempre —Beno nombró un proyecto en vez de
+            // pedir que se anote algo— pero con más margen de acción que
+            // solo mirar el balance (cerrarlo, moverle una fecha).
             esProyecto
               ? {
-                  etiqueta: `Ver los números de ${entidad.nombre}`,
-                  destino: "consultas" as const,
+                  etiqueta: `Hacer algo con ${entidad.nombre}`,
+                  destino: "proyecto" as const,
                   argumento: entidad.nombre,
                 }
               : {
@@ -1079,6 +1089,195 @@ export async function despachar(
         destino: "retro",
         titulo: `Retro de ${proyecto.nombre}`,
         cuerpo,
+      };
+    }
+
+    case "proyecto": {
+      /*
+        Esta rama ESCRIBE en `projects`, directo y sin pasar por la
+        bandeja, y no contradice la regla 6 por lo mismo que `bitacora` y
+        `tema_estudio`: **no hay producción de un modelo**. Las fechas las
+        dice Beno, leerlas es aritmética de calendario y el nombre del
+        proyecto se resuelve contra tres filas.
+
+        ⚠ Y con una obligación que la bitácora no tiene: **mover una
+        ventana mueve balances**. La respuesta tiene que decir qué cambió
+        y qué efecto tuvo, no un "listo".
+      */
+      const hoy = todayISO();
+      const pedido = leerPedidoDeProyecto(decision.argumento, hoy);
+
+      const { data: proyectosData } = await supabase
+        .from("projects")
+        .select("*")
+        .order("nombre");
+
+      const proyectos = proyectosData ?? [];
+
+      /*
+        Los compartidos, para poder decir **qué efecto tuvo** el cambio.
+        Se leen acá adentro y no arriba del `switch`: es la única rama que
+        los necesita, y las trece de al lado no tienen por qué pagar la
+        consulta.
+      */
+      const { data: compartidosData } = await supabase
+        .from("movements")
+        .select("id, fecha, descripcion")
+        .is("project_id", null)
+        .order("fecha");
+
+      const movimientosCompartidos = compartidosData ?? [];
+
+      if (pedido.operacion === "crear") {
+        if (!pedido.nombre) {
+          return {
+            clase: "aviso",
+            titulo: "¿Cómo se llama el proyecto?",
+            cuerpo:
+              "Decime el nombre y, si ya lo sabés, desde cuándo va. El color y el peso quedan en los valores por defecto y se editan en Ajustes.",
+          };
+        }
+
+        /*
+          Por `crearProyecto()` y no con un insert a mano: esa action
+          resuelve el slug disponible y valida contra `projectSchema`, que
+          tiene el refine del check `projects_fechas_coherentes`. Por ahí
+          es por donde "cerralo antes de que abriera" vuelve en castellano
+          y no como un error crudo de Postgres.
+
+          Devuelve `ActionResult` y **nunca lanza** para errores
+          esperables: se mira el `.ok`, no se envuelve en try/catch.
+        */
+        const creado = await crearProyecto({
+          nombre: pedido.nombre,
+          color: COLOR_POR_DEFECTO_DE_PROYECTO,
+          fecha_inicio: pedido.apertura,
+          fecha_fin: pedido.cierre,
+          peso_prorrateo: 1,
+        });
+
+        if (!creado.ok) {
+          return {
+            clase: "aviso",
+            titulo: "No pude crear el proyecto",
+            cuerpo: creado.error,
+          };
+        }
+
+        return {
+          clase: "texto",
+          destino: "proyecto",
+          titulo: `Creé el proyecto ${creado.data.nombre}`,
+          cuerpo: [
+            describirVentana(creado.data),
+            efectoDelCambio(
+              proyectos,
+              [...proyectos, creado.data],
+              movimientosCompartidos,
+            ),
+            "El color y el peso de prorrateo quedaron en los valores por defecto: se cambian desde Ajustes.",
+          ].join("\n"),
+        };
+      }
+
+      // Para todo lo demás hace falta saber de qué proyecto se habla.
+      const encontrado = resolverProyecto(pedido.nombre, proyectos);
+
+      if (!encontrado || encontrado === "ambiguo") {
+        if (proyectos.length === 0) {
+          return {
+            clase: "aviso",
+            titulo: "Todavía no tenés ningún proyecto",
+            cuerpo: "Pedime que cree uno, o creálo desde Ajustes.",
+          };
+        }
+
+        return {
+          clase: "pregunta",
+          titulo: pedido.nombre
+            ? `No sé de qué proyecto me hablás con “${pedido.nombre}”`
+            : "¿De qué proyecto?",
+          opciones: proyectos.map((p) => ({
+            etiqueta: p.nombre,
+            destino: "proyecto" as const,
+            // El slug reemplaza al nombre y el resto del pedido queda
+            // intacto: las fechas y el verbo tienen que sobrevivir a la
+            // pregunta o la respuesta no puede hacer nada.
+            argumento: reemplazarNombre(decision.argumento, pedido.nombre, p.slug),
+          })),
+        };
+      }
+
+      /*
+        ⚠ **Guarda que no está en el plan original y hace falta.** Sin
+        ella, "renombrá" a secas ("renombrá Proder" sin el " a ") deja
+        `nuevoNombre` vacío o nulo, y sin este chequeo eso llegaría hasta
+        `actualizarProyecto()` como un nombre en blanco. Va **después** de
+        resolver el proyecto —así el mensaje sale sabiendo de cuál se
+        habla— y **antes** de construir `despues`.
+      */
+      if (pedido.operacion === "renombrar" && !pedido.nuevoNombre) {
+        return {
+          clase: "aviso",
+          titulo: "¿Cómo lo querés llamar?",
+          cuerpo:
+            "Decime el nombre nuevo, como en “renombrá Proder a Gentius”.",
+        };
+      }
+
+      const antes = proyectos;
+      const despues = proyectos.map((p) =>
+        p.id === encontrado.id
+          ? {
+              ...p,
+              nombre: pedido.nuevoNombre ?? p.nombre,
+              fecha_inicio: pedido.apertura ?? p.fecha_inicio,
+              fecha_fin:
+                pedido.operacion === "reabrir"
+                  ? null
+                  : pedido.operacion === "cerrar"
+                    ? (pedido.cierre ?? hoy)
+                    : (pedido.cierre ?? p.fecha_fin),
+            }
+          : p,
+      );
+
+      const nuevo = despues.find((p) => p.id === encontrado.id)!;
+
+      /*
+        `actualizarProyecto()` solo regenera el slug **si cambió el
+        nombre**, para que los links viejos a `/proyectos/<slug>` sigan
+        andando. Por eso se le manda el proyecto entero y no un parche: no
+        reimplementes el update.
+      */
+      const guardado = await actualizarProyecto(encontrado.id, {
+        nombre: nuevo.nombre,
+        color: nuevo.color,
+        fecha_inicio: nuevo.fecha_inicio,
+        fecha_fin: nuevo.fecha_fin,
+        peso_prorrateo: Number(nuevo.peso_prorrateo),
+      });
+
+      if (!guardado.ok) {
+        return {
+          clase: "aviso",
+          titulo: "No pude cambiar el proyecto",
+          cuerpo: guardado.error,
+        };
+      }
+
+      return {
+        clase: "texto",
+        destino: "proyecto",
+        titulo:
+          pedido.operacion === "renombrar"
+            ? `${encontrado.nombre} ahora se llama ${nuevo.nombre}`
+            : `Cambié la ventana de ${nuevo.nombre}`,
+        cuerpo: [
+          describirVentana(nuevo),
+          efectoDelCambio(antes, despues, movimientosCompartidos),
+          "Si no era esto, cambialo desde Ajustes.",
+        ].join("\n"),
       };
     }
 
@@ -1413,4 +1612,78 @@ function partirArgumento(argumento: string | null): [string, string | null] {
   if (corte === -1) return [texto, null];
 
   return [texto.slice(0, corte).trim(), texto.slice(corte + 3).trim() || null];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Proyectos
+// ─────────────────────────────────────────────────────────────
+
+/** La ventana en una línea, con las dos puntas nulas dichas en criollo. */
+function describirVentana(p: {
+  nombre: string;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+}): string {
+  const desde = p.fecha_inicio ? formatDate(p.fecha_inicio) : "siempre";
+  const hasta = p.fecha_fin ? formatDate(p.fecha_fin) : "sigue abierto";
+  return `${p.nombre} va de ${desde} a ${hasta}.`;
+}
+
+/**
+ * Qué gastos compartidos cambian de reparto por este cambio de ventana.
+ *
+ * ⚠ **Esto es la obligación del spec y no un adorno**: mover una ventana
+ * mueve balances, y sin decirlo el efecto se descubre tres pantallas
+ * después. Se calcula con `calcularParticipaciones()` —la misma función
+ * que usan los balances y la pantalla de Proyectos— sobre los proyectos
+ * de antes y los de después, así que no hay un segundo lugar donde viva
+ * la regla del reparto.
+ */
+function efectoDelCambio(
+  antes: ProyectoParaReparto[],
+  despues: ProyectoParaReparto[],
+  compartidos: { id: string; fecha: string; descripcion: string }[],
+): string {
+  const participacionesAntes = memoParticipaciones(antes);
+  const participacionesDespues = memoParticipaciones(despues);
+
+  const movidos = compartidos.filter((m) => {
+    const a = [...participacionesAntes(m.fecha).keys()].sort().join(",");
+    const d = [...participacionesDespues(m.fecha).keys()].sort().join(",");
+    return a !== d;
+  });
+
+  if (movidos.length === 0) {
+    return "No cambia el reparto de ningún gasto compartido.";
+  }
+
+  const ejemplos = movidos
+    .slice(0, 3)
+    .map((m) => `${m.descripcion} (${formatDate(m.fecha)})`)
+    .join(", ");
+
+  const resto = movidos.length > 3 ? ` y ${movidos.length - 3} más` : "";
+
+  return `Cambia el reparto de ${movidos.length} ${
+    movidos.length === 1 ? "gasto compartido" : "gastos compartidos"
+  }: ${ejemplos}${resto}. Miralo en Proyectos.`;
+}
+
+/**
+ * Cambia el pedazo del argumento que nombraba al proyecto por su slug,
+ * **dejando el resto intacto**.
+ *
+ * Es lo que hace que una pregunta de "¿de qué proyecto?" no se lleve
+ * puestas las fechas. Es el mismo problema que resolvió `"tema — slug"` en
+ * `lecciones_tema`, pero acá el argumento tiene más de un dato adentro y
+ * no alcanza con pegar el slug al final.
+ */
+function reemplazarNombre(
+  argumento: string | null,
+  nombreLeido: string,
+  slug: string,
+): string {
+  const texto = argumento ?? "";
+  if (!nombreLeido) return `${texto} ${slug}`.trim();
+  return texto.replace(nombreLeido, slug);
 }
