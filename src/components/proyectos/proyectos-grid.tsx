@@ -17,7 +17,7 @@ import { todayISO } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import {
   etiquetaProrrateo,
-  participacionesEnFecha,
+  calcularParticipaciones,
   pesosSonUniformes,
 } from "@/lib/prorrateo";
 import type { Moneda, Movement } from "@/lib/supabase/database.types";
@@ -37,7 +37,7 @@ export function ProyectosGrid({ movements }: { movements: Movement[] }) {
   );
 
   const participaciones = useMemo(
-    () => participacionesEnFecha(projects, todayISO()),
+    () => calcularParticipaciones(projects, todayISO()),
     [projects],
   );
   const uniformes = useMemo(

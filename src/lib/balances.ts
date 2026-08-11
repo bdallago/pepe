@@ -24,10 +24,11 @@ import type {
  * centavos. Por eso el reparto de gastos compartidos se hace por resto
  * mayor sobre centavos enteros: las partes suman exactamente el total.
  *
- * Única excepción, y es real: si no hay proyectos activos no hay entre
- * quiénes repartir. El gasto compartido sigue contando en el balance
- * general. `Balances.compartidoSinRepartir` lo expone para que la UI
- * pueda avisar en vez de mostrar números que no cierran.
+ * Única excepción, y es real: si la fecha del gasto no cae en la ventana
+ * de vigencia de ningún proyecto no hay entre quiénes repartir. El gasto
+ * compartido sigue contando en el balance general.
+ * `Balances.compartidoSinRepartir` lo expone para que la UI pueda avisar
+ * en vez de mostrar números que no cierran.
  */
 
 export type FiltroEstado = "efectuado" | "planificado" | "ambos";

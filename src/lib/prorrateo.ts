@@ -7,7 +7,8 @@ import type { Moneda, Movement, Project } from "@/lib/supabase/database.types";
  *
  * Un movimiento con project_id = null es compartido: sirve a todos los
  * proyectos (Claude Pro, Cursor, etc.). En las vistas por proyecto se
- * reparte entre los proyectos ACTIVOS, ponderado por peso_prorrateo.
+ * reparte entre los proyectos que estaban VIVOS en la fecha del gasto,
+ * ponderado por peso_prorrateo.
  *
  * El reparto se calcula al vuelo. Nunca se guardan filas duplicadas en la
  * base: eso rompería el balance general, que suma el compartido una sola vez.
@@ -22,36 +23,6 @@ export interface ParticipacionProyecto {
   indice: number;
   /** Cantidad de proyectos que participan. */
   total: number;
-}
-
-/**
- * Calcula qué fracción del gasto compartido le toca a cada proyecto activo.
- *
- * Si no hay proyectos activos devuelve un mapa vacío: el gasto compartido
- * sigue existiendo en el balance general, simplemente no se reparte.
- */
-export function calcularParticipaciones(
-  projects: Pick<Project, "id" | "activo" | "peso_prorrateo">[],
-): Map<string, ParticipacionProyecto> {
-  const activos = projects.filter((p) => p.activo);
-  const pesoTotal = activos.reduce(
-    (sum, p) => sum + Number(p.peso_prorrateo),
-    0,
-  );
-
-  const map = new Map<string, ParticipacionProyecto>();
-  if (activos.length === 0 || pesoTotal <= 0) return map;
-
-  activos.forEach((project, indice) => {
-    map.set(project.id, {
-      projectId: project.id,
-      fraccion: Number(project.peso_prorrateo) / pesoTotal,
-      indice: indice + 1,
-      total: activos.length,
-    });
-  });
-
-  return map;
 }
 
 /** Lo mínimo que hace falta para saber si un proyecto entra a un reparto. */
@@ -96,7 +67,7 @@ export function estaVivo(
  * gasto sigue contando en el balance general, simplemente no se reparte.
  * Quien llama tiene que decirlo, no esconderlo.
  */
-export function participacionesEnFecha(
+export function calcularParticipaciones(
   projects: ProyectoParaReparto[],
   fecha: string,
 ): Map<string, ParticipacionProyecto> {
@@ -162,7 +133,7 @@ export function memoParticipaciones(
   return (fecha: string) => {
     let p = cache.get(fecha);
     if (!p) {
-      p = participacionesEnFecha(projects, fecha);
+      p = calcularParticipaciones(projects, fecha);
       cache.set(fecha, p);
     }
     return p;

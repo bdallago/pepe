@@ -443,7 +443,7 @@ export interface ResultadoAceptacion {
  *
  * ⚠ Y hay un efecto que la pantalla avisa **antes** de llegar acá: un
  * proyecto más **cambia el reparto de los gastos compartidos**.
- * `participacionesEnFecha()` reparte por `peso_prorrateo` entre los que
+ * `calcularParticipaciones()` reparte por `peso_prorrateo` entre los que
  * estaban vivos en la fecha de cada gasto (lo explica largo el
  * encabezado de `20260810000001_proyectos_fechas.sql`), así que uno que
  * nace hoy se lleva su parte de lo que venga de hoy en adelante y le

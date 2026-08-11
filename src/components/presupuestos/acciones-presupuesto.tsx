@@ -53,7 +53,7 @@ import {
 import { todayISO } from "@/lib/dates";
 import {
   cortesDelReparto,
-  participacionesEnFecha,
+  calcularParticipaciones,
   type ProyectoParaReparto,
 } from "@/lib/prorrateo";
 import type { EstadoPresupuesto } from "@/lib/presupuestos-server";
@@ -72,7 +72,7 @@ import type { EstadoPresupuesto } from "@/lib/presupuestos-server";
  *
  * La ventana que se simula la abre **la fecha de inicio del
  * formulario**, que es la que se va a insertar. Con la de hoy el aviso
- * mentía apenas Beno retrocedía el campo: `participacionesEnFecha()`
+ * mentía apenas Beno retrocedía el campo: `calcularParticipaciones()`
  * reparte entre los que estaban vivos en la fecha de cada gasto, así que
  * una fecha vieja mete al proyecto nuevo en el reparto de gastos que ya
  * pasaron — que es justo el caso sobre el que este recuadro existe para
@@ -196,8 +196,8 @@ export function AccionesPresupuesto({
     },
   ];
   const desde = fechaInicio || inicioMasViejo(projects);
-  const antes = participacionesEnFecha(projects, desde);
-  const despues = participacionesEnFecha(conNuevo, desde);
+  const antes = calcularParticipaciones(projects, desde);
+  const despues = calcularParticipaciones(conNuevo, desde);
   const participantes = projects.filter((p) => despues.has(p.id));
 
   // Los cortes se usan **solo como detector**. Si el reparto cambia más

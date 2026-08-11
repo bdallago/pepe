@@ -32,7 +32,7 @@ import {
 import { calcularBalancesProyecto, filtrarMovimientos } from "@/lib/balances";
 import { todayISO } from "@/lib/dates";
 import { etiquetaProrrateo, imputarAProyecto } from "@/lib/prorrateo";
-import { participacionesEnFecha, pesosSonUniformes } from "@/lib/prorrateo";
+import { calcularParticipaciones, pesosSonUniformes } from "@/lib/prorrateo";
 import type { Movement, Project } from "@/lib/supabase/database.types";
 
 /**
@@ -72,7 +72,7 @@ export function ProyectoView({
   );
 
   const participaciones = useMemo(
-    () => participacionesEnFecha(projects, todayISO()),
+    () => calcularParticipaciones(projects, todayISO()),
     [projects],
   );
   const uniformes = useMemo(
