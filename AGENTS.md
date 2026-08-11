@@ -679,20 +679,38 @@ esa ya es la carga rápida de movimientos).
 
 | Archivo | Qué |
 |---|---|
-| `agentes/tipos.ts` | Los trece destinos, el esquema de la decisión, la unión de respuestas |
+| `agentes/tipos.ts` | Los catorce destinos, el esquema de la decisión, la unión de respuestas |
 | `agentes/recepcionista.ts` | Frase → lista ordenada de decisiones |
 | `agentes/cadena.ts` | Las ejecuta en orden y contiene los fallos |
 | `agentes/despacho.ts` | Un `case` por destino, cáscara sobre lo que ya existe |
 | `agentes/resolver.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts` | Resolución **determinística**: proyectos, tracks, rangos, fechas, el formato telegráfico |
+| `agentes/proyectos.ts` | Qué se le pide a un proyecto y con qué fechas, determinístico |
 
-⚠ **`bitacora` es el sumidero de todo lo que la app no sabe hacer**, y eso
+⚠ **`bitacora` era el sumidero de todo lo que la app no sabe hacer**, y eso
 se descubrió usándolo el 2026-08-10. Tiene el gancho léxico más ancho
-("anotá", "apuntá", "registrá", "guardá") **y es el único destino que
-escribe directo**, así que un pedido no cubierto no termina en un "no sé
-hacer eso": termina en una fila escrita. Pasó — pedir las fechas de dos
-proyectos dejó dos entradas con el contenido `"Proder"` y `"El Prode"`,
-más una retro que nadie pidió. La salvaguarda y el destino `proyecto` que
-falta están en
+("anotá", "apuntá", "registrá", "guardá") **y escribe directo**, así que un
+pedido no cubierto no terminaba en un "no sé hacer eso": terminaba en una
+fila escrita. Pasó — pedir las fechas de dos proyectos dejó dos entradas
+con el contenido `"Proder"` y `"El Prode"`, más una retro que nadie pidió.
+
+**La salvaguarda es `pareceAnotacion()` en `agentes/bitacora.ts`, y va en
+código y no en el prompt** por lo que dice el bloque de vidrio de abajo: si
+algo se resuelve con un test sobre un string, se hace ahí. Son dos
+condiciones —menos de **15 caracteres** o menos de **3 palabras**, o que el
+texto sea el nombre de un proyecto o de un track— y en vez de escribir,
+pregunta. Los números salieron de medir: las seis entradas reales de Beno
+van de **186 a 2015 caracteres**, y la más corta tiene 33 palabras, o sea
+que el piso está un orden de magnitud por debajo de lo que él escribe.
+
+**El chequeo de nombre es EXACTO, no `resolverProyecto()`**, que hace match
+parcial: con match parcial, cualquier anotación larga que *mencione* un
+proyecto caería en la pregunta. Y se gana el lugar con un caso real:
+`"El Prode de Beno"` tiene **16 caracteres y 4 palabras**, o sea que pasa
+los dos filtros de largo y lo único que lo agarra es esto — y es uno de los
+dos proyectos del fallo que originó todo.
+
+Lo que faltaba además de la salvaguarda era **el destino que recibiera
+esos pedidos**: `proyecto`, el catorceavo. Ver
 `docs/superpowers/specs/2026-08-10-operar-conversando-design.md`.
 
 **Regla que ordena todo: si algo se puede resolver sin modelo, se
@@ -704,11 +722,16 @@ de Beno se parsean con **cero llamadas**.
 **Multi-acción es seguro por una razón concreta**: nada entra al dominio
 sin confirmación, así que una frase con tres pedidos son tres propuestas
 y si la segunda falla quedan dos. No hay transacción que deshacer. La
-excepción es `bitacora` y `tema_estudio`, que **escriben directo** — y
-pueden hacerlo porque **no hay producción de un modelo**: el texto y el
-título los pone Beno, el modelo solo recorta y fecha. Si a esos prompts
-alguien les agrega "mejorá" o "resumí", el razonamiento deja de valer y
-pasan a necesitar la bandeja.
+excepción son **tres**: `bitacora`, `tema_estudio` y `proyecto`, que
+**escriben directo** — y pueden hacerlo porque **no hay producción de un
+modelo**: el texto y el título los pone Beno, las fechas son aritmética de
+calendario y el nombre del proyecto se resuelve contra tres filas; el
+modelo solo recorta y fecha. Si a esos prompts alguien les agrega "mejorá"
+o "resumí", el razonamiento deja de valer y pasan a necesitar la bandeja.
+
+`proyecto` tiene además una obligación que las otras dos no: **mover una
+ventana mueve balances**, así que su respuesta dice qué cambió y qué efecto
+tuvo, no un "listo".
 
 #### El prompt del recepcionista es de vidrio. Cuatro veces medidas.
 
@@ -744,6 +767,23 @@ las seis simples con una acción, el argumento telegráfico literal, y
 `buscador` a propósito, así que **buscar lo que anotó** y **armar uno para
 un cliente** se separan por VERBO, igual que `tema_estudio` y
 `lecciones_tema`.
+
+**El sexto también, y una de sus seis líneas fue borrar una que decía lo
+contrario.** `proyecto` (2026-08-11) entró con el bullet del especialista
+(tres líneas), dos de frontera y una en la instrucción del argumento, todas
+arriba del bloque de confianza. La sexta es que **el bullet de `retro`
+decía textual `Ej: "cerrá Proder"`**: la colisión con el destino nuevo no
+era previsible, estaba escrita, y se corrigió reescribiendo ese bullet para
+que hable del documento y no del cierre. Piso intacto en las dieciséis
+frases, y las tres cosas que se vinieron a arreglar se movieron juntas:
+`"cerrá Proder"` de `retro` a `proyecto`, el fallo 1 de **tres acciones
+equivocadas a dos de `proyecto` con las fechas adentro**, y el fallo 2 de
+una acción a dos.
+
+Ese último confirma algo que conviene saber para el próximo: **un destino
+que falta no se manifiesta como un "no sé"**. El modelo no partía la frase
+porque no tenía dónde poner la segunda mitad, no porque no la viera —
+apenas existió `proyecto`, partió solo, sin tocar la regla de partir.
 
 **Lo que se mide no es el acierto, es el modo de fallar.** La calibración
 del 2026-08-10 contra las quince frases reales de Beno pasó de 11/15 con

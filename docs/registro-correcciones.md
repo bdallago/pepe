@@ -14,12 +14,12 @@
 diciendo el mismo número y el invariante `suma(por proyecto) === balance general` cerrando exacto
 en ARS y en USD.
 
-**Hay trabajo a mitad de camino en la rama `operar-conversando`, sin mergear ni desplegar**: las
-tareas 1 a 4 de `docs/superpowers/plans/2026-08-11-operar-conversando.md`. Arregla dos bugs que
-**sí llegaron a producción** —el sumidero de bitácora y el proyecto del movimiento— y agrega el
-destino `proyecto`. Falta la recalibración medida del recepcionista (tarea 5), el cierre de la ola
-(tarea 6) y la ola 2 entera. **La tarea 4 quedó sin la revisión de dos etapas** que sí tuvieron
-las tres anteriores.
+**La ola 1 de `docs/superpowers/plans/2026-08-11-operar-conversando.md` está terminada en la rama
+`operar-conversando`, sin mergear ni desplegar** (tareas 1 a 6, con `typecheck`, `lint` y `build`
+limpios). Arregla dos bugs que **sí llegaron a producción** —el sumidero de bitácora y el proyecto
+del movimiento—, agrega el destino `proyecto` y recalibra el recepcionista midiendo. Falta **la ola
+2 entera**: las tres tools del conector. **La tarea 4 quedó sin la revisión de dos etapas** que sí
+tuvieron las tres anteriores.
 
 ⚠ **De esa rama salió el hallazgo metodológico de la sesión, y vale más que cualquiera de los
 bugs**: el plan se escribió midiendo y aun así trajo **ocho defectos**, todos silenciosos. Los
@@ -39,6 +39,16 @@ respaldando. Del lado de Pepe está todo hecho desde hace días.
 
 ## Historial
 
+- **2026-08-11 — El prompt del recepcionista mandaba `"cerrá Proder"` a `retro` a propósito.** El
+  bullet decía textual `Ej: "cerrá Proder"`, así que la colisión con el destino `proyecto` no era
+  previsible: estaba escrita. Corregido para que `retro` hable del documento y no del cierre.
+  Medido antes y después con dieciséis frases: el piso quedó intacto y las tres frases que fallaron
+  el 2026-08-10 se arreglaron juntas. *(En la rama `operar-conversando`.)*
+- **2026-08-11 — `leerFecha()` recortaba al pasado las fechas de un proyecto.** `"30/12"` volvía
+  como diciembre **del año pasado** y `"2027-01-15"` como hoy, las dos en silencio. Está bien para
+  bitácora y movimientos —registran lo que ya pasó— y mal para una ventana, que se puede abrir el
+  mes que viene: ahora hay `{ futuro: true }` y el destino `proyecto` es el único que lo pasa.
+  *(En la rama.)*
 - **2026-08-11 — La bitácora era el sumidero de todo lo que la app no sabe hacer.** Tiene el gancho
   léxico más ancho y es el único destino que escribe directo: un pedido no cubierto terminaba en una
   fila escrita, y pasó — pedir las fechas de dos proyectos dejó dos entradas con el contenido

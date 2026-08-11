@@ -242,10 +242,10 @@ completitud.
 | **Entrypoint** | `/api/agentes/interpretar`. |
 | **Lógica** | `lib/agentes/`: `tipos.ts` (14 destinos), `recepcionista.ts`, `cadena.ts`, `despacho.ts`, y la resolución determinística en `resolver.ts`, `nombres.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts`, `proyectos.ts`. |
 
-⚠ **Al 2026-08-11 esta área está a mitad de camino, en la rama
-`operar-conversando` y sin mergear ni desplegar.** Lo que sigue describe
-el estado **de la rama**; `main` todavía tiene 13 destinos y no tiene
-salvaguarda de bitácora. El plan es
+⚠ **Al 2026-08-11 la ola 1 está terminada en la rama `operar-conversando`,
+sin mergear ni desplegar; falta la ola 2 (las tres tools del conector).**
+Lo que sigue describe el estado **de la rama**; `main` todavía tiene 13
+destinos y no tiene salvaguarda de bitácora. El plan es
 `docs/superpowers/plans/2026-08-11-operar-conversando.md` y su sección
 "Correcciones de la ejecución" **gana sobre el código que figura en las
 tareas**.
@@ -254,8 +254,14 @@ tareas**.
 incidentes medidos** donde agregarle texto rompió casos que ni nombraba.
 Antes de tocarlo, medir; después, volver a medir. Si la regla se puede
 resolver con un test sobre un string, va en `despacho.ts`. **Medir cuesta
-~8 minutos por corrida**: el prompt son ~2100 tokens contra un techo de
-5500/minuto, o sea 2 frases por minuto.
+~8 minutos por corrida**: el prompt son ~2275 tokens contra un techo de
+5500/minuto, o sea 2 frases por minuto — y **cada línea que le agregues
+sube ese costo**. Los dos agregados que pasaron limpios al primer intento
+(`presupuesto` y `proyecto`) usaron la misma receta: pocas líneas,
+**léxicas y no en prosa**, y todas **arriba** del bloque de confianza, que
+queda último. Y antes de agregar un destino, buscá si el prompt ya dice lo
+contrario en algún lado: el bullet de `retro` mandaba `"cerrá Proder"` a
+`retro` **a propósito**.
 ⚠ **`bitacora` era el sumidero** —gancho léxico ancho + escribe directo—
 y por eso `agentes/bitacora.ts` tiene ahora `pareceAnotacion()`: menos de
 15 caracteres o menos de 3 palabras, **o** coincidencia **exacta** con el
