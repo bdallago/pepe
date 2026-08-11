@@ -266,6 +266,48 @@ import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
  * que se verifican después las citas de cada entregable. Misma clase de
  * red que `textoDelMovimiento()`, y por el mismo motivo.
  *
+ * **`proyecto` entró con seis líneas, y una de las seis fue borrar una
+ * línea que decía lo contrario.** Este prompt mandaba `"cerrá Proder"` a
+ * `retro` **a propósito** —el bullet decía textual `Ej: "cerrá Proder"`—,
+ * así que la colisión con el destino nuevo no era previsible: estaba
+ * escrita. Por eso el bullet de `retro` se reescribió para hablar del
+ * documento y no del cierre, sin sumar líneas. Las otras cinco son el
+ * bullet del especialista (tres, con ejemplos), dos líneas de frontera
+ * pegadas al párrafo que ya separa `roadmap` de `estudio` —cambiar la
+ * ficha vs. escribir un documento sobre él— y una pegada a la instrucción
+ * del argumento, que es de lo que habla. Todas **arriba** del bloque de
+ * confianza, que quedó último y sin tocar.
+ *
+ * Medido el 2026-08-11, antes y después, con las mismas dieciséis frases:
+ * las cuatro ambiguas siguen en 0.3 las cuatro y con el mismo destino, las
+ * seis simples siguen dando una sola acción cada una con el mismo destino,
+ * `"qué anotaciones tengo sobre gestión de presupuestos"` sigue en
+ * `buscador` con 1, `"hacé la retro de Gentius"` sigue en `retro`, y el
+ * argumento de `"-20usd Claude Code 06/08"` volvió idéntico a la frase,
+ * con la fecha. Salió limpio al primer intento, como `presupuesto`.
+ *
+ * Lo que se movió es exactamente lo que se vino a mover, y las tres cosas
+ * de una: `"cerrá Proder"` pasó de `retro` a **`proyecto`**; el fallo 1
+ * pasó de **tres acciones equivocadas** —dos de `bitacora` con los
+ * argumentos `"Proder"` y `"El Prode"`, más una `retro` que nadie pidió—
+ * a **dos de `proyecto` con las fechas adentro** (`"Proder 01/04/26 -
+ * 31/07/26"`); y el fallo 2 pasó de **una acción a dos**, con `"Activalo
+ * de paso"` volviendo como `proyecto`.
+ *
+ * Las dos últimas eran las que el plan daba por dudosas y las dos salieron
+ * mejor de lo previsto. La del fallo 2 confirma la hipótesis que estaba
+ * anotada: el modelo no partía la frase porque **no tenía dónde poner la
+ * segunda mitad**, no porque no la viera. Un destino que falta no se
+ * manifiesta como un "no sé": se manifiesta como texto que desaparece o
+ * que aterriza en el vecino léxico más cercano.
+ *
+ * Dos desvíos chicos, los dos inocuos y anotados para que no se
+ * redescubran: `"qué me toca hoy"` pasó de argumento `null` a `"hoy"` —y
+ * la rama `roadmap` de `despacho.ts` no lee el argumento— y dos
+ * confianzas bajaron de 1 a 0.9, muy arriba del umbral de 0.6. El costo
+ * que sí se paga es el de siempre: el prompt pasó de ~2100 a ~2275 tokens,
+ * o sea que **medirlo tarda más a cada línea**.
+ *
  * Un dato que salió de esa medición y del que depende el rango temporal:
  * para "consultas" el modelo ya devuelve el período dentro del argumento
  * ("mis balances según estos últimos 6 meses"), sin que haya que
@@ -300,8 +342,12 @@ Los especialistas:
   estudiarlo. Ej: "quiero aprender sobre eso", "quiero aprender sobre eso
   basado en tal proyecto", "necesito aprender eso aplicado a un
   proyecto", "quiero que agreguemos lecciones sobre eso".
-- "retro": cerrar un proyecto y hacer su retrospectiva. Ej: "cerrá Proder",
-  "hacé la retro de Gentius".
+- "retro": hacer la retrospectiva de un proyecto, el documento que se
+  escribe al terminarlo. Ej: "hacé la retro de Gentius", "escribí la retro
+  de Proder".
+- "proyecto": crear, cerrar, reabrir o renombrar un proyecto, o poner sus
+  fechas. Ej: "creá el proyecto X", "cerrá X el 31/07", "reabrí X",
+  "activalo", "poné que X arrancó el 01/04".
 - "lecciones_tema": sacar lecciones sobre un tema. Ej: "sacá lecciones de
   lo que aprendí con clientes", "qué aprendí sobre pricing".
 - "suscripciones": gastos recurrentes que quizá no usa. Ej: "qué estoy
@@ -336,6 +382,8 @@ que ya existe: la sesión de hoy, la que sigue, cuánto avanzó un track.
 "estudio" es cuando pide que le PROPONGAS algo que todavía no está en
 ningún track ("sugerís", "recomendás", "proponés"). Si no pide nada
 nuevo, es "roadmap".
+"cerrá X" y "poné las fechas de X" son "proyecto": cambian la ficha del
+proyecto. "hacé la retro de X" es "retro": escribe un documento sobre él.
 
 Si Beno NOMBRA el tema, no es "estudio", y que además diga "basado en" o
 "aplicado a" un proyecto no lo cambia. Entre los otros tres decide el
@@ -356,6 +404,8 @@ especialista no necesita ninguno, poné null.
 NO reformules ni traduzcas el argumento: copialo como lo escribió Beno.
 Para "bitacora" copiá ENTERA la parte de la frase que cuenta lo que pasó,
 desde donde empieza y sin sacarle palabras del medio.
+Para "proyecto" copiá el nombre del proyecto Y las fechas tal como las
+escribió, sin sacarle ninguna.
 
 Casi todas las frases piden UNA sola cosa, y entonces la lista lleva UN
 solo elemento. Poné más de uno SOLO si la frase pide cosas distintas y lo
