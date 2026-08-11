@@ -267,25 +267,54 @@ export function leerFecha(
 const MAX_PALABRAS_DE_FECHA = 6;
 
 /**
- * Las mismas expresiones de arriba, pero **ancladas**: matchean solo si el
- * texto es una fecha y nada más. Se arman de las mismas listas de meses y
- * días para que no se puedan separar de las reglas.
+ * Las expresiones que `REGLAS` sabe leer, como alternativas sueltas.
+ *
+ * Se arman de las mismas listas de meses y días que las reglas, así que
+ * no se pueden separar de ellas. Es la razón de que esto exista como
+ * constante en vez de estar escrito dos veces: `agentes/proyectos.ts`
+ * llegó a tener su propia copia a mano, y la copia se separó en dos
+ * sentidos — nació **sin** la regla de días de la semana ("cerrá Proder
+ * el martes" no se detectaba), y nació **más ancha** que esta, con
+ * `\d{1,2}\s+de\s+[a-záéíóú]+` aceptando cualquier palabra después de
+ * "de" en vez de solo un mes real de `NOMBRE_DE_MES`. Medido el
+ * 2026-08-11.
  */
-const SOLO_FECHA = new RegExp(
-  "^(?:" +
-    [
-      "\\d{4}-\\d{1,2}-\\d{1,2}",
-      "\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?",
-      `(?:el\\s+)?\\d{1,2}\\s+de\\s+(?:${NOMBRE_DE_MES})(?:\\s+de\\s+\\d{4})?`,
-      `(?:el\\s+)?(?:${NOMBRE_DE_DIA})(?:\\s+pasado)?`,
-      "anteayer",
-      "antes\\s+de\\s+ayer",
-      "ayer",
-      "hoy",
-      "hace\\s+(?:\\d{1,3}|un|una|dos|tres|cuatro|cinco|seis)\\s+(?:dias?|semanas?)",
-      "(?:la\\s+)?semana\\s+pasada",
-    ].join("|") +
-    ")$",
+const ALTERNATIVAS_DE_FECHA = [
+  "\\d{4}-\\d{1,2}-\\d{1,2}",
+  "\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?",
+  `(?:el\\s+)?\\d{1,2}\\s+de\\s+(?:${NOMBRE_DE_MES})(?:\\s+de\\s+\\d{4})?`,
+  `(?:el\\s+)?(?:${NOMBRE_DE_DIA})(?:\\s+pasado)?`,
+  "anteayer",
+  "antes\\s+de\\s+ayer",
+  "ayer",
+  "hoy",
+  "hace\\s+(?:\\d{1,3}|un|una|dos|tres|cuatro|cinco|seis)\\s+(?:dias?|semanas?)",
+  "(?:la\\s+)?semana\\s+pasada",
+];
+
+/**
+ * Las mismas expresiones de arriba, pero **ancladas**: matchean solo si el
+ * texto es una fecha y nada más.
+ */
+const SOLO_FECHA = new RegExp("^(?:" + ALTERNATIVAS_DE_FECHA.join("|") + ")$");
+
+/**
+ * Lo mismo que `SOLO_FECHA`, pero **sin anclar y global**, para poder
+ * sacarle las fechas a un texto libre y quedarse con el resto. La usa
+ * `agentes/proyectos.ts` para separar el nombre de un proyecto de su
+ * ventana ("cerrá Proder el martes" → el nombre es "Proder", "el martes"
+ * es la fecha).
+ *
+ * Las fronteras son `(?<![\p{L}\p{N}])`/`(?![\p{L}\p{N}])` y no `\b`, por
+ * la misma razón que `agentes/proyectos.ts` las usa para sus verbos: `\b`
+ * no cuenta una vocal acentuada como letra, y "el 5 de agosto" seguido de
+ * una palabra acentuada rompería el corte. Acá ninguna de las expresiones
+ * termina en acentuada, pero mantenerlas iguales evita tener que
+ * recordar la excepción.
+ */
+export const EXPRESIONES_DE_FECHA = new RegExp(
+  "(?<![\\p{L}\\p{N}])(?:" + ALTERNATIVAS_DE_FECHA.join("|") + ")(?![\\p{L}\\p{N}])",
+  "giu",
 );
 
 /**

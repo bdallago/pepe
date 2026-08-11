@@ -23,6 +23,56 @@ Zod · `@modelcontextprotocol/server` + `mcp-handler` · Groq
 
 ---
 
+## Correcciones de la ejecución (2026-08-11)
+
+⚠ **Este plan se escribió midiendo —y aun así trajo defectos.** Están
+corregidos en el código, pero **el código que figura abajo, en las tareas,
+sigue siendo el original**. Si vas a re-ejecutar desde acá, leé esto
+primero o los reintroducís.
+
+Los cinco son de la misma familia: **afirmaciones plausibles que nadie
+había ejecutado**, y los cinco fallan en silencio.
+
+| Lo que el plan decía | Lo que es | Dónde |
+|---|---|---|
+| La segunda opción de la salvaguarda puede apuntar a `consultas` | Con un **track** eso muestra el balance general de toda la app titulado "Balance general". Hace falta un discriminador `tipo` | T1 |
+| `normalizarNombre()` se duplica porque `resolver.ts` es `server-only` y no se puede importar desde un script | **Falso, medido**: con `--conditions=react-server` se importa perfecto. La razón verdadera es el contagio transitivo de `server-only` a `bitacora.ts`. Se extrajo a `agentes/nombres.ts` | T1 |
+| El argumento de las opciones viaja sin problema | `route.ts` lo capa en **300** y el cliente no lo recorta: una frase de 298 produce un argumento de 317 → **HTTP 400** y el movimiento se pierde. Subido a 1100 | T2 |
+| `\bcerr[áa]\b` matchea `"cerrá Proder"` | **No matchea ninguna forma acentuada**: `\b` de JS se define contra `\w`, que excluye "á". Los cuatro verbos caían al default `ventana`. Hace falta `(?<![\p{L}\p{N}])…(?![\p{L}\p{N}])` con flag `u` | T3 |
+| `leerLasDosFechas()` maneja una sola marca | Con solo apertura, la fecha se escribía en **`cierre`**: un proyecto que arranca el mes que viene nacía cerrado | T3 |
+
+Y tres más que salieron barriendo el módulo terminado:
+
+- **`RELLENO` se comía artículos que son parte de nombres reales**:
+  `"cerrá El Prode"` daba `"Prode"` y `"Agente de RRHH"` daba
+  `"Agente RRHH"`. Reemplazado por recortes estructurales (`ANDAMIAJE`).
+- **El recorte de conectores sacaba uno solo de la punta**:
+  `"creá el proyecto Agente de RRHH que arranca el 01/09/26"` daba el
+  nombre `"Agente de RRHH que el"` — y eso es el nombre con el que se crea
+  el proyecto. Después apareció **el mismo defecto en `nuevoNombre`**, que
+  el arreglo no había alcanzado.
+- **`EXPRESIONES_DE_FECHA` se había separado de `fechas.ts`**, que es
+  exactamente lo que su propio comentario advertía: nació sin la regla de
+  días de la semana y con `"5 de <cualquier palabra>"` abierta, así que un
+  proyecto llamado `"5 de Mayo"` se leía como una fecha y se quedaba sin
+  nombre. Ahora **se deriva** de las mismas listas que `REGLAS`.
+
+**Lo que los agarró no fue escribir mejor el plan: fue que cada tarea
+tenga una revisión que corre el código en vez de leerlo.** Dos de los ocho
+los encontró un barrido de 540 combinaciones mirando **los cinco campos**
+de la salida — los chequeos que verifican un subconjunto de los campos
+dejan pasar los otros, y así se coló el del nombre con dos conectores.
+
+**Deuda conocida que se decidió no pagar:** `agentes/proyectos.ts` hace
+tres pasadas sobre el string crudo con regex que sirven para propósitos
+opuestos (una marca sirve para *partir* y para *borrarse*; un verbo para
+*decidir* y para *borrarse*). De ahí sale casi todo lo de arriba. La
+salida buena es tokenizar una vez y que las tres respuestas salgan del
+mismo mapa; no se hizo porque es un rediseño. Las limitaciones que quedan
+están escritas al final de ese archivo.
+
+---
+
 ## Antes de empezar
 
 **Este proyecto no tiene suite de tests versionada** (`AGENTS.md`). La
