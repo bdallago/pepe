@@ -20,6 +20,34 @@ Zod · scripts de verificación con `tsx`.
 
 ---
 
+## Correcciones de la ejecución (2026-08-11)
+
+Este plan se escribió **leyendo código y razonando sobre él, sin ejecutar
+nada**, y por eso afirmaba siete cosas que no eran ciertas. Las Tareas 1 a
+4 ya se ejecutaron y encontraron cinco de ellas de a una; las otras dos
+salieron después, en una auditoría en seco de las tareas que faltaban.
+Todas están corregidas más abajo, en su tarea.
+
+| Lo que decía | Lo que es | Dónde |
+|---|---|---|
+| El typecheck de la Tarea 3 falla en 6 call sites | Pasa limpio; la función vieja todavía existe | T3 · Step 8 |
+| `crearProyectoDesdePresupuesto` crea el proyecto | No existe; el insert está inline en `aceptarPresupuesto` | T4 · Step 2 |
+| El centinela del reparto simulado es `"nuevo"` | El componente lo lee como `"__nuevo__"` | T4 · Step 2 |
+| La simulación se hace en `hoy` | Se inserta la fecha del formulario, que es editable | T4 · Step 2 |
+| El closure memoizado se escribe en cada call site | Estaba duplicado; ahora es `memoParticipaciones()` | T4 · Step 1 |
+| Los archivos de tracks que no hay que tocar son 3 | Son **4**: falta `lib/sugerencias.ts` | T6 · Step 3 |
+| El `projectSchema` nuevo alcanza | Falta el refine cruzado del check de la base | T6 · Step 4 |
+
+Y dos que no eran errores del plan pero tampoco estaban escritas: el
+`process.exit()` de los scripts crashea en Windows, y `alternarProyectoActivo`
+puede violar el check de fechas con un proyecto de inicio futuro.
+
+**Moraleja para el próximo plan de este repo:** antes de darlo por
+aprobado, grepear cada símbolo que nombra y correr cada comando cuyo
+resultado predice. Los siete se detectaban así.
+
+---
+
 ## Antes de empezar
 
 **Este proyecto no tiene suite de tests versionada** (`AGENTS.md`). La
@@ -666,9 +694,20 @@ y Gentius ya no es `0`.
 - [ ] **Step 8: Typecheck**
 
 Run: `npm run typecheck`
-Expected: **falla**, y está bien: los 6 call sites de UI todavía llaman a
-`calcularParticipaciones` con la firma vieja. Se arreglan en la Tarea 4.
-Anotá los errores que salen, tienen que ser exactamente esos 6 archivos.
+Expected: **pasa limpio.**
+
+⚠ **Este paso decía que iba a fallar en 6 call sites de UI. Era falso, y
+se comprobó corriéndolo el 2026-08-11.** El razonamiento estaba mal: los
+componentes importan `calcularParticipaciones` **directo de
+`prorrateo.ts`**, no vía `balances.ts`, y esa función sigue existiendo
+con su firma vieja hasta la Tarea 5. El compilador no tiene de qué
+quejarse.
+
+Consecuencia práctica, y por eso importa: **el compilador NO te va a
+enumerar el trabajo de la Tarea 4.** Hay que ir a buscarlo con el `grep`
+del Step 3 de esa tarea, que es la única red que queda. La promesa de la
+Tarea 1 —"sin default, el compilador obliga a mirar los ocho"— recién se
+cumple después del borrado de la Tarea 5.
 
 - [ ] **Step 9: Commitear**
 
@@ -825,10 +864,27 @@ Expected: solo la definición en `src/lib/prorrateo.ts`.
 
 - [ ] **Step 2: Borrarla y renombrar la nueva**
 
+⚠ **El orden no es negociable: borrar PRIMERO, renombrar DESPUÉS.** Si
+corrés el `sed` con la vieja todavía en el archivo, quedan dos funciones
+exportadas con el mismo nombre y el error que tira el compilador no dice
+lo que pasó.
+
+⚠ **`prorrateo.ts` tiene dos exports que la Tarea 4 agregó y este plan no
+conocía: `memoParticipaciones` y `cortesDelReparto`.** Las dos tienen
+consumidores reales (`balances.ts` y `acciones-presupuesto.tsx`
+respectivamente) y **no se borran**. Aparecen cerca de la vieja en
+cualquier grep; no te confundas.
+
 Borrar la función `calcularParticipaciones` entera (la que filtra por
 `p.activo`) y renombrar `participacionesEnFecha` → `calcularParticipaciones`.
 
 Run: `grep -rln "participacionesEnFecha" src/ | xargs sed -i 's/participacionesEnFecha/calcularParticipaciones/g'`
+
+Verificado el 2026-08-11: el nombre **no aparece en `mcp/`**, así que el
+`sed` sobre `src/` alcanza. Los seis archivos que toca son
+`prorrateo.ts`, `balances.ts` (vía `memoParticipaciones`), los tres
+componentes migrados en la Tarea 4, y un comentario de
+`actions/presupuestos.ts` — ese último también corresponde renombrarlo.
 
 ⚠ Correr ese `sed` **solo sobre `src/`**, nunca sobre `docs/`: los specs
 y los planes mencionan el nombre viejo a propósito, como registro de cómo
@@ -914,10 +970,25 @@ src/lib/schemas.ts
 mcp/servidor.mts
 ```
 
-⚠ `src/components/ajustes/tracks-panel.tsx`, `hoy-view.tsx` y
-`lib/aprendizaje.ts` también dicen `activo`, pero **sobre `tracks`**, que
-es otra tabla y no se toca. Un track en pausa es una decisión de estudio,
-no una ventana de vida.
+⚠ `src/components/ajustes/tracks-panel.tsx`, `hoy-view.tsx`,
+`lib/aprendizaje.ts` y **`lib/sugerencias.ts:241`** también dicen
+`activo`, pero **sobre `tracks`**, que es otra tabla y no se toca. Un
+track en pausa es una decisión de estudio, no una ventana de vida.
+
+⚠ **`sugerencias.ts` faltaba en esta lista y es el más fácil de romper**,
+porque su `t.activo` se lee igual que los de proyectos. Son **cuatro**
+archivos de tracks, no tres. Medido el 2026-08-11: `grep -rn "\.activo"
+src/ mcp/` da 18 archivos; 4 son de tracks, 13 son de proyectos y el
+restante es la vieja `calcularParticipaciones` de `prorrateo.ts`, que la
+Tarea 5 ya borró.
+
+`src/lib/schemas.ts` **no aparece en ese grep**: dice `activo:` y no
+`.activo`. Está en la lista de arriba igual, y hay que tocarlo.
+
+✓ Verificado el 2026-08-11: `tsconfig.json` incluye `**/*.mts` y no
+excluye `mcp/`, así que acá el compilador **sí** enumera el trabajo. (No
+es como el Step 8 de la Tarea 3, donde la predicción era falsa porque la
+función vieja seguía existiendo.)
 
 - [ ] **Step 4: Reemplazar cada lectura**
 
@@ -928,21 +999,38 @@ reemplazo mecánico:
 `src/lib/schemas.ts` — `projectSchema` pierde `activo` y gana las fechas:
 
 ```ts
-export const projectSchema = z.object({
-  nombre: z
-    .string()
-    .trim()
-    .min(1, "Poné un nombre.")
-    .max(80, "Máximo 80 caracteres."),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color inválido."),
-  fecha_inicio: isoDate.nullable(),
-  fecha_fin: isoDate.nullable(),
-  peso_prorrateo: z
-    .number()
-    .positive("El peso tiene que ser mayor a cero.")
-    .max(9999, "Peso demasiado grande."),
-});
+export const projectSchema = z
+  .object({
+    nombre: z
+      .string()
+      .trim()
+      .min(1, "Poné un nombre.")
+      .max(80, "Máximo 80 caracteres."),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color inválido."),
+    fecha_inicio: isoDate.nullable(),
+    fecha_fin: isoDate.nullable(),
+    peso_prorrateo: z
+      .number()
+      .positive("El peso tiene que ser mayor a cero.")
+      .max(9999, "Peso demasiado grande."),
+  })
+  // La base tiene `projects_fechas_coherentes` desde
+  // `20260810000001_proyectos_fechas.sql:46`. Sin este refine, cerrar un
+  // proyecto antes de su inicio no lo frena el formulario: lo frena
+  // Postgres, y lo que ve Beno es el texto crudo de una violación de
+  // check constraint. Validar acá es decirle lo mismo en castellano.
+  .refine(
+    (p) => !p.fecha_inicio || !p.fecha_fin || p.fecha_fin >= p.fecha_inicio,
+    { message: "El cierre no puede ser anterior al inicio.", path: ["fecha_fin"] },
+  );
 ```
+
+⚠ **Ojo con el `.refine()`**: `z.object().refine()` devuelve un
+`ZodEffects`, no un `ZodObject`. Si algún call site hace `.partial()`,
+`.extend()`, `.omit()` o `.pick()` sobre `projectSchema`, deja de
+compilar. Comprobalo con `grep -rn "projectSchema" src/` antes de dar la
+tarea por terminada; si aparece alguno, exportá el objeto sin refinar
+aparte y aplicá el refine solo donde se valida el formulario.
 
 `src/lib/actions/projects.ts` — `crearProyecto` y `actualizarProyecto`
 escriben `fecha_inicio`/`fecha_fin` en vez de `activo`, y
@@ -958,6 +1046,12 @@ escriben `fecha_inicio`/`fecha_fin` en vez de `activo`, y
  *
  * Reabrir no toca `fecha_inicio`: si el proyecto arrancó el 01/04 y se
  * cerró por error, tiene que volver a arrancar el 01/04 y no hoy.
+ *
+ * El cierre se corre al inicio cuando el proyecto todavía no arrancó.
+ * Cerrar hoy un proyecto que empieza el mes que viene violaría
+ * `projects_fechas_coherentes` y devolvería un error de Postgres para
+ * algo que tiene una respuesta obvia: un proyecto que se cierra antes de
+ * arrancar duró cero días, y su ventana es su día de inicio.
  */
 export async function alternarProyectoActivo(
   id: string,
@@ -965,9 +1059,25 @@ export async function alternarProyectoActivo(
 ): Promise<ActionResult> {
   const { supabase } = await requireSession();
 
+  let fecha_fin: string | null = null;
+
+  if (!abierto) {
+    const { data: proyecto } = await supabase
+      .from("projects")
+      .select("fecha_inicio")
+      .eq("id", id)
+      .single();
+
+    const hoy = todayISO();
+    fecha_fin =
+      proyecto?.fecha_inicio && proyecto.fecha_inicio > hoy
+        ? proyecto.fecha_inicio
+        : hoy;
+  }
+
   const { error } = await supabase
     .from("projects")
-    .update({ fecha_fin: abierto ? null : todayISO() })
+    .update({ fecha_fin })
     .eq("id", id);
 
   if (error) return fail(mensajeDeError(error));
@@ -1157,10 +1267,41 @@ En `observaciones.ts:266`, mismo criterio:
       `Hay ${miles(balances.compartidoSinRepartir)} de gastos compartidos que no se repartieron: ningún proyecto estaba abierto en sus fechas.`,
 ```
 
-En `mcp/servidor.mts:189` y `proyectos-grid.tsx:142`, ajustar el texto con
+En `mcp/servidor.mts:189` y `proyectos-grid.tsx`, ajustar el texto con
 la misma razón. `proyectos-grid` ya recibe el monto por prop; pasale
 también `movimientosSinRepartir` si querés listarlos, o dejá solo el texto
 corregido.
+
+⚠ **La referencia `proyectos-grid.tsx:142` está vieja.** Al 2026-08-11 la
+línea 146 es la que pasa `sinRepartir={balances.compartidoSinRepartir}`, y
+**el texto vive en el subcomponente de más abajo** (alrededor de las
+líneas 156-165, donde está `const esperada = sinRepartir !== 0`). Buscá
+por el nombre de la prop, no por el número de línea.
+
+⚠ **`mcp/servidor.mts:189` compara `> 0` mientras los otros cuatro
+comparan `!== 0`.** Con un ingreso compartido sin repartir el neto da
+negativo y ese aviso —solo ese— no aparecería. Es una inconsistencia
+pre-existente, no la introduce este plan, pero se arregla gratis mientras
+tenés el archivo abierto. Unificalo en `!== 0`.
+
+- [ ] **Step 1.b: El otro texto de `balance.ts`, que el plan no había visto**
+
+`lib/mcp/tools/balance.ts:157-166` es un bloque **distinto** del de arriba
+y también quedó mintiendo. Usa `b.participacion`, que
+`calcularBalancesProyecto` define como la participación **de hoy**,
+mientras cada fila se repartió con el conjunto de **su** fecha.
+
+Reproducible hoy con Proder: cerró el 20/07, así que `b.participacion` es
+`undefined` y el conector contesta *"No participa del reparto de los
+gastos compartidos"*. Es falso — sus movimientos de abril a julio sí
+incluyen su porción de los compartidos de esa ventana, y de hecho están
+sumados en el balance que el mismo mensaje muestra dos líneas más arriba.
+
+La pregunta que ese texto quiere contestar no es "¿participa hoy?" sino
+"¿algo de lo que estoy mostrando lleva parte de un gasto compartido?".
+Resolvelo con un flag que se calcule durante el `for` de `imputados` en
+`calcularBalancesProyecto`, y que la etiqueta de hoy quede solo para
+cuando el proyecto está vivo.
 
 - [ ] **Step 2: Typecheck y lint**
 
@@ -1232,8 +1373,39 @@ chequear("Gentius ya no es cero", ars.porProyecto.find((p) => p.nombre === "Gent
 console.log("\nBalances finales, ARS:");
 ars.porProyecto.forEach((p) => console.log(`  ${p.nombre}: ${p.balance}`));
 
-process.exit(fallos === 0 ? 0 : 1);
+process.exitCode = fallos === 0 ? 0 : 1;
 ```
+
+⚠ **`process.exitCode`, nunca `process.exit()`.** En Windows,
+`process.exit()` justo después de que se cierra el socket de Supabase
+crashea con `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`, un
+bug de libuv. La salida ya se imprimió entera, así que parece un fallo del
+cálculo y no lo es. Nos pasó en las Tareas 2, 3 y 4.
+
+### El margen del chequeo de los dos caminos, medido
+
+**Medido el 2026-08-11, antes de escribir esta verificación**, para que
+nadie descubra el número cuando ya falló:
+
+| Proyecto y moneda | Diferencia entre los dos caminos |
+|---|---|
+| Proder (USD) | **0.0400** ← la peor |
+| El Prode de Beno (ARS) | 0.0200 |
+| Gentius (USD) | 0.0100 |
+| el resto | 0.0000 |
+
+**Con `< 0.05` pasa, pero por un centavo.** La causa es real y
+pre-existente: `calcularBalances` reparte con `repartirPorRestoMayor()`
+—centavos enteros— y `calcularBalancesProyecto` hace
+`round2(monto * fraccion)` por movimiento, que es justo el redondeo por
+fracción que el docstring del módulo dice que rompe el invariante. Al
+pasar de mitades a tercios el desvío creció (era 0.0100 y 0.0400 antes de
+este plan).
+
+No lo aflojes a `< 0.10` para que pase: eso esconde el problema. Si algún
+día se pasa de 0.05, la salida correcta es unificar el algoritmo —que
+`calcularBalancesProyecto` también use `repartirPorRestoMayor()`— y no
+mover la vara.
 
 - [ ] **Step 2: Correrlo**
 
