@@ -94,10 +94,10 @@ export function ProyectosPanel() {
    * así que sin este `toast` un cierre fallido no se vería en ningún lado.
    */
   async function alternar(proyecto: Project) {
-    const vivo = estaVivo(proyecto);
+    const tieneCierre = proyecto.fecha_fin !== null;
 
     setAlternando(proyecto.id);
-    const resultado = await alternarProyectoActivo(proyecto.id, !vivo);
+    const resultado = await alternarProyectoActivo(proyecto.id, tieneCierre);
     setAlternando(null);
 
     if (!resultado.ok) {
@@ -105,7 +105,7 @@ export function ProyectosPanel() {
       return;
     }
 
-    toast.success(vivo ? "Proyecto cerrado." : "Proyecto reabierto.");
+    toast.success(tieneCierre ? "Proyecto reabierto." : "Proyecto cerrado.");
     router.refresh();
   }
 
@@ -146,7 +146,22 @@ export function ProyectosPanel() {
         ) : (
           projects.map((proyecto) => {
             const participacion = participaciones.get(proyecto.id);
+
+            /**
+             * ⚠ El botón y el badge miran cosas distintas **a propósito**:
+             * son dos preguntas distintas y conflarlas es lo que produce
+             * la rareza. El botón edita la ventana, así que la suya es
+             * "¿tiene fecha de cierre?"; el badge informa el presente, así
+             * que la suya es "¿está vivo hoy?". Un proyecto cerrado HOY
+             * contesta que sí a las dos —`estaVivo` es inclusivo en las
+             * dos puntas— y las dos son literalmente ciertas.
+             *
+             * Si el botón mirara `estaVivo`, cerrar un proyecto hoy no
+             * cambiaría su etiqueta y el cierre no se podría deshacer
+             * hasta mañana. No lo "arregles" unificándolos.
+             */
             const vivo = estaVivo(proyecto);
+            const tieneCierre = proyecto.fecha_fin !== null;
 
             return (
               <div
@@ -187,7 +202,7 @@ export function ProyectosPanel() {
                   {alternando === proyecto.id ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : null}
-                  {vivo ? "Cerrar" : "Reabrir"}
+                  {tieneCierre ? "Reabrir" : "Cerrar"}
                 </Button>
                 <Button
                   variant="ghost"
