@@ -5,6 +5,7 @@ import { registrarBalance } from "@/lib/mcp/tools/balance";
 import { registrarBitacora } from "@/lib/mcp/tools/bitacora";
 import { registrarLecciones } from "@/lib/mcp/tools/lecciones";
 import { registrarMovimientos } from "@/lib/mcp/tools/movimientos";
+import { registrarNotas } from "@/lib/mcp/tools/notas";
 import { registrarProyectos } from "@/lib/mcp/tools/proyectos";
 import { verificarAccessToken } from "@/lib/oauth/almacen";
 import { RUTA_MCP } from "@/lib/oauth/protocolo";
@@ -16,7 +17,7 @@ import { RUTA_MCP } from "@/lib/oauth/protocolo";
  * más. Las tools viven en `lib/mcp/tools/`, una familia por archivo, y
  * el único acceso a la base es `lib/mcp/datos.ts`.
  *
- * ## Las ocho tools, y el corte que las ordena
+ * ## Las nueve tools, y el corte que las ordena
  *
  * El corte no es por tema, es por **quién termina escribiendo en la
  * base** (AGENTS.md §8):
@@ -24,10 +25,10 @@ import { RUTA_MCP } from "@/lib/oauth/protocolo";
  * | Tool | Qué hace |
  * |---|---|
  * | `listar_proyectos`, `listar_movimientos`, `balance`, `buscar_lecciones`, `leer_bitacora` | leen |
- * | `registrar_movimiento`, `registrar_leccion` | dejan una propuesta en `inbox` |
+ * | `registrar_movimiento`, `registrar_leccion`, `registrar_nota` | dejan una propuesta en `inbox` |
  * | `escribir_bitacora` | escribe directo |
  *
- * Las dos del medio **no violan la regla 6**: sigue siendo Beno el que
+ * Las del medio **no violan la regla 6**: sigue siendo Beno el que
  * aprieta el botón, en la misma bandeja de siempre. No hizo falta
  * inventar un mecanismo de confirmación nuevo porque ya existía. La
  * última puede escribir porque no hay producción de un modelo: el texto
@@ -109,6 +110,7 @@ const handler = createMcpHandler(
     registrarBalance(server);
     registrarLecciones(server);
     registrarBitacora(server);
+    registrarNotas(server);
   },
   {
     // Sin esto el servidor se presenta como "mcp-typescript server on

@@ -269,6 +269,14 @@ export type EdicionNota = z.infer<typeof edicionNotaSchema>;
  * Una vez que la entrada existe, el pase de extracción que ya está hecho
  * la mira y, si tiene una lección adentro, la propone. Ese camino no hay
  * que construirlo.
+ *
+ * Sirve para los **dos** tipos que terminan en una entrada de bitácora: la
+ * que un modelo sacó de una captura y la que un modelo dictó por el
+ * conector. El payload tiene la misma forma en los dos y el criterio
+ * también — en los dos el texto lo produjo un modelo, así que pasa por la
+ * bandeja—. Lo único que cambia es de dónde vino, y eso lo muestra la
+ * tarjeta, no la action. Por eso no se renombró: el nombre quedó corto,
+ * pero renombrarla es ruido en el diff sin ninguna ganancia.
  */
 export async function aceptarNotaDeAdjunto(
   itemId: string,
@@ -292,7 +300,7 @@ export async function aceptarNotaDeAdjunto(
 
   if (errorLectura) return fail(mensajeDeError(errorLectura));
   if (!item) return fail("No encontré esa propuesta.");
-  if (item.tipo !== "nota_de_adjunto") {
+  if (item.tipo !== "nota_de_adjunto" && item.tipo !== "nota_dictada") {
     return fail("Esa propuesta no es una nota de bitácora.");
   }
   if (item.estado !== "pendiente" && item.estado !== "pospuesto") {

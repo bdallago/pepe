@@ -389,7 +389,13 @@ export function BandejaView({
 
   const actual = items[0] ?? null;
   const esZombie = actual?.tipo === "zombie";
-  const esNota = actual?.tipo === "nota_de_adjunto";
+  // Los dos tipos que terminan en una entrada de bitácora. Comparten el
+  // payload, la action de aceptación y la mitad derecha de la tarjeta; lo
+  // único que cambia es de dónde salió el texto, que es la columna
+  // izquierda.
+  const esNota =
+    actual?.tipo === "nota_de_adjunto" || actual?.tipo === "nota_dictada";
+  const esNotaDictada = actual?.tipo === "nota_dictada";
   const esMovimiento = actual?.tipo === "movimiento_dictado";
   const propuesta =
     actual && !esZombie && !esNota && !esMovimiento
@@ -984,17 +990,44 @@ export function BandejaView({
               */}
               <section className="space-y-2">
                 <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Lo que pegaste
+                  {esNotaDictada ? "De dónde salió" : "Lo que pegaste"}
                 </h2>
-                <p className="text-sm">{nota.de_que_es}</p>
-                <MiniaturaAdjunto
-                  path={nota.storage_path}
-                  alt={`Captura ${nota.adjunto_nombre}`}
-                />
-                {nota.frase && (
-                  <p className="text-muted-foreground text-xs">
-                    Escribiste: “{nota.frase}”
-                  </p>
+                {esNotaDictada ? (
+                  <>
+                    <p className="text-sm">La dictaste desde Claude.</p>
+                    {/*
+                      La fuente a la izquierda es la salvaguarda contra lo
+                      inventado, igual que la miniatura de una captura.
+                      Acá la fuente no es una imagen: es la conversación,
+                      que la app no tiene. Lo único honesto que se puede
+                      mostrar es que el texto NO es de Beno.
+
+                      ⚠ Y por eso esta rama NO renderiza
+                      `MiniaturaAdjunto`: `leerNota()` pone
+                      `storage_path: ""` cuando no viene, y la miniatura
+                      con el path vacío se queda en "Cargando la imagen…"
+                      para siempre.
+                    */}
+                    <p className="text-muted-foreground text-xs">
+                      El texto lo <strong>escribió Claude</strong>, no vos: es
+                      un resumen de lo que charlaron. Por eso pasa por acá y
+                      no se guarda solo. Si le falta algo o suena a otra
+                      persona, editalo antes de aceptar.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">{nota.de_que_es}</p>
+                    <MiniaturaAdjunto
+                      path={nota.storage_path}
+                      alt={`Captura ${nota.adjunto_nombre}`}
+                    />
+                    {nota.frase && (
+                      <p className="text-muted-foreground text-xs">
+                        Escribiste: “{nota.frase}”
+                      </p>
+                    )}
+                  </>
                 )}
               </section>
 
