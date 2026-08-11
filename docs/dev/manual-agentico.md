@@ -74,20 +74,38 @@ usuario puede forzar una cotización distinta.
 
 | | |
 |---|---|
-| **Qué hace** | `projects` es la entidad raíz de **toda** la app, no solo de finanzas. Los gastos sin proyecto se reparten entre los activos. |
+| **Qué hace** | `projects` es la entidad raíz de **toda** la app, no solo de finanzas. Los gastos sin proyecto se reparten entre los que estaban **vivos en la fecha de cada gasto**. |
 | **Dónde se usa** | `/proyectos`, `/proyectos/[slug]`, y el panel de Ajustes. |
-| **Entrypoints** | `lib/actions/projects.ts`: `crearProyecto`, `actualizarProyecto`, `borrarProyecto`, `alternarProyectoActivo`. |
-| **Lógica** | `lib/prorrateo.ts` y `lib/balances.ts`. `repartirPorRestoMayor()` reparte centavos enteros. |
-| **Estado** | `projects`. |
+| **Entrypoints** | `lib/actions/projects.ts`: `crearProyecto`, `actualizarProyecto`, `borrarProyecto`, `alternarProyectoActivo` (el botón Cerrar/Reabrir de Ajustes). |
+| **Lógica** | `lib/prorrateo.ts`: `estaVivo()`, `calcularParticipaciones(projects, fecha)`, `memoParticipaciones()`, `cortesDelReparto()`, `repartirPorRestoMayor()`. `lib/balances.ts` consume todo eso. |
+| **Estado** | `projects`, con la ventana `fecha_inicio`/`fecha_fin`. **La columna `activo` ya no existe** (borrada el 2026-08-11). |
 
-**Trampas.** ⚠ **`alternarProyectoActivo` existe y no está enganchada a
-ninguna pantalla.** ⚠ `fecha_inicio`/`fecha_fin` existen y **no las lee
-nadie**: eso lo arregla el plan
-`docs/superpowers/plans/2026-08-10-prorrateo-por-fecha.md`, que además
-borra la columna `activo`. ⚠ **Nunca filtres proyectos por `activo` para
-decidir si se puede *escribir* sobre ellos** — `activo` decide si
-participan del prorrateo. Esa confusión ya causó dos bugs
-(`lib/bitacora.ts` lo documenta, y `agentes/despacho.ts:503` lo repitió).
+**Trampas.** ⚠ **La ventana es la única fuente de verdad**: no hay
+bandera. `estaVivo(p, fecha)` es lo que antes decía `activo`, pero contra
+una fecha, y es **inclusivo en las dos puntas**. `fecha_inicio` nula es
+"desde siempre", `fecha_fin` nula es "sigue abierto".
+⚠ **`calcularParticipaciones(projects, fecha)` no tiene default en
+`fecha`, a propósito**: un default a hoy dejaría compilar un call site
+olvidadizo que repartiría el histórico entero con la foto de hoy — el bug
+original, y de los que no se ven porque contesta números plausibles.
+⚠ **El reparto vive entero en `prorrateo.ts` y hay TRES caminos que lo
+usan**: la grilla (`calcularBalances`), el encabezado del proyecto
+(`calcularBalancesProyecto`) y las filas (`imputarAProyecto`). Los tres
+pasan por `repartirEntreParticipantes()`, que devuelve un **`Map` por
+`projectId`** y no un array posicional, justamente para que ninguno pueda
+desalinear el emparejamiento. Si alguno vuelve a redondear por fracción
+(`round2(monto * fraccion)`), las tres pantallas dejan de decir el mismo
+número — ya pasó, ver el registro de correcciones.
+⚠ **Las dos monedas se reparten por separado.** Derivar una de la otra
+reintroduce el problema y además tocaría un monto congelado.
+⚠ **En Ajustes, el botón mira `fecha_fin` y el badge mira `estaVivo()`.**
+Son dos preguntas distintas y unificarlas hace que un cierre no se pueda
+deshacer el mismo día. No lo "arregles".
+⚠ **Nunca filtres proyectos por su ventana para decidir si se puede
+*escribir* sobre ellos** — la ventana decide quién participa del
+prorrateo, nada más. Esa confusión causó dos bugs (`lib/bitacora.ts` lo
+documenta, y `agentes/despacho.ts` lo repitió: mandaba a "Compartido" en
+silencio los gastos de un proyecto cerrado).
 
 ### Categorías, recurrencias y cotización
 
@@ -204,6 +222,14 @@ rompió el pase de extracción una vez. `clave_dedupe` se libera al resolver,
 verificada por código. La moneda se congela y se congela **una sola vez**.
 Aceptar un presupuesto crea un proyecto. El PDF es una hoja de impresión,
 no una librería.
+⚠ **El recuadro que simula cómo queda el prorrateo usa la fecha del
+formulario, no `hoy`** — es editable y es la que se inserta. Y cuando esa
+ventana cruza más de un régimen de reparto (hay proyectos que abren o
+cierran en el medio), **no muestra porcentajes: muestra una línea que dice
+que no hay un reparto solo**. Es deliberado: mostrar rangos daba números
+idénticos para decisiones distintas (retroceder al 01/04 alcanza 15 gastos
+y al 01/06 alcanza 7, y el panel imprimía lo mismo). Honestidad, no
+completitud.
 
 ---
 
@@ -224,6 +250,10 @@ resolver con un test sobre un string, va en `despacho.ts`.
 único destino que escribe directo, así que un pedido no cubierto termina
 en una fila escrita. ⚠ Falta el destino `proyecto`; está en
 `docs/superpowers/specs/2026-08-10-operar-conversando-design.md`.
+⚠ **`despacho.ts` ya NO filtra el proyecto por estado** al resolver un
+movimiento dictado, y eso es deliberado: un gasto de un proyecto cerrado
+va a ese proyecto, que para eso se cerró en esa fecha y no en otra.
+Filtrar ahí lo mandaba a "Compartido" sin decir nada.
 
 ---
 
@@ -255,7 +285,11 @@ solo deja nombrar tablas con dueño. Detalle en `docs/conector-mcp.md`.
 ## Infra y datos
 
 - **Supabase** ref `thlocwmhxzqkmmnxmunf` (inmutable). Migraciones en
-  `supabase/migrations/`. **Próxima libre: `20260810100000`.**
+  `supabase/migrations/`, aplicadas hasta `20260810100001_borrar_activo`.
+  **Próxima libre: `20260812000000`** — numerala así o más alto, no más
+  bajo: las dos del reparto por fecha quedaron con timestamp **anterior**
+  a las `20260811…` que ya estaban aplicadas, y hubo que empujarlas con
+  `supabase db push --linked --include-all`.
 - **Vercel** proyecto `pepe-beno` → https://pepe-beno.vercel.app
 - **Buckets privados**: `comprobantes` y `adjuntos`.
 - **Verificación** (no hay suite de tests versionada):
@@ -264,6 +298,15 @@ solo deja nombrar tablas con dueño. Detalle en `docs/conector-mcp.md`.
   borran**. Se corren con `npx tsx --conditions=react-server ./script.mts`
   **desde la raíz del repo**.
 - ⚠ **No corras `npm run build` con un `next dev` vivo**: comparten
-  `.next`.
+  `.next`. Y ojo: bajar el dev matando el wrapper de npm **deja vivo al
+  hijo que escucha en el 3000**. Verificá por puerto, no por proceso.
 - ⚠ Al regenerar `database.types.ts` hay que **volver a pegar a mano** el
   bloque de alias del final.
+- ⚠ **En los scripts usá `process.exitCode = N`, nunca `process.exit(N)`**:
+  en Windows, salir justo después de que se cierra el socket de Supabase
+  crashea con un assert de libuv (`UV_HANDLE_CLOSING`). La salida ya se
+  imprimió entera, así que parece un fallo del cálculo y no lo es.
+- ⚠ **Al borrar una columna, primero desplegá el código que dejó de
+  leerla.** La base es una sola y `main` está sirviendo: al revés,
+  PostgREST contesta `42703` en `error` con `data: null`, y todo call site
+  que no mire `.error` se queda sin datos **sin romperse**.

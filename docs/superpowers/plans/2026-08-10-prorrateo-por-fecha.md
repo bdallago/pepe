@@ -1,5 +1,17 @@
 # El reparto por fecha — plan de implementación
 
+> ✅ **EJECUTADO Y EN PRODUCCIÓN el 2026-08-11.** Las nueve tareas están
+> hechas, mergeadas a `main` y desplegadas. Este archivo se deja como
+> registro de qué se decidió y **con qué información equivocada** — ver
+> "Correcciones de la ejecución", abajo. Los desvíos respecto de lo que
+> dice acá están explicados en cada tarea; el resultado final está en
+> `AGENTS.md` §2 y en `docs/registro-correcciones.md`.
+>
+> Dos cosas que el plan no previó y se hicieron igual: el reparto se
+> extrajo entero a `prorrateo.ts` porque había **tres** caminos de cálculo
+> y no dos, y la migración que borra `activo` se aplicó **después** del
+> deploy y no antes, para no dejar una ventana con producción rota.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Que un gasto compartido se reparta entre los proyectos que

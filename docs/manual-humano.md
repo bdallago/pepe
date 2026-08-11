@@ -36,12 +36,24 @@ pantalla te lo dice. También la podés forzar a mano.
 
 **Un movimiento puede no tener proyecto, y eso significa algo.** Quiere
 decir que es compartido: Claude Pro, el hosting, la publicidad. Esos gastos
-se reparten entre los proyectos activos cada vez que mirás un balance,
-**sin duplicar nada en la base**. Por eso la suma de lo que costó cada
-proyecto da exactamente el balance general, y la pantalla de Proyectos
-verifica esa cuenta a la vista. Si algún día no hay ningún proyecto
-activo, no hay entre quiénes repartir: la app te avisa en vez de mostrarte
-números que no cierran.
+se reparten cada vez que mirás un balance, **sin duplicar nada en la
+base**. Por eso la suma de lo que costó cada proyecto da exactamente el
+balance general, y la pantalla de Proyectos verifica esa cuenta a la vista.
+
+**Cada proyecto tiene una ventana: cuándo arrancó y cuándo cerró**, y un
+gasto compartido se reparte entre los que estaban abiertos **el día de ese
+gasto**. La diferencia no es un detalle: antes se repartía entre los que
+estuvieran abiertos hoy, así que cerrar un proyecto cambiaba
+retroactivamente cuánto había costado cada uno de los otros. Un gasto de
+marzo se reparte entre los que estaban vivos en marzo, y va a seguir
+diciendo lo mismo dentro de un año.
+
+Las dos fechas se editan en Ajustes, y ahí también está el botón de cerrar
+y reabrir. Dejar el cierre vacío quiere decir que el proyecto sigue
+abierto. Si un gasto compartido cae en una fecha en la que no había ningún
+proyecto abierto, no hay entre quiénes repartirlo: la app te avisa, te
+dice **cuáles** son esos gastos, y los sigue contando en el balance
+general.
 
 Además hay gastos recurrentes, que generan los movimientos planificados
 solos, y un detector que una vez por día busca **suscripciones que quizás

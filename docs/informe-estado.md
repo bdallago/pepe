@@ -10,7 +10,14 @@
 > - `tipo_bandeja` ya no tiene cinco valores: se le sumaron
 >   `nota_de_adjunto`, `movimiento_dictado` y `leccion_dictada`.
 > - `sugerir_categoria_historico` toma un `p_user_id` opcional.
-> - Lo que viene está en `docs/superpowers/specs/2026-08-10-*`.
+> - ⚠ **La columna `projects.activo` ya no existe** (borrada el
+>   2026-08-11), así que el esquema y la tabla de datos que aparecen más
+>   abajo la muestran de más. Los gastos compartidos se reparten entre los
+>   proyectos que estaban vivos **en la fecha de cada gasto**, según la
+>   ventana `fecha_inicio`/`fecha_fin`. El índice
+>   `projects_user_activo_idx` se cayó con la columna.
+> - Lo que viene está en `docs/superpowers/specs/2026-08-10-*`, y de esos
+>   el del prorrateo por fecha **ya está implementado y en producción**.
 >
 > Sigue vigente lo de la sección 5.3 sobre el limitador de Groq como
 > estado de módulo, y lo del enum `categorizacion` que nada produce.

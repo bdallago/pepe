@@ -30,13 +30,13 @@ lo mismo de corrido y sin rutas de archivos.
 | [`superpowers/specs/`](superpowers/specs) | El diseño de cada feature: qué se decidió y por qué se descartó lo otro | uno por feature |
 | [`superpowers/plans/`](superpowers/plans) | El plan de implementación, tarea por tarea | uno por spec |
 
-**El registro de correcciones está vacío a propósito**
-([`registro-correcciones.md`](registro-correcciones.md)): todavía no hubo
-un bug que ameritara entrada, pero el archivo existe igual para que la
-primera corrección ya tenga dónde anotarse. Se llama "registro" y no
+**El registro de correcciones** ([`registro-correcciones.md`](registro-correcciones.md))
+tiene su primera tanda desde el 2026-08-11: nueve entradas que salieron
+todas de implementar el reparto por fecha. Se llama "registro" y no
 "bitácora" porque en Pepe **Bitácora es una sección del producto**. El
 historial fino sigue en los mensajes de commit, largos a propósito y con
-el porqué de cada cambio: `git log` es el detalle.
+el porqué de cada cambio: `git log` es el detalle; el registro guarda el
+estado y el resumen de una o dos líneas por corrección.
 
 **Tampoco hay índice estructural generado.** Con `rg` sobre `src/` alcanza:
 el vocabulario del repo es dominio en castellano, donde el match exacto
@@ -47,6 +47,12 @@ gana.
 Los dos manuales, el registro de correcciones y el índice se editan a
 mano y los actualiza `/actualizar`: los manuales, cuando una
 funcionalidad cambia de forma — pantalla nueva, action nueva, tabla
-nueva — y el registro, cuando se corrige un bug. Los specs y los planes **no se tocan después de
-escritos**: son el registro de qué se decidió con la información que había
-en ese momento.
+nueva — y el registro, cuando se corrige un bug.
+
+**Los specs y los planes no se reescriben después de escritos**: son el
+registro de qué se decidió con la información que había en ese momento.
+Lo que sí se les puede agregar es un bloque al principio diciendo que ya
+se ejecutaron y **qué afirmaban que resultó ser falso** — eso no borra la
+decisión, la contextualiza. El plan del reparto por fecha lo tiene, y vale
+leerlo antes de escribir el próximo: se escribió sin ejecutar nada y
+afirmaba siete cosas que no eran ciertas.
