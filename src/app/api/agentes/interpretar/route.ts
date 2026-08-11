@@ -34,6 +34,8 @@ const cuerpoSchema = z
     /** Cuando Beno elige una opción de una pregunta, ya sabemos el destino. */
     destino: z.enum(DESTINOS).optional(),
     argumento: z.string().max(300).nullable().optional(),
+    /** Solo lo manda la caja cuando Beno eligió una opción de confirmación. */
+    confirmado: z.boolean().optional(),
     /** Los archivos que el browser ya subió al bucket `adjuntos`. */
     adjuntos: z.array(adjuntoSubidoSchema).max(MAX_ADJUNTOS).optional(),
   })
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Pedido inválido." }, { status: 400 });
   }
 
-  const { frase, destino, argumento, adjuntos } = parseado.data;
+  const { frase, destino, argumento, adjuntos, confirmado } = parseado.data;
   const supabase = await createClient();
 
   // Con adjunto **no se llama al recepcionista**: que haya un archivo es
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
     // cadena devuelve la respuesta pelada: este camino se comporta igual
     // que antes de que existieran las cadenas.
     const decisiones = destino
-      ? [{ destino, argumento: argumento ?? null, confianza: 1 }]
+      ? [{ destino, argumento: argumento ?? null, confianza: 1, confirmado }]
       : await decidirDestinos(frase);
 
     // Una frase puede pedir varias cosas. Se ejecutan en orden y las

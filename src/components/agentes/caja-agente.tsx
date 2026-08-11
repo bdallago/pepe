@@ -150,7 +150,11 @@ export function CajaAgente({
     return subidos;
   }
 
-  async function enviar(destino?: Destino, argumento?: string | null) {
+  async function enviar(
+    destino?: Destino,
+    argumento?: string | null,
+    confirmado?: boolean,
+  ) {
     const texto = frase.trim();
     // Con archivos la frase puede ir vacía: arrastrar un PDF y nada más
     // es un pedido legítimo, y el handler lo acepta.
@@ -205,6 +209,7 @@ export function CajaAgente({
           frase: texto,
           destino,
           argumento: dato,
+          ...(confirmado ? { confirmado } : {}),
           ...(adjuntos ? { adjuntos } : {}),
         }),
       });
@@ -386,7 +391,11 @@ function Completar({
   onElegir,
 }: {
   respuesta: Extract<RespuestaSimple, { clase: "completar" }>;
-  onElegir: (destino: Destino, argumento?: string | null) => void;
+  onElegir: (
+    destino: Destino,
+    argumento?: string | null,
+    confirmado?: boolean,
+  ) => void;
 }) {
   const [valor, setValor] = useState("");
 
@@ -453,7 +462,11 @@ function Movimiento({
   onCerrar,
 }: {
   respuesta: Extract<RespuestaSimple, { clase: "movimiento" }>;
-  onElegir: (destino: Destino, argumento?: string | null) => void;
+  onElegir: (
+    destino: Destino,
+    argumento?: string | null,
+    confirmado?: boolean,
+  ) => void;
   onCerrar?: () => void;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -736,7 +749,11 @@ function Respuesta({
   onCerrar,
 }: {
   respuesta: RespuestaAgente;
-  onElegir: (destino: Destino, argumento?: string | null) => void;
+  onElegir: (
+    destino: Destino,
+    argumento?: string | null,
+    confirmado?: boolean,
+  ) => void;
   onCerrar?: () => void;
 }) {
   switch (respuesta.clase) {
@@ -861,7 +878,7 @@ function Respuesta({
                 key={n}
                 variant="secondary"
                 size="sm"
-                onClick={() => onElegir(o.destino, o.argumento)}
+                onClick={() => onElegir(o.destino, o.argumento, o.confirmado)}
               >
                 {o.etiqueta}
               </Button>

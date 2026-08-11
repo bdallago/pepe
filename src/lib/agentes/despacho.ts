@@ -1,6 +1,10 @@
 import "server-only";
 
-import { leerAnotacion } from "@/lib/agentes/bitacora";
+import {
+  esNombreDeEntidad,
+  leerAnotacion,
+  pareceAnotacion,
+} from "@/lib/agentes/bitacora";
 import { leerMovimiento } from "@/lib/agentes/movimientos";
 import { observarBalances } from "@/lib/agentes/observaciones";
 import {
@@ -828,6 +832,58 @@ export async function despachar(
         .order("nombre");
 
       const todos = proyectos ?? [];
+
+      /*
+        ⚠ **Si lo que se va a anotar no parece una anotación, se pregunta
+        en vez de escribir.**
+
+        `bitacora` es el destino con el gancho léxico más ancho y el único
+        que escribe directo: cuando un pedido no está cubierto por ningún
+        especialista, el recepcionista aterriza acá y lo que era un "no sé
+        hacer eso" se convierte en una fila escrita. Pasó el 2026-08-10 —
+        pedir las fechas de dos proyectos dejó dos entradas con el
+        contenido "Proder" y "El Prode"—. El desarrollo del test está en
+        `agentes/bitacora.ts`.
+
+        `confirmado` es la salida: cuando Beno aprieta "Sí, anotalo", la
+        opción vuelve con esa marca y esto no se vuelve a preguntar.
+      */
+      const { data: tracksParaChequeo } = await supabase
+        .from("tracks")
+        .select("nombre, slug");
+
+      const nombrados = [...todos, ...(tracksParaChequeo ?? [])];
+
+      if (
+        !decision.confirmado &&
+        !pareceAnotacion(anotacion.contenido, nombrados)
+      ) {
+        const entidad = esNombreDeEntidad(anotacion.contenido, nombrados);
+
+        return {
+          clase: "pregunta",
+          titulo: entidad
+            ? `¿“${anotacion.contenido}” querías anotarlo en la bitácora, o querías hacer algo con ${entidad.nombre}?`
+            : `¿“${anotacion.contenido}” querías anotarlo en la bitácora?`,
+          opciones: [
+            {
+              etiqueta: "Sí, anotalo",
+              destino: "bitacora" as const,
+              argumento: anotacion.contenido,
+              confirmado: true,
+            },
+            ...(entidad
+              ? [
+                  {
+                    etiqueta: `Ver los números de ${entidad.nombre}`,
+                    destino: "consultas" as const,
+                    argumento: entidad.nombre,
+                  },
+                ]
+              : []),
+          ],
+        };
+      }
 
       // El proyecto se busca en la anotación entera: si nombra uno, va
       // ahí. `"ambiguo"` (más de un nombre adentro del texto) cae al de

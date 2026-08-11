@@ -89,3 +89,101 @@ export function leerAnotacion(
     fechaExplicita: explicita,
   };
 }
+
+/**
+ * Lo mínimo que necesita una fila para poder compararse por nombre.
+ * Proyectos y tracks lo cumplen los dos.
+ */
+interface Nombrado {
+  nombre: string;
+  slug: string;
+}
+
+/**
+ * Menos que esto no es una anotación: es un nombre suelto o un pedido a
+ * medias. Los dos números salieron de medir las seis entradas reales de
+ * Beno el 2026-08-11: la más corta tiene **186 caracteres y 33 palabras**,
+ * o sea que el piso está un orden de magnitud por debajo de lo que él
+ * escribe de verdad.
+ */
+const MIN_CHARS = 15;
+const MIN_PALABRAS = 3;
+
+/**
+ * ¿Esto que se va a escribir parece una anotación?
+ *
+ * ## Por qué existe
+ *
+ * `bitacora` es **el destino con el gancho léxico más ancho** ("anotá",
+ * "apuntá", "registrá", "guardá") y **el único que escribe directo**. Esas
+ * dos cosas juntas lo convierten en el sumidero de todo lo que la app no
+ * sabe hacer: cuando un pedido no está cubierto, el recepcionista aterriza
+ * en el vecino léxico más cercano y termina acá. En el resto del diseño el
+ * peor caso es "una propuesta basura que se rechaza con una tecla"; acá el
+ * peor caso es **una fila escrita**, y pasó — el 2026-08-10, pedir las
+ * fechas de dos proyectos dejó dos entradas con el contenido `"Proder"` y
+ * `"El Prode"`—. El desarrollo del test está en `agentes/bitacora.ts`.
+ *
+ * ⚠ **Va en código y no en el prompt del recepcionista, a propósito.** Es
+ * la misma regla que ya aplicó `textoDelMovimiento()`: si algo se puede
+ * resolver con un test sobre un string, se hace ahí. Ese prompt tiene
+ * cuatro incidentes medidos de romperse por agregarle texto.
+ *
+ * ## Por qué la comparación de nombre es EXACTA
+ *
+ * No usa `resolverProyecto()`, que hace match parcial
+ * (`aguja.includes(nombre)`): con eso, cualquier anotación larga que
+ * **mencione** un proyecto caería en la pregunta. Medido el 2026-08-11
+ * contra las seis entradas reales, hoy da `null` de casualidad —ninguna
+ * nombra un proyecto vigente, la que habla del tema dice "HRKit"— y no hay
+ * que apoyarse en esa casualidad.
+ *
+ * El chequeo exacto se gana el lugar con un caso concreto y no hipotético:
+ * **`"El Prode de Beno"` tiene 16 caracteres y 4 palabras**, así que pasa
+ * los dos filtros de largo y lo único que lo agarra es esto. Es uno de los
+ * dos proyectos del fallo que originó la salvaguarda.
+ */
+export function pareceAnotacion(
+  contenido: string,
+  nombrados: Nombrado[],
+): boolean {
+  const limpio = contenido.trim();
+
+  if (limpio.length < MIN_CHARS) return false;
+  if (limpio.split(/\s+/).filter(Boolean).length < MIN_PALABRAS) return false;
+
+  return !esNombreDeEntidad(limpio, nombrados);
+}
+
+/** Coincide **exactamente** con el nombre o el slug de un proyecto o un track. */
+export function esNombreDeEntidad(
+  texto: string,
+  nombrados: Nombrado[],
+): Nombrado | null {
+  const aguja = normalizarNombre(texto);
+  if (!aguja) return null;
+
+  return (
+    nombrados.find(
+      (n) =>
+        normalizarNombre(n.nombre) === aguja ||
+        normalizarNombre(n.slug) === aguja,
+    ) ?? null
+  );
+}
+
+/**
+ * El mismo criterio que `agentes/resolver.ts`: minúsculas, sin tildes y
+ * sin puntuación. Está duplicado a propósito y son cinco líneas: lo de
+ * allá es un módulo `server-only` y esto tiene que poder correrse desde un
+ * script de verificación sin arrastrar medio Next.
+ */
+function normalizarNombre(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

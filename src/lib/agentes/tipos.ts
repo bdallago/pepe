@@ -92,6 +92,16 @@ const decisionBase = z.object({
    * análisis que pedir. Undefined y false valen lo mismo acá.
    */
   analizar: z.boolean().optional(),
+  /**
+   * Beno ya contestó que sí a una pregunta de confirmación.
+   *
+   * **No lo produce el modelo** —igual que `analizar` cuando el destino
+   * viene elegido a mano—: lo pone el route handler cuando Beno aprieta
+   * una opción que lo trae. Es lo único que le permite a una rama con
+   * salvaguarda distinguir "el recepcionista derivó esto acá" de "Beno
+   * dijo que sí". Sin él, la pregunta se vuelve a hacer para siempre.
+   */
+  confirmado: z.boolean().optional(),
 });
 
 /**
@@ -250,7 +260,13 @@ export type RespuestaSimple =
   | {
       clase: "pregunta";
       titulo: string;
-      opciones: { etiqueta: string; destino: Destino; argumento: string | null }[];
+      opciones: {
+        etiqueta: string;
+        destino: Destino;
+        argumento: string | null;
+        /** La opción que dice "sí, hacelo igual". Apaga la salvaguarda. */
+        confirmado?: boolean;
+      }[];
     }
   | {
       /**
