@@ -132,9 +132,27 @@ const ANDAMIAJE =
  * verbo, las fechas y el andamiaje ("Proder apertura … y cierre …" deja
  * un "y" pegado al final). En el medio no se tocan: ahí pueden ser parte
  * del nombre, como el "de" de "Agente de RRHH".
+ *
+ * ⚠ **La punta inicial no lleva artículos, y es a propósito.** Un nombre
+ * puede empezar con uno — "El Prode" es un proyecto real de esta base —,
+ * así que agregar `el|la|…` acá deshace el arreglo del punto 2 y vuelve
+ * a dar "Prode". Que un nombre *termine* en artículo es mucho menos
+ * probable, y por eso la punta final sí los incluye.
  */
 const CONECTOR_INICIAL = /^(?:y|que|para|con|su)\s+/iu;
-const CONECTOR_FINAL = /\s+(?:y|que|para|con|su)$/iu;
+
+/**
+ * A diferencia de `CONECTOR_INICIAL`, esta **sí** repite (`+` sobre el
+ * grupo) y **sí** incluye artículos. Los dos son necesarios juntos:
+ * "creá el proyecto Agente de RRHH que arranca el 01/09/26" deja **dos**
+ * conectores pegados al final —"que" y "el"— una vez que se van "arranca"
+ * y la fecha. Con un recorte simple, de uno solo, el proyecto se creaba
+ * llamándose "Agente de RRHH que el" — y `crear` es la operación que
+ * escribe ese nombre directo en la base, sin bandeja. Medido el
+ * 2026-08-11.
+ */
+const CONECTOR_FINAL =
+  /(?:\s+(?:y|que|para|con|su|el|la|los|las|un|una|de|del))+$/giu;
 
 export function leerPedidoDeProyecto(
   argumento: string | null,
