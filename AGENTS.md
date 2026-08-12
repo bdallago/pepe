@@ -833,12 +833,33 @@ nombres.** No es una sospecha, son cuatro incidentes con medición:
    Las mismas dos reglas en **seis líneas y léxicas** (listas de palabras,
    no descripciones) pasaron limpio.
 
-Por eso: **antes de tocar ese prompt, medí; después de tocarlo, volvé a
-medir.** El piso de regresión son las cuatro ambiguas sueltas
-(`"Claude Code"`, `"Proder"`, `"pricing"`, `"Vercel Pro"`, todas por
-debajo de 0.6) y las seis simples con **una sola acción** cada una. Y si
-la regla que querés agregar se puede resolver con un test sobre un string
-en `despacho.ts`, hacelo ahí — como `textoDelMovimiento()`.
+**Por eso: antes de tocar ese prompt, medí; después de tocarlo, volvé a
+medir.** Y ahora eso es un comando y no un ritual:
+
+```bash
+npm run medir:recepcionista            # el piso: 11 frases, ~11 min
+npm run medir:recepcionista -- --todo  # completo: ~32 min
+```
+
+El piso de regresión vive en `src/lib/agentes/banco.ts` y la línea base
+commiteada en `docs/dev/recepcionista-linea-base.json`, así que el diff de
+un PR muestra **qué confianzas se movieron**. Son las cuatro ambiguas
+sueltas (`"Claude Code"`, `"Proder"`, `"pricing"`, `"Vercel Pro"`, todas
+por debajo de 0.6), las seis simples con **una sola acción** cada una, y
+`"el hosting de Vercel Pro"` — la única ambigua que todavía llega al
+modelo, porque las cuatro anclas las cortocircuita `atajo.ts`. Y si la
+regla que querés agregar se puede resolver con un test sobre un string en
+`despacho.ts`, hacelo ahí — como `textoDelMovimiento()`.
+
+⚠ **Oscilar cuenta como fallar.** Cada frase se dispara tres veces: el
+modelo **no es determinístico ni con `temperatura: 0`** —está medido con
+`"agreguemos lecciones"`—, así que una corrida por frase no distingue "lo
+arreglé" de "salió bien esta vez". Las seis mediciones históricas de este
+prompt tienen ese sesgo.
+
+⚠ **Medir cuesta 2 llamadas por minuto** y no se puede apurar: el prompt
+reserva ~2613 tokens contra un techo de 5500 por minuto. Por eso el
+corredor es retomable.
 
 **El quinto agregado pasó limpio al primer intento, y confirma la
 receta.** `presupuesto` (2026-08-10) entró con **cinco líneas léxicas** —
