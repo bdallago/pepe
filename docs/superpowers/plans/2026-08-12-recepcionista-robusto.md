@@ -22,6 +22,33 @@ decidibles no lleguen al modelo.
 
 **Spec:** `../specs/2026-08-12-recepcionista-robusto-design.md`
 
+## ⚠ ORDEN DE EJECUCIÓN — leelo antes de empezar
+
+**Las tareas NO se ejecutan en el orden en que están escritas.** El orden
+es este, decidido con Beno el 2026-08-12:
+
+| # | Tarea | Por qué acá |
+|---|---|---|
+| 1 | **B1** | Función pura, 44 tests, **cero llamadas a Groq**. No depende de nada |
+| 2 | **C1, C2** | El atajo. Depende de B1. Verificable con tests puros |
+| 3 | **A1, A2, A3, A4, A5, A6** | El arnés. Ahora cuesta **35 % menos** porque 9 frases ya no llaman al modelo |
+| 4 | **B2, B3** | La cirugía del prompt. Es lo único que de verdad necesita el arnés |
+
+**El motivo es de eficiencia y está medido.** Con el atajo puesto antes,
+las 4 anclas ambiguas y las 5 telegráficas dejan de llamar al modelo: son
+**27 llamadas menos por corrida completa**. Medir el piso pasa de ~15 a
+**~9 minutos**, y el corpus completo de ~47 a **~32**. La capa
+determinística se paga sola abaratando todo lo que viene después.
+
+**Lo único que no se mueve: B3 va después de A.** Sacarle 24 líneas al
+prompt sin poder medir es exactamente el error que este plan viene a
+eliminar.
+
+En C2 hay un ajuste por el reorden: el paso 3 dice "comparar contra la
+medición de la Tarea B3", que todavía no existe. Reemplazalo por
+**medir y guardar esa tabla como referencia**; la comparación real la
+hace B3 después.
+
 ---
 
 ## Lo que ya se verificó corriendo, antes de escribir este plan
