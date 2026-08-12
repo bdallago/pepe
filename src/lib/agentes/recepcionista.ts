@@ -1,6 +1,7 @@
 import "server-only";
 
 import { completarJSON, MODELO_CHICO } from "@/lib/llm";
+import { atajar } from "@/lib/agentes/atajo";
 import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
 
 /**
@@ -454,6 +455,12 @@ con las claves destino, argumento, confianza, analizar.`;
  * recuperarse tirando la llamada, alcanza con quedarse con las primeras.
  */
 export async function decidirDestinos(frase: string): Promise<Decision[]> {
+  const atajo = atajar(frase);
+  if (atajo) {
+    console.info(`[recepcionista] atajo ${atajo.motivo}, sin llamar al modelo.`);
+    return atajo.decisiones;
+  }
+
   const { datos } = await completarJSON({
     modelo: MODELO_CHICO,
     sistema: SISTEMA,
