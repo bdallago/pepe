@@ -1,11 +1,11 @@
 import "server-only";
 
+import { adosarSubconjuntos, type MovimientoConReparto } from "@/lib/prorrateo";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Artifact,
   Block,
   DailyLog,
-  Movement,
   StudySession,
   Track,
 } from "@/lib/supabase/database.types";
@@ -20,17 +20,26 @@ import type {
 
 const LIMITE = 20000;
 
-export async function getMovimientos(): Promise<Movement[]> {
+export async function getMovimientos(): Promise<MovimientoConReparto[]> {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("movements")
-    .select("*")
-    .order("fecha", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(LIMITE);
+  // Las dos lecturas van juntas y en paralelo porque **el reparto no es
+  // correcto sin las dos**: un compartido con subconjunto explícito al
+  // que no le llega su subconjunto se reparte por ventana de fecha, que
+  // es un número plausible y equivocado. Es el modo de fallar caro de
+  // este módulo, así que no se separan en dos funciones que alguien
+  // pueda llamar de a una.
+  const [movimientos, subconjuntos] = await Promise.all([
+    supabase
+      .from("movements")
+      .select("*")
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(LIMITE),
+    supabase.from("movement_projects").select("movement_id, project_id"),
+  ]);
 
-  return data ?? [];
+  return adosarSubconjuntos(movimientos.data ?? [], subconjuntos.data ?? []);
 }
 
 export async function getProyectoPorSlug(slug: string) {

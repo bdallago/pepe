@@ -13,6 +13,7 @@ import {
   MULTIPLICADORES_POR_DEFECTO,
   type Multiplicadores,
 } from "@/lib/presupuestos";
+import type { QuoteParaConversion } from "@/lib/presupuestos/conversion";
 import { createClient } from "@/lib/supabase/server";
 import type { Database, Moneda } from "@/lib/supabase/database.types";
 
@@ -163,6 +164,34 @@ export async function getPresupuestos(): Promise<Quote[]> {
     .select("*")
     .is("archivado_en", null)
     .order("numero", { ascending: false });
+
+  return data ?? [];
+}
+
+/**
+ * Las filas que alimentan la tabla de conversión.
+ *
+ * ⚠ **Esta es la única lectura del módulo que NO filtra `archivado_en`**,
+ * y la diferencia con `getPresupuestos()` de arriba es deliberada: la
+ * lista es la interfaz y los archivados la ensucian, pero la conversión
+ * es una lectura histórica y sacarlos le subiría la tasa de aceptación
+ * cada vez que Beno ordena la pantalla. El motivo está desarrollado en
+ * el encabezado de `presupuestos/conversion.ts`.
+ *
+ * Se piden las nueve columnas que usa el cálculo y no `*`: así se ve de
+ * un vistazo que el panel no toca ni el pedido ni el texto del
+ * presupuesto.
+ */
+export async function getPresupuestosParaConversion(): Promise<
+  QuoteParaConversion[]
+> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("quotes")
+    .select(
+      "id, estado, cliente_tipo, moneda, total_origen, enviado_en, resuelto_en, motivo_descarte, reemplaza_a",
+    );
 
   return data ?? [];
 }

@@ -99,7 +99,52 @@ export const movementSchema = z.object({
   tasa_fecha: isoDate,
   estado: estadoMovimientoSchema,
   comprobante_path: z.string().max(400).nullable().optional(),
-});
+
+  /**
+   * Los proyectos entre los que se reparte, cuando Beno los nombra.
+   *
+   * Solo tiene sentido con `project_id` en null: un gasto imputado a un
+   * proyecto no pasa por el reparto en ningún caso. Lo valida el
+   * `superRefine` de abajo, y además lo garantiza un trigger en la base.
+   *
+   * **Mínimo dos.** Con uno solo, decir "compartido entre X" es decir
+   * "es de X", y eso ya se escribe con `project_id`. Dos formas de
+   * guardar lo mismo es la que después contesta distinto según por dónde
+   * la leas.
+   */
+  proyectos_explicitos: z.array(uuid).max(50).optional().nullable(),
+})
+  .superRefine((valor, ctx) => {
+    const elegidos = valor.proyectos_explicitos;
+    if (!elegidos || elegidos.length === 0) return;
+
+    if (valor.project_id !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["proyectos_explicitos"],
+        message:
+          "Un gasto imputado a un proyecto no se reparte: quitá el proyecto o quitá la lista.",
+      });
+      return;
+    }
+
+    if (elegidos.length < 2) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["proyectos_explicitos"],
+        message:
+          "Elegí al menos dos proyectos. Con uno solo, imputáselo directo a ese proyecto.",
+      });
+    }
+
+    if (new Set(elegidos).size !== elegidos.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["proyectos_explicitos"],
+        message: "Hay un proyecto repetido.",
+      });
+    }
+  });
 
 export type MovementInput = z.infer<typeof movementSchema>;
 

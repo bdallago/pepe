@@ -17,7 +17,12 @@ import {
   avisoProyectoDesconocido,
   resolverProyecto,
 } from "@/lib/mcp/resolver";
-import { estaVivo, etiquetaProrrateo, pesosSonUniformes } from "@/lib/prorrateo";
+import {
+  adosarSubconjuntos,
+  estaVivo,
+  etiquetaProrrateo,
+  pesosSonUniformes,
+} from "@/lib/prorrateo";
 import type { Moneda } from "@/lib/supabase/database.types";
 
 /**
@@ -114,14 +119,21 @@ export function registrarBalance(server: McpServer) {
         );
       }
 
-      const [movimientos, proyectos, categorias] = await Promise.all([
-        datos
-          .de("movements")
-          .order("fecha", { ascending: false })
-          .limit(TECHO_MOVIMIENTOS),
-        datos.de("projects").order("nombre"),
-        datos.de("categories"),
-      ]);
+      // ⚠ `movement_projects` **no es opcional acá**. Sin él, un gasto
+      // compartido con subconjunto explícito se repartiría por ventana de
+      // fecha y el conector contestaría un número distinto del que
+      // muestra la pantalla, sin fallar y sin avisar. Es el mismo motivo
+      // por el que `mcp/datos.mts` lee los proyectos igual que el layout.
+      const [movimientos, subconjuntos, proyectos, categorias] =
+        await Promise.all([
+          datos
+            .de("movements")
+            .order("fecha", { ascending: false })
+            .limit(TECHO_MOVIMIENTOS),
+          datos.de("movement_projects"),
+          datos.de("projects").order("nombre"),
+          datos.de("categories"),
+        ]);
 
       if (movimientos.error) {
         throw new Error(
@@ -129,7 +141,10 @@ export function registrarBalance(server: McpServer) {
         );
       }
 
-      const movs = movimientos.data ?? [];
+      const movs = adosarSubconjuntos(
+        movimientos.data ?? [],
+        subconjuntos.data ?? [],
+      );
       const projs = proyectos.data ?? [];
       const cats = categorias.data ?? [];
 

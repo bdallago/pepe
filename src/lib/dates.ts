@@ -89,6 +89,18 @@ export function addDays(iso: string, days: number): string {
 }
 
 /**
+ * Cuántos días hay de `desde` a `hasta`. Negativo si `hasta` es anterior.
+ *
+ * Se apoya en `parseISODate`, que trabaja al mediodía local: restar dos
+ * fechas parseadas a medianoche daría 23 o 25 horas en los dos domingos
+ * del año en que cambia el huso, y el redondeo se comería un día.
+ */
+export function diasEntre(desde: string, hasta: string): number {
+  const ms = parseISODate(hasta).getTime() - parseISODate(desde).getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+/**
  * Día de la semana en formato ISO: 1 = lunes … 7 = domingo.
  *
  * `getDay()` devuelve 0 para el domingo; acá se lo lleva a 7 para que el

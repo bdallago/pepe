@@ -508,6 +508,42 @@ export type Database = {
           },
         ]
       }
+      movement_projects: {
+        Row: {
+          creado_en: string
+          movement_id: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          creado_en?: string
+          movement_id: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          creado_en?: string
+          movement_id?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movement_projects_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movement_projects_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       oauth_clients: {
         Row: {
           client_id: string

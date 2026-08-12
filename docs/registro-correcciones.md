@@ -38,11 +38,46 @@ frases seguras y equivocadas. Es el modo de fallar que más caro sale en este pr
 de la key de Groq, 16 horas caído en silencio) y por eso todas se verificaron midiendo contra la
 base real, no leyendo.
 
-Queda **una deuda conocida, sin dueño y fuera de la app**: el workflow del repo
-`bdallago/pepe-respaldos` todavía no recorre el bucket `adjuntos`, así que esos bytes no se están
-respaldando. Del lado de Pepe está todo hecho desde hace días.
+**La etapa 3 de presupuestos quedó cerrada el 2026-08-11** con la tabla de conversión
+(`lib/presupuestos/conversion.ts`, pura, cero tokens). Verificada corriendo: 32 chequeos del
+cálculo y el panel renderizado contra el server real con ocho presupuestos sembrados, incluido uno
+archivado para comprobar que cuenta en la conversión y **no** en la lista. Los datos de prueba se
+borraron y `quotes` volvió a cero.
+
+**El gasto compartido entre un subconjunto explícito de proyectos está implementado** (2026-08-11):
+migración `20260812000001_compartido_entre.sql`, motor, formulario, las dos superficies de MCP y el
+respaldo. Verificado con 25 chequeos que corren el código, incluido el invariante con subconjuntos
+mezclados y que **el default no se movió**. ⚠ **La migración todavía no está aplicada**: hace falta
+el `SUPABASE_ACCESS_TOKEN`, que tiene Beno.
+
+**No queda ninguna deuda conocida fuera de la app.** La que estaba anotada acá —que el workflow de
+`bdallago/pepe-respaldos` no recorría el bucket `adjuntos`— era **falsa**: ver el historial.
 
 ## Historial
+
+- **2026-08-11 — Se difirió por "falta de evidencia" una feature que Beno había pedido explícitamente.**
+  Ante "hacé todo", el subconjunto explícito de proyectos se convirtió en una pregunta en vez de en
+  código, con el argumento de que el caso ocurre cero veces en los datos de hoy. El argumento era
+  correcto y la decisión no: medir para elegir **cómo** construir algo es distinto de medir para
+  decidir **si** construir lo que ya te pidieron. Se implementó entero después. La regla que queda:
+  cuando el pedido es explícito, la evidencia informa el diseño, no habilita el recorte.
+
+- **2026-08-11 — La deuda del respaldo de `adjuntos` no existía, y estuvo anotada un día entero.**
+  `AGENTS.md`, este registro y la memoria decían que faltaba el `for` del lado de
+  `bdallago/pepe-respaldos` y que esos bytes no se guardaban en ningún lado. El workflow los baja
+  desde el commit `06d9b7b` del 2026-08-10 (`bajar_bucket adjuntos adjunto …`), `respaldo.json`
+  está en v3 y la última corrida agendada salió verde. Lo que confundió es que
+  `adjuntos/MANIFIESTO.json` dice `total: 0` — porque **hoy no hay ningún adjunto en el bucket**.
+  Un inventario en cero se leyó como "no funciona". La lección es la de siempre acá: verificar la
+  premisa antes de anotar la deuda, y **una deuda que no existe cuesta igual que un bug**, porque
+  manda a trabajar donde no hace falta.
+- **2026-08-11 — Los números esperados del plan de pruebas quedaron viejos el mismo día en que se
+  escribieron.** El plan (artifact del 2026-08-11) fijó los balances *antes* de que se desplegara
+  el reparto por fecha, así que tres de sus veinte pasos esperan lo contrario de lo correcto:
+  esperaba El Prode y Proder **activos** y Gentius **inactivo** —hoy es exactamente al revés—,
+  Proder en `$463.306` (hoy `$469.472`) y Gentius en `$0` "porque está inactivo" (hoy `-$12.333`,
+  y es el único vivo). Las tools contestan bien; lo que envejeció es el plan. El invariante cierra
+  exacto: `469.472 − 12.333 − 154.728 = 302.411`.
 
 - **2026-08-11 — El destino `proyecto` decía "Cambié la ventana" sin haber cambiado nada.** Corriendo
   el criterio de aceptación contra la app: la frase del fallo 1 dejaba el cierre en 20/07 cuando pedía

@@ -52,6 +52,7 @@ import { formatDate, todayISO } from "@/lib/dates";
 import { formatMoney, formatRate } from "@/lib/format";
 import { montoEnMoneda } from "@/lib/fx";
 import type { Movement } from "@/lib/supabase/database.types";
+import type { MovimientoConReparto } from "@/lib/prorrateo";
 import { cn } from "@/lib/utils";
 
 type Columna = "fecha" | "descripcion" | "monto" | "proyecto" | "categoria";
@@ -79,7 +80,7 @@ const FILTROS_VACIOS: Filtros = {
   hasta: "",
 };
 
-export function MovementsTable({ movements }: { movements: Movement[] }) {
+export function MovementsTable({ movements }: { movements: MovimientoConReparto[] }) {
   const router = useRouter();
   const { projects, categories, moneda } = useAppData();
 
@@ -88,8 +89,8 @@ export function MovementsTable({ movements }: { movements: Movement[] }) {
     columna: "fecha",
     dir: "desc",
   });
-  const [editando, setEditando] = useState<Movement | null>(null);
-  const [borrando, setBorrando] = useState<Movement | null>(null);
+  const [editando, setEditando] = useState<MovimientoConReparto | null>(null);
+  const [borrando, setBorrando] = useState<MovimientoConReparto | null>(null);
 
   const nombreProyecto = useMemo(
     () => new Map(projects.map((p) => [p.id, p])),

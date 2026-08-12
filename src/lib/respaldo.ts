@@ -42,14 +42,18 @@ import type { SupabaseClient } from "@/lib/supabase/server";
  * a propósito: el workflow que hay hoy sigue andando sin tocar una línea
  * y sigue bajando los comprobantes igual.
  *
- * ⚠ **Pero hasta que el workflow lea `adjuntos`, los bytes de los
- * adjuntos no se están copiando a ningún lado.** El inventario viaja y
- * las URLs firmadas salen por `/api/cron/comprobantes`, así que del lado
- * de la app está todo; falta el `for` del otro lado, que es un cambio de
- * cinco líneas. Está anotado en `AGENTS.md` para que no se pierda: un
- * respaldo que uno cree tener y no tiene es peor que no tenerlo.
+ * El workflow de `bdallago/pepe-respaldos` recorre los dos buckets desde
+ * el commit `06d9b7b` del 2026-08-10. (Este comentario decía que faltaba
+ * el `for` del otro lado; era falso, ver `AGENTS.md`.)
+ *
+ * 4 — agrega `movement_projects`, el subconjunto explícito de proyectos
+ * de un gasto compartido. Es una tabla más en `TABLAS` y nada más, pero
+ * sube la versión porque **un respaldo v3 restaurado sobre el esquema
+ * nuevo devolvería balances distintos** de los que tenía: los gastos con
+ * subconjunto volverían a repartirse por ventana de fecha. Callado y
+ * plausible, que es el modo de fallar caro de este módulo.
  */
-export const VERSION_RESPALDO = 3;
+export const VERSION_RESPALDO = 4;
 
 /**
  * Las tablas del respaldo, en orden de dependencia: si algún día esto se
@@ -60,6 +64,13 @@ const TABLAS = [
   "categories",
   "recurrences",
   "movements",
+  // Va inmediatamente después de `movements` porque cada fila apunta a
+  // una suya con FK real: al reimportar, primero tiene que existir el
+  // movimiento. Y no se puede omitir aunque sean pocas filas — sin ellas
+  // un gasto compartido vuelve a repartirse por ventana de fecha, o sea
+  // que el respaldo restauraría números **distintos** de los que había,
+  // sin fallar y sin avisar.
+  "movement_projects",
   "tracks",
   "blocks",
   "sessions",

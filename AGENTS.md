@@ -177,6 +177,46 @@ caso, Proder en USD). Es pre-existente y creció al pasar de mitades a
 tercios. La salida buena es unificar el algoritmo, no aflojar la
 tolerancia de quien lo compare.
 
+#### 2.b El subconjunto explícito, y por qué no cambia el default
+
+Beno lo pidió así: *"este gasto es un compartido entre y, z y u
+proyecto"*. Vive en `movement_projects` (una fila por par) y lo adosa
+`adosarSubconjuntos()` al leer, dejando `MovimientoConReparto`.
+
+**Sin filas, no cambia absolutamente nada.** Un compartido sin
+subconjunto se reparte por ventana de fecha, igual que siempre; las
+filas son una **anulación por movimiento**. Eso es lo que permitió meter
+la tabla sin mover un solo número de los que ya estaban cargados, y es
+la propiedad que hay que conservar si alguien la toca.
+
+**Lo explícito NO se filtra por `estaVivo()`.** La ventana de fecha
+existe justamente porque no hay una declaración de Beno; cuando la hay,
+filtrarla encima convertiría "de estos tres" en "de los que yo diga que
+además sigan abiertos". Si elige un proyecto cerrado a esa fecha, está
+diciendo que ese proyecto carga su parte. Es el caso de uso real: hoy
+Gentius es el único vivo, así que un gasto de fútbol sin subconjunto se
+le iría entero.
+
+**Mínimo dos proyectos**, validado en el formulario y en el schema. Con
+uno solo, "compartido entre X" es "es de X", y eso ya se escribe con
+`project_id`; dos formas de guardar lo mismo es la que después contesta
+distinto según por dónde la leas. La base además lo garantiza con dos
+triggers: uno rechaza el subconjunto si el movimiento tiene proyecto
+imputado, y el otro lo **borra** si el movimiento deja de ser
+compartido.
+
+⚠ **Cuatro lugares leen movimientos y los cuatro tienen que traer el
+subconjunto**: `lib/queries.ts`, `mcp/datos.mts`, la tool `balance` del
+conector y el respaldo. Si uno se olvida, no falla: contesta un número
+plausible y distinto del de la pantalla. Por eso la lectura de
+`movement_projects` va **en el mismo `Promise.all`** que la de
+`movements` en los tres primeros, en vez de en una función aparte que
+alguien pueda llamar sola.
+
+Y `memoParticipaciones()` **keyea por fecha + subconjunto ordenado**. Con
+la fecha sola, el primer compartido de un día dejaba cacheado su reparto
+y todos los demás de ese día se lo comían.
+
 ### 3. Moneda de origen vs. derivada
 
 El formulario muestra ARS y USD a la vez. El campo que se escribe define
@@ -841,6 +881,48 @@ el número al modelo y el código compara contra ese mismo número. No se
 está midiendo incertidumbre, se le está pidiendo al modelo que elija de
 qué lado caer. Explica por qué la calibración es tan frágil.
 
+### 10. La tabla de conversión de presupuestos no opina
+
+`lib/presupuestos/conversion.ts` es la última pieza de la etapa 3 del
+spec de presupuestos: qué pasó con lo que cotizaste, **todo aritmética
+sobre filas que ya existen, cero llamadas a un modelo**. Vive debajo de
+la lista en `/presupuestos`.
+
+⚠ **No confundir la etapa 3 con la 6.** El spec las separa: la 3 es
+"aceptar → proyecto · descartar con motivo · la tabla de conversión" y no
+necesita modelo; la **6** es el análisis del descarte *hecho por un
+razonador* y **no se habilita hasta que haya ≥ 10 presupuestos
+resueltos**, que al ritmo de "unos pocos por año" son unos tres. Con
+cuatro filas, un razonador opinando sobre el proceso comercial de Beno
+produce exactamente el consejo genérico que prohíbe la regla número uno
+de `lib/sugerencias.ts`. Por eso el panel **nombra** lo que enseña cada
+motivo —texto del spec— y no dice en ninguna parte qué habría que hacer.
+
+Tres decisiones que no se ven leyendo las firmas:
+
+1. **Acá sí entran los archivados**, y es la excepción a la regla 4 —la
+   misma que ya vale para el buscador—. `getPresupuestosParaConversion()`
+   es la única lectura del módulo que no filtra `archivado_en`.
+   Excluirlos haría que la tasa de aceptación **suba sola** cada vez que
+   Beno ordena la pantalla: mentir hacia el lado que uno quiere
+   escuchar.
+2. **Las monedas no se mezclan nunca.** Un presupuesto en USD con tarifa
+   en USD no tiene `tasa_usada` —no hubo conversión que congelar—, así
+   que llevarlo a pesos hoy exigiría cotizarlo con la tasa de hoy, que es
+   justo lo que prohíbe la regla 1. El techo se calcula **por moneda**.
+3. **El "techo" es un corchete, no rangos de monto.** El spec pide "tasa
+   de aceptación por rango de monto". Con cuatro filas, cortar en rangos
+   fijos pone una fila por balde y cada balde da 0 % o 100 %: ruido con
+   cara de estadística. El par **aceptado más caro / descartado más
+   barato** contesta lo mismo sin inventar precisión, y además dice algo
+   que los baldes esconden: si se cruzan, el precio no es lo que decide.
+
+`UMBRAL_LECTURA = 10` es el mismo número del spec, reusado a propósito:
+si diez resueltos son pocos para que opine un razonador, son pocos para
+que opine una tabla. Por debajo los números **se muestran igual** y el
+panel avisa arriba —antes de que uno los lea, no después de haber sacado
+una conclusión— que todavía no significan nada.
+
 ## Respaldo automático
 
 Además del botón de Ajustes, hay un respaldo **diario y automático**:
@@ -908,21 +990,31 @@ GitHub llega lo mismo.
 `version >= 2` la falta de inventario es un error. Así no hay ventana
 rota entre el merge y el deploy, ni un agujero permanente después.
 
-### ⚠ El bucket `adjuntos` todavía no lo baja nadie
+### Los dos buckets, y el `for` que ya está de los dos lados
 
 Con la etapa de adjuntos apareció un **segundo bucket privado**
-(`adjuntos`, los archivos que Beno pega en la caja). Del lado de la app
-está todo hecho: `VERSION_RESPALDO` pasó a **3**, `attachments` está en
-`TABLAS`, `respaldo.json` trae `.adjuntos` con el inventario y
+(`adjuntos`, los archivos que Beno pega en la caja). Del lado de la app:
+`VERSION_RESPALDO` pasó a **3**, `attachments` está en `TABLAS`,
+`respaldo.json` trae `.adjuntos` con el inventario y
 `/api/cron/comprobantes` devuelve las URLs firmadas bajo una clave
 `adjuntos` **nueva y al lado de `archivos`**, para no cambiarle el
 significado a una clave que el workflow ya usa.
 
-**Falta el `for` del otro lado.** Hasta que el workflow de
-`bdallago/pepe-respaldos` recorra también `adjuntos`, esos bytes no se
-están guardando en ningún lado. Es un cambio de cinco líneas, calcado del
-que ya hace con los comprobantes, y hay que hacerlo: un respaldo que uno
-cree tener y no tiene es peor que no tenerlo.
+⚠ **Esta sección decía que faltaba el `for` del otro lado y que esos
+bytes no se estaban guardando en ningún lado. Es falso**, y estuvo
+escrito así entre el 2026-08-10 y el 2026-08-11. El workflow de
+`bdallago/pepe-respaldos` recorre los dos buckets desde el commit
+`06d9b7b` ("Respaldar también los adjuntos de la caja de agentes"), con
+`bajar_bucket adjuntos adjunto '.adjuntos.archivos' '.adjuntos'` y el
+mismo tratamiento de huérfanos y faltantes que los comprobantes.
+Verificado el 2026-08-11 clonando el repo: existe `adjuntos/MANIFIESTO.json`
+y la última corrida agendada salió verde.
+
+El inventario dice `total: 0` porque **hoy no hay ningún adjunto en el
+bucket**, no porque no se baje. Que un inventario en cero se lea como
+"no funciona" es justamente el modo de fallar contra el que el workflow
+distingue `version < 2` (avisa y saltea) de `version >= 2` (la falta de
+inventario es error).
 
 ## Búsqueda de lecciones
 

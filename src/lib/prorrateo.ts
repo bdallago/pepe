@@ -32,6 +32,58 @@ export type ProyectoParaReparto = Pick<
 >;
 
 /**
+ * Un movimiento con su subconjunto explícito de proyectos ya resuelto.
+ *
+ * `movements` no tiene esa columna —vive en `movement_projects`, porque
+ * son varios proyectos por movimiento— así que la lectura la adosa. El
+ * campo es **opcional** a propósito: `Movement` sigue siendo asignable a
+ * este tipo, de modo que ningún call site que todavía no la necesita
+ * tuvo que cambiar, y el default (repartir por ventana de fecha) es lo
+ * que pasa cuando nadie la setea.
+ *
+ * `undefined` y `[]` significan lo mismo acá —"sin subconjunto, repartí
+ * por fecha"— y es deliberado: un subconjunto vacío no es un reparto
+ * entre nadie, es la ausencia de una declaración.
+ */
+export type MovimientoConReparto = Movement & {
+  proyectos_explicitos?: readonly string[] | null;
+};
+
+/**
+ * Pega cada subconjunto explícito a su movimiento.
+ *
+ * Vive acá y no en `queries.ts` por dos motivos. Uno, es aritmética pura
+ * y `queries.ts` es `server-only`: ahí adentro no se podría ni importar
+ * desde un test ni desde el MCP, que no corre dentro de Next. Dos, es la
+ * traducción entre la forma de la base (una fila por par) y la que usa
+ * el reparto (ids sueltos), y esa traducción es parte de la regla, no de
+ * la consulta.
+ *
+ * A los movimientos **sin** filas no se les pone `[]` sino nada: para
+ * `calcularParticipaciones` los dos significan lo mismo, y dejar el
+ * campo ausente hace que un `Movement` sin subconjunto se siga viendo
+ * igual que antes en el debugger.
+ */
+export function adosarSubconjuntos(
+  movimientos: Movement[],
+  filas: readonly { movement_id: string; project_id: string }[],
+): MovimientoConReparto[] {
+  if (filas.length === 0) return movimientos;
+
+  const porMovimiento = new Map<string, string[]>();
+  for (const f of filas) {
+    const actual = porMovimiento.get(f.movement_id);
+    if (actual) actual.push(f.project_id);
+    else porMovimiento.set(f.movement_id, [f.project_id]);
+  }
+
+  return movimientos.map((m) => {
+    const explicitos = porMovimiento.get(m.id);
+    return explicitos ? { ...m, proyectos_explicitos: explicitos } : m;
+  });
+}
+
+/**
  * ¿El proyecto estaba vivo en esta fecha?
  *
  * Es lo que antes decía la columna `activo`, pero preguntado contra una
@@ -71,19 +123,39 @@ export function estaVivo(
 export function calcularParticipaciones(
   projects: ProyectoParaReparto[],
   fecha: string,
+  restringidoA?: readonly string[] | null,
 ): Map<string, ParticipacionProyecto> {
-  const vivos = projects.filter((p) => estaVivo(p, fecha));
-  const pesoTotal = vivos.reduce((sum, p) => sum + Number(p.peso_prorrateo), 0);
+  const participantes = restringidoA?.length
+    ? // ── El subconjunto explícito NO se filtra por `estaVivo()` ──────
+      //
+      // La ventana de fecha existe justamente porque *no* hay una
+      // declaración de Beno sobre ese gasto. Cuando la hay, filtrarla
+      // encima convertiría "compartido entre estos tres" en "entre los
+      // que yo diga que además sigan abiertos", que es otra cosa y no es
+      // lo que pidió. Si elige un proyecto cerrado a esa fecha, está
+      // diciendo que ese proyecto carga su parte: es su decisión y la
+      // app la respeta.
+      //
+      // Se filtra igual contra `projects` para no inventar un id que ya
+      // no existe (la FK tiene `on delete cascade`, pero el array puede
+      // venir de una lectura vieja).
+      projects.filter((p) => restringidoA.includes(p.id))
+    : projects.filter((p) => estaVivo(p, fecha));
+
+  const pesoTotal = participantes.reduce(
+    (sum, p) => sum + Number(p.peso_prorrateo),
+    0,
+  );
 
   const map = new Map<string, ParticipacionProyecto>();
-  if (vivos.length === 0 || pesoTotal <= 0) return map;
+  if (participantes.length === 0 || pesoTotal <= 0) return map;
 
-  vivos.forEach((project, indice) => {
+  participantes.forEach((project, indice) => {
     map.set(project.id, {
       projectId: project.id,
       fraccion: Number(project.peso_prorrateo) / pesoTotal,
       indice: indice + 1,
-      total: vivos.length,
+      total: participantes.length,
     });
   });
 
@@ -190,13 +262,26 @@ export function cortesDelReparto(
  */
 export function memoParticipaciones(
   projects: ProyectoParaReparto[],
-): (fecha: string) => Map<string, ParticipacionProyecto> {
+): (
+  fecha: string,
+  restringidoA?: readonly string[] | null,
+) => Map<string, ParticipacionProyecto> {
   const cache = new Map<string, Map<string, ParticipacionProyecto>>();
-  return (fecha: string) => {
-    let p = cache.get(fecha);
+  return (fecha: string, restringidoA?: readonly string[] | null) => {
+    // ⚠ La clave lleva el subconjunto, **ordenado**. Sin eso, el primer
+    // compartido de una fecha dejaría cacheado su reparto y todos los
+    // demás de esa misma fecha se lo comerían: dos gastos del mismo día
+    // con subconjuntos distintos contestarían lo mismo, en silencio y
+    // con números plausibles. Ordenado, porque `[a,b]` y `[b,a]` son el
+    // mismo reparto y tienen que compartir entrada.
+    const clave = restringidoA?.length
+      ? `${fecha}|${[...restringidoA].sort().join(",")}`
+      : fecha;
+
+    let p = cache.get(clave);
     if (!p) {
-      p = calcularParticipaciones(projects, fecha);
-      cache.set(fecha, p);
+      p = calcularParticipaciones(projects, fecha, restringidoA);
+      cache.set(clave, p);
     }
     return p;
   };

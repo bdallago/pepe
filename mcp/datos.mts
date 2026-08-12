@@ -1,11 +1,15 @@
 import { getUserId, supabase } from "./supabase.mts";
 
+import {
+  adosarSubconjuntos,
+  type MovimientoConReparto,
+} from "@/lib/prorrateo";
+
 import type {
   Block,
   Category,
   DailyLog,
   Database,
-  Movement,
   Project,
   StudySession,
   Track,
@@ -27,19 +31,45 @@ import type {
 
 const LIMITE = 20000;
 
-export async function getMovimientos(): Promise<Movement[]> {
+/**
+ * Los movimientos **con su subconjunto explícito de proyectos adosado**.
+ *
+ * Las dos lecturas van juntas por el mismo motivo por el que
+ * `getProyectos()` no filtra los archivados: sin `movement_projects`, un
+ * gasto compartido con subconjunto se repartiría por ventana de fecha y
+ * el MCP contestaría un número distinto del que muestra la pantalla. Un
+ * balance de menos en un listado molesta; dos balances que no coinciden
+ * erosionan la confianza en los dos.
+ */
+export async function getMovimientos(): Promise<MovimientoConReparto[]> {
   const userId = await getUserId();
 
-  const { data, error } = await supabase
-    .from("movements")
-    .select("*")
-    .eq("user_id", userId)
-    .order("fecha", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(LIMITE);
+  const [movimientos, subconjuntos] = await Promise.all([
+    supabase
+      .from("movements")
+      .select("*")
+      .eq("user_id", userId)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(LIMITE),
+    supabase
+      .from("movement_projects")
+      .select("movement_id, project_id")
+      .eq("user_id", userId),
+  ]);
 
-  if (error) throw new Error(`No se pudieron leer los movimientos: ${error.message}`);
-  return data ?? [];
+  if (movimientos.error) {
+    throw new Error(
+      `No se pudieron leer los movimientos: ${movimientos.error.message}`,
+    );
+  }
+  if (subconjuntos.error) {
+    throw new Error(
+      `No se pudieron leer los gastos compartidos entre proyectos elegidos: ${subconjuntos.error.message}`,
+    );
+  }
+
+  return adosarSubconjuntos(movimientos.data ?? [], subconjuntos.data ?? []);
 }
 
 /**
