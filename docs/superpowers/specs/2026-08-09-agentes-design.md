@@ -1,7 +1,22 @@
 # Agentes en Pepe — diseño
 
+> ✅ **EJECUTADO Y EN PRODUCCIÓN.** La caja vive en la pantalla de inicio y
+> en `Ctrl+J`. El encabezado de abajo decía "pendiente el plan de
+> implementación" y quedó viejo apenas se implementó.
+>
+> ⚠ **Son catorce destinos, no diez.** Este spec diseña "diez agentes en
+> cuatro olas"; después entraron `presupuesto` (2026-08-10) y `proyecto`
+> (2026-08-11), entre otros. La lista viva está en `lib/agentes/tipos.ts`
+> y el mapa en `docs/dev/manual-agentico.md`.
+>
+> ⚠ **Antes de tocar el prompt del recepcionista, leé AGENTS.md §9.** Es
+> de vidrio: hay **seis** agregados medidos, cuatro de los cuales
+> rompieron casos que ni siquiera nombraban. La receta que funciona son
+> pocas líneas léxicas, arriba del bloque de confianza, con medición
+> antes y después.
+
 Fecha: 2026-08-09
-Estado: **aprobado el diseño, pendiente el plan de implementación**
+Estado original: aprobado el diseño, pendiente el plan de implementación.
 
 ## Alcance de este spec
 

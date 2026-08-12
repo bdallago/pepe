@@ -1,8 +1,24 @@
 # Adjuntos en Pepe — diseño
 
+> ✅ **APROBADO Y EJECUTADO: está en producción.** PDF y capturas entran
+> por la caja y terminan en la bandeja. El encabezado de abajo decía "sin
+> aprobar" porque se escribió sin Beno disponible; quedó viejo apenas se
+> empezó a construir.
+>
+> Dos números que este spec fijó y la medición corrigió: son **~2 capturas
+> por minuto, no 3** (el spec midió con un prompt más corto; con el real
+> la reserva es de ~3570 tokens contra un techo de 7300), y **el caso C
+> —presupuestos— dejó de contestarse con un test sobre un string**: ahora
+> existe el destino `presupuesto`, que es lo que este mismo spec anticipa
+> en "una dependencia en la otra dirección".
+>
+> El respaldo del bucket `adjuntos` **está cubierto** desde el commit
+> `06d9b7b` del repo `bdallago/pepe-respaldos`. Si leés en algún lado que
+> falta, está desactualizado: ver AGENTS.md.
+
 Fecha: 2026-08-10
-Estado: **diseño propuesto, sin aprobar**. Beno no estuvo disponible; las
-decisiones que eran suyas se tomaron por la opción más conservadora y
+Estado original: diseño propuesto sin aprobar. Beno no estuvo disponible;
+las decisiones que eran suyas se tomaron por la opción más conservadora y
 están listadas al final.
 
 Extiende `docs/superpowers/specs/2026-08-09-agentes-design.md`.

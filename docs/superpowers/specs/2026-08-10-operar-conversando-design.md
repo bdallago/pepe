@@ -1,5 +1,18 @@
 # Operar Pepe conversando — diseño
 
+> ✅ **EJECUTADO Y EN PRODUCCIÓN el 2026-08-11**, las once tareas. El plan
+> es `../plans/2026-08-11-operar-conversando.md`, y ⚠ **su sección
+> "Correcciones de la ejecución" gana sobre el código que figura en las
+> tareas**.
+>
+> Lo que la ejecución agregó y este spec no preveía: el criterio de
+> aceptación encontró **dos defectos más** con las once tareas ya en
+> verde. El caro es que el destino `proyecto` contestaba *"Cambié la
+> ventana"* sin haber cambiado nada — la lección no es la fecha, es que
+> **una respuesta que no compara contra el estado anterior miente sin
+> darse cuenta**, y ese chequeo se queda en `despacho.ts` aunque el lector
+> esté arreglado.
+
 Spec B de dos. El otro es `2026-08-10-prorrateo-por-fecha-design.md`, que
 es el modelo de datos que este necesita abajo: B1 no puede escribir una
 ventana de vida si las ventanas todavía no significan nada.

@@ -420,6 +420,42 @@ export type Database = {
           },
         ]
       }
+      movement_projects: {
+        Row: {
+          creado_en: string
+          movement_id: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          creado_en?: string
+          movement_id: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          creado_en?: string
+          movement_id?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movement_projects_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movement_projects_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       movements: {
         Row: {
           category_id: string
@@ -1600,11 +1636,11 @@ export const Constants = {
 // Alias de conveniencia usados en toda la app.
 // Este bloque se escribe a mano: si regenerás el archivo, volvé a pegarlo.
 //
-// Todo lo de arriba sale del generador. Al 2026-08-11 no queda nada
-// escrito a mano ahí: las migraciones de adjuntos que faltaban aplicar
-// ya están aplicadas, igual que las dos de hoy
-// (`20260811000000_bandeja_conector.sql` y
-// `20260811000001_historico_por_usuario.sql`).
+// Todo lo de arriba sale del generador. Al 2026-08-12 no queda nada
+// escrito a mano ahí: `20260812000001_compartido_entre.sql` está
+// aplicada, así que `movement_projects` —que hasta hoy estaba pegada a
+// mano— ahora la produce el generador, en su lugar alfabético y con la
+// misma definición carácter por carácter.
 // ─────────────────────────────────────────────────────────────
 
 export type TipoMovimiento = Database["public"]["Enums"]["tipo_movimiento"];

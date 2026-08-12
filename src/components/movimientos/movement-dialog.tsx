@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { PrecargaMovimiento } from "@/lib/agentes/tipos";
-import type { Movement } from "@/lib/supabase/database.types";
+import type { MovimientoConReparto } from "@/lib/prorrateo";
 
 /** Alta o edición de un movimiento en modal. */
 export function MovementDialog({
@@ -20,7 +20,7 @@ export function MovementDialog({
   onOpenChange,
   onListo,
 }: {
-  movimiento?: Movement;
+  movimiento?: MovimientoConReparto;
   /** Un movimiento dictado a la caja de agentes, ya leído y clasificado. */
   precarga?: PrecargaMovimiento;
   projectIdInicial?: string | null;

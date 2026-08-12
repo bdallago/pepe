@@ -55,6 +55,19 @@ proyecto abierto, no hay entre quiénes repartirlo: la app te avisa, te
 dice **cuáles** son esos gastos, y los sigue contando en el balance
 general.
 
+**Y si un gasto es compartido pero no entre todos, lo podés decir.** Al
+elegir "Compartido" en el formulario aparece abajo un bloque *Compartido
+entre* con todos tus proyectos: si no tildás ninguno —que es como viene—
+se reparte por fecha, igual que siempre. Si tildás algunos, se reparte
+**solo entre esos**, aunque ese día hubiera otros abiertos y aunque los
+que elegiste estén cerrados. Es para el caso de la API de fútbol, que es
+de los dos proyectos de fútbol y no del de recursos humanos, por más que
+los tres convivan.
+
+Van mínimo dos: con uno solo no es un gasto compartido, es un gasto de
+ese proyecto, y eso se carga eligiéndolo arriba. Para volver atrás hay un
+"volver al reparto automático" al lado del título.
+
 Además hay gastos recurrentes, que generan los movimientos planificados
 solos, y un detector que una vez por día busca **suscripciones que quizás
 ya no uses**: cosas que venís pagando mes a mes mientras el proyecto que
@@ -146,6 +159,20 @@ El presupuesto se edita, se exporta a PDF y se manda. Si prospera se
 convierte en proyecto; si no, se descarta con un motivo. Y una vez por
 semana un proceso trae precios de referencia del mercado argentino y te
 avisa si tu tarifa quedó desfasada. **Avisa: nunca la cambia.**
+
+Debajo de la lista hay un panel de **conversión**: cuántos aceptaste sobre
+cuántos resolviste, la tasa por tipo de cliente, cuánto tardaste de mandar
+a resolver, y por qué se cayeron los que se cayeron. Son cuentas sobre tus
+propias filas —no interviene ningún modelo— y **el panel no opina**: te
+dice qué enseña cada motivo de descarte y nada más. Dos cosas que conviene
+saber: los presupuestos archivados **sí** cuentan ahí, porque archivar
+ordena la pantalla y no reescribe el histórico; y mientras haya menos de
+diez resueltos el panel te avisa arriba que los números todavía no
+significan nada.
+
+En vez de rangos de monto muestra dos números: **el aceptado más caro y el
+descartado más barato**. Si el segundo es menor que el primero, te lo dice:
+quiere decir que el precio no es lo que está decidiendo.
 
 ---
 

@@ -163,6 +163,15 @@ en proyecto; si no, se descarta con motivo.
 Un cron semanal trae **tarifas de referencia del mercado argentino** y
 avisa si la tarifa quedó desfasada. Avisa: nunca la cambia.
 
+Debajo de la lista hay una **tabla de conversión**: tasa de aceptación
+global y por tipo de cliente, días de enviado a resuelto, y qué enseña
+cada motivo de descarte. Es aritmética sobre las filas que ya existen
+—cero llamadas a un modelo— y **no opina**. En vez de rangos de monto
+muestra el **aceptado más caro contra el descartado más barato**: si se
+cruzan, el precio no es lo que está decidiendo. Cuenta los presupuestos
+archivados, porque archivar ordena la pantalla y no reescribe el
+histórico.
+
 ### Conector MCP
 
 Pepe se puede agregar a Claude.ai como conector remoto y operarlo
@@ -223,6 +232,18 @@ Si un gasto compartido cae en una fecha en la que no había ningún
 proyecto abierto no hay entre quiénes repartirlo: cuenta igual en el
 balance general y la app lo avisa diciendo cuáles son esos movimientos,
 en vez de mostrar números que no cierran.
+
+**Y si un gasto es compartido pero no entre todos, se puede decir.** Al
+elegir "Compartido" en el formulario aparece un bloque *Compartido entre*
+con todos los proyectos: sin tildar ninguno se reparte por fecha, igual
+que siempre; tildando algunos se reparte **solo entre esos**, aunque ese
+día hubiera otros abiertos y aunque los elegidos estén cerrados. Es para
+el caso de la API de fútbol, que es de los proyectos de fútbol y no del
+de recursos humanos, por más que los tres convivan.
+
+Van mínimo dos: con uno solo no es un compartido, es un gasto de ese
+proyecto. Se guarda en `movement_projects` y **sin filas ahí no cambia
+nada** — el reparto por ventana de fecha sigue siendo el default.
 
 ### 3. El importe real es el que escribiste
 

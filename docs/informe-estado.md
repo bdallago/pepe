@@ -22,6 +22,14 @@
 >   proyectos que estaban vivos **en la fecha de cada gasto**, según la
 >   ventana `fecha_inicio`/`fecha_fin`. El índice
 >   `projects_user_activo_idx` se cayó con la columna.
+> - Un gasto compartido puede además repartirse entre un **subconjunto
+>   explícito** de proyectos (`movement_projects`, 2026-08-11). Sin filas
+>   ahí, el reparto por ventana de fecha sigue siendo el default, así que
+>   nada de lo que dice este informe sobre prorrateo dejó de valer.
+> - `VERSION_RESPALDO` es **4** y `TABLAS` incluye `movement_projects`.
+> - La pantalla de **Presupuestos** tiene un panel de **conversión**
+>   (etapa 3 del spec, cero tokens). El análisis del descarte *con modelo*
+>   es la etapa 6 y sigue sin hacerse: pide ≥ 10 resueltos.
 > - Lo que viene está en `docs/superpowers/specs/2026-08-10-*`, y de esos
 >   el del prorrateo por fecha **ya está implementado y en producción**.
 >

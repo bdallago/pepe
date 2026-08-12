@@ -4,6 +4,7 @@ import {
   estaVivo,
   memoParticipaciones,
   repartirEntreParticipantes,
+  type MovimientoConReparto,
   type ParticipacionProyecto,
   type ProyectoParaReparto,
 } from "@/lib/prorrateo";
@@ -105,11 +106,17 @@ export interface Balances {
   cantidadMovimientos: number;
 }
 
-/** Filtra por rango de fechas y estado. */
-export function filtrarMovimientos(
-  movements: Movement[],
+/**
+ * Filtra por rango de fechas y estado.
+ *
+ * Es genérica para no perder el subconjunto explícito por el camino: con
+ * una firma fija a `Movement[]`, filtrar borraba `proyectos_explicitos`
+ * del tipo y el reparto volvía silenciosamente al default de fecha.
+ */
+export function filtrarMovimientos<T extends Movement>(
+  movements: T[],
   filtros: FiltrosBalance,
-): Movement[] {
+): T[] {
   return movements.filter((m) => {
     if (filtros.desde && m.fecha < filtros.desde) return false;
     if (filtros.hasta && m.fecha > filtros.hasta) return false;
@@ -148,7 +155,7 @@ function sumarTotales(movements: Movement[], moneda: Moneda): Totales {
  * que la UI puede decir **cuáles** y no solo cuánto.
  */
 function repartirCompartidos(
-  compartidos: Movement[],
+  compartidos: MovimientoConReparto[],
   projects: ProyectoParaReparto[],
   moneda: Moneda,
 ): {
@@ -161,7 +168,12 @@ function repartirCompartidos(
   const participacionesDe = memoParticipaciones(projects);
 
   for (const movement of compartidos) {
-    const participaciones = participacionesDe(movement.fecha);
+    // Si el movimiento trae subconjunto explícito, manda él; si no, la
+    // ventana de fecha, que es el default de siempre.
+    const participaciones = participacionesDe(
+      movement.fecha,
+      movement.proyectos_explicitos,
+    );
 
     if (participaciones.size === 0) {
       sinRepartir.push(movement);
@@ -266,7 +278,7 @@ function formatMes(mes: string): string {
  * `compartidoSinRepartir`).
  */
 export function calcularBalances(
-  movements: Movement[],
+  movements: MovimientoConReparto[],
   projects: Project[],
   categories: Category[],
   moneda: Moneda,
@@ -366,7 +378,7 @@ export function calcularBalances(
  * se despegan; el reparto tiene que ser el mismo en los dos.
  */
 export function calcularBalancesProyecto(
-  movements: Movement[],
+  movements: MovimientoConReparto[],
   projects: Project[],
   categories: Category[],
   projectId: string,
@@ -408,7 +420,7 @@ export function calcularBalancesProyecto(
     }
     if (m.project_id !== null) continue;
 
-    const participaciones = participacionesDe(m.fecha);
+    const participaciones = participacionesDe(m.fecha, m.proyectos_explicitos);
     if (!participaciones.has(projectId)) continue;
 
     incluyeCompartidos = true;

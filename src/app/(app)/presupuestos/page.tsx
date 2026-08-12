@@ -3,19 +3,25 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 
 import { PresupuestosLista } from "@/components/presupuestos/presupuestos-lista";
+import { TablaConversion } from "@/components/presupuestos/tabla-conversion";
 import { Button } from "@/components/ui/button";
+import { calcularConversion } from "@/lib/presupuestos/conversion";
 import {
   getAjustesPresupuesto,
   getPresupuestos,
+  getPresupuestosParaConversion,
 } from "@/lib/presupuestos-server";
 
 export const metadata: Metadata = { title: "Presupuestos" };
 
 export default async function PresupuestosPage() {
-  const [presupuestos, ajustes] = await Promise.all([
+  const [presupuestos, ajustes, paraConversion] = await Promise.all([
     getPresupuestos(),
     getAjustesPresupuesto(),
+    getPresupuestosParaConversion(),
   ]);
+
+  const conversion = calcularConversion(paraConversion);
 
   const sinTarifa = !ajustes.tarifa_hora || ajustes.tarifa_hora <= 0;
 
@@ -53,6 +59,12 @@ export default async function PresupuestosPage() {
       ) : null}
 
       <PresupuestosLista presupuestos={presupuestos} />
+
+      {/*
+        Va debajo de la lista y no arriba: lo primero que uno viene a
+        buscar acá es un presupuesto concreto, no la estadística.
+      */}
+      <TablaConversion conversion={conversion} />
     </div>
   );
 }

@@ -1,5 +1,22 @@
 # El reparto por fecha — diseño
 
+> ✅ **EJECUTADO Y EN PRODUCCIÓN el 2026-08-11.** El plan es
+> `../plans/2026-08-10-prorrateo-por-fecha.md`.
+>
+> ⚠ **Una cosa que este spec afirma dejó de ser cierta**: la sección "Lo
+> que este spec deja afuera" difiere el **gasto compartido entre un
+> subconjunto explícito de proyectos** hasta saber "si aparece seguido o
+> fue un caso de dos veces". Se implementó igual el mismo 2026-08-11, a
+> pedido de Beno — `movement_projects`, migración
+> `20260812000001_compartido_entre.sql`. El razonamiento del spec para
+> diferirlo era correcto y no alcanzaba: **medir sirve para decidir cómo
+> construir algo, no si construir lo que ya te pidieron.**
+>
+> Lo que sí sobrevivió de ese razonamiento, y es lo mejor del diseño
+> final: **sin filas no cambia nada**, el reparto por ventana de fecha
+> sigue siendo el default, y por eso la tabla entró sin mover un solo
+> número de los que había cargados. El desarrollo está en AGENTS.md §2.b.
+
 Spec A de dos. El otro es `2026-08-10-operar-conversando-design.md`, que
 es donde viven los tres fallos que Beno reportó. Este es el modelo de
 datos que aquel necesita abajo.

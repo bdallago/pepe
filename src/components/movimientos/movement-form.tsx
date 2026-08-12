@@ -25,10 +25,10 @@ import { convertir, round2, round4 } from "@/lib/fx";
 import { formatRate, parseAmount } from "@/lib/format";
 import { actualizarMovimiento, crearMovimiento } from "@/lib/actions/movements";
 import type { PrecargaMovimiento } from "@/lib/agentes/tipos";
+import type { MovimientoConReparto } from "@/lib/prorrateo";
 import type {
   EstadoMovimiento,
   Moneda,
-  Movement,
   TipoMovimiento,
 } from "@/lib/supabase/database.types";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,12 @@ const formSchema = z.object({
   estado: z.enum(["efectuado", "planificado"]),
   /** "compartido" o el uuid del proyecto. */
   project_id: z.string().min(1),
+  /**
+   * Los proyectos elegidos a mano para repartir un compartido. Vacío es
+   * el default y significa "los que estén vivos en la fecha del gasto",
+   * que es lo que hizo la app siempre.
+   */
+  proyectos_explicitos: z.array(z.string()),
   category_id: z.string().min(1, "Elegí una categoría."),
   monto_ars: z.string(),
   monto_usd: z.string(),
@@ -94,8 +100,15 @@ const ESPERA_SUGERENCIA_MS = 600;
 type Marcas = { [K in keyof PrecargaMovimiento["procedencia"]]: string | null };
 
 interface Props {
-  /** Si viene, el formulario edita en vez de crear. */
-  movimiento?: Movement;
+  /**
+   * Si viene, el formulario edita en vez de crear.
+   *
+   * Lleva `proyectos_explicitos` porque editar un compartido con
+   * subconjunto y no precargarlo lo borraría en silencio: el formulario
+   * manda siempre la lista, así que una lista vacía por no haberla leído
+   * se guarda como "sacale el subconjunto".
+   */
+  movimiento?: MovimientoConReparto;
   /**
    * Un movimiento dictado a la caja de agentes, ya leído y clasificado.
    * Precarga los campos y muestra de dónde salió cada uno.
@@ -188,6 +201,7 @@ export function MovementForm({
       tipo: movimiento?.tipo ?? precarga?.tipo ?? "egreso",
       estado: movimiento?.estado ?? "efectuado",
       project_id: proyectoInicial ?? "compartido",
+      proyectos_explicitos: [...(movimiento?.proyectos_explicitos ?? [])],
       category_id: movimiento?.category_id ?? precarga?.categoryId ?? "",
       monto_ars: movimiento ? String(movimiento.monto_ars) : "",
       monto_usd: movimiento ? String(movimiento.monto_usd) : "",
@@ -388,12 +402,21 @@ export function MovementForm({
       return;
     }
 
+    const esCompartido = values.project_id === "compartido";
+
     const payload = {
       fecha: values.fecha,
       descripcion: values.descripcion.trim(),
       tipo: values.tipo as TipoMovimiento,
-      project_id:
-        values.project_id === "compartido" ? null : values.project_id,
+      project_id: esCompartido ? null : values.project_id,
+      // Solo viaja si el gasto es compartido: con proyecto imputado la
+      // lista no se usa y el schema del servidor la rechaza. Y `null`
+      // cuando está vacía, que es lo que borra el subconjunto anterior
+      // al editar — vaciar la lista tiene que poder deshacerse.
+      proyectos_explicitos:
+        esCompartido && values.proyectos_explicitos.length > 0
+          ? values.proyectos_explicitos
+          : null,
       category_id: values.category_id,
       monto_origen: round2(montoOrigen),
       moneda_origen: values.moneda_origen as Moneda,
@@ -431,6 +454,13 @@ export function MovementForm({
   }
 
   const proyectosDisponibles = editando ? projects : proyectosActivos;
+
+  // El subconjunto explícito ofrece **todos** los proyectos, también los
+  // cerrados, y no solo los activos como el selector de arriba: el punto
+  // de nombrarlos a mano es poder incluir a uno que la ventana de fecha
+  // dejaría afuera. Filtrarlos acá volvería la lista redundante con el
+  // default.
+  const explicitos = watch("proyectos_explicitos");
   const descripcionRegister = register("descripcion");
   const fechaRegister = register("fecha");
 
@@ -705,6 +735,81 @@ export function MovementForm({
           ) : null}
         </div>
       </div>
+
+      {/*
+        ── Compartido entre proyectos elegidos a mano ──────────────────
+
+        Solo aparece con "Compartido" elegido: con un proyecto imputado
+        el gasto no pasa por el reparto y la lista no se usaría.
+
+        Arranca **vacío y significando "todos los vivos"**, que es lo que
+        la app hizo siempre. Es la diferencia entre agregar una opción y
+        cambiarle el default a todo lo que ya está cargado.
+      */}
+      {watch("project_id") === "compartido" ? (
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <Label>Compartido entre</Label>
+            {explicitos.length > 0 ? (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground text-xs underline"
+                onClick={() => setValue("proyectos_explicitos", [])}
+              >
+                volver al reparto automático
+              </button>
+            ) : null}
+          </div>
+
+          <p className="text-muted-foreground text-xs">
+            {explicitos.length === 0
+              ? "Se reparte entre los proyectos que estén abiertos en la fecha del gasto. Tildá algunos solo si este gasto es de unos y no de otros."
+              : `Se reparte solo entre estos ${explicitos.length}, aunque haya otros abiertos ese día.`}
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            {projects.map((p) => {
+              const tildado = explicitos.includes(p.id);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={tildado}
+                  onClick={() =>
+                    setValue(
+                      "proyectos_explicitos",
+                      tildado
+                        ? explicitos.filter((id) => id !== p.id)
+                        : [...explicitos, p.id],
+                    )
+                  }
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-xs transition-colors",
+                    tildado
+                      ? "border-[var(--teal)] bg-[var(--teal)]/10 font-medium"
+                      : "text-muted-foreground hover:bg-secondary/40",
+                  )}
+                >
+                  {p.nombre}
+                </button>
+              );
+            })}
+          </div>
+
+          {/*
+            Un solo proyecto tildado es "es de ese proyecto", y eso ya se
+            escribe con el selector de arriba. Se avisa acá y no recién al
+            guardar: el servidor lo rechaza igual, pero enterarse después
+            de apretar Guardar es peor.
+          */}
+          {explicitos.length === 1 ? (
+            <p className="text-destructive text-xs">
+              Con uno solo no es un compartido. Elegí otro, o imputáselo
+              directo a ese proyecto arriba.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label htmlFor="estado">Estado</Label>

@@ -32,7 +32,7 @@ corte no es una etapa del desarrollo: es la regla que las gobierna.
 |---|---|
 | `listar_proyectos` | Los proyectos con su slug y si siguen abiertos hoy. Casi todo lo demás pide un slug, así que suele ser el primer paso. Ojo: "cerrado" no quiere decir "no participa del reparto" — un proyecto cerrado se sigue llevando la parte que le tocó mientras estuvo vivo |
 | `listar_movimientos` | Ingresos y egresos, filtrables por proyecto, fechas, categoría, tipo y estado. De a 25 |
-| `balance` | Ingresos, egresos y saldo en una sola moneda. Sin proyecto, el general; con proyecto, el de ese proyecto **con su parte de lo compartido** |
+| `balance` | Ingresos, egresos y saldo en una sola moneda. Sin proyecto, el general; con proyecto, el de ese proyecto **con su parte de lo compartido** (lee también `movement_projects`, o contestaría distinto que la pantalla) |
 | `buscar_lecciones` | Búsqueda por texto en español sobre las lecciones anotadas. Incluye las archivadas |
 | `leer_bitacora` | Las entradas del día a día, por rango de fechas y proyecto |
 

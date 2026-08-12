@@ -63,7 +63,7 @@ crons, la cotización forzada y el conector MCP.
 | **Dónde se usa** | `/movimientos`, más la carga rápida con `Ctrl+K`. |
 | **Entrypoints** | `lib/actions/movements.ts`: `crearMovimiento`, `actualizarMovimiento`, `borrarMovimiento`, `efectuarMovimiento`. |
 | **Lógica** | `lib/fx.ts` (`congelarMontos`, `montoEnMoneda`), `lib/schemas.ts` (`movementSchema`). |
-| **Estado** | `movements`, y el archivo del comprobante en el bucket privado `comprobantes`. |
+| **Estado** | `movements`, `movement_projects` (el subconjunto explícito de un compartido), y el archivo del comprobante en el bucket privado `comprobantes`. |
 
 **Trampas.** El formulario muestra ARS y USD a la vez y el campo que se
 escribe define `moneda_origen`; el efecto que recalcula el derivado
@@ -79,8 +79,8 @@ usuario puede forzar una cotización distinta.
 | **Qué hace** | `projects` es la entidad raíz de **toda** la app, no solo de finanzas. Los gastos sin proyecto se reparten entre los que estaban **vivos en la fecha de cada gasto**. |
 | **Dónde se usa** | `/proyectos`, `/proyectos/[slug]`, y el panel de Ajustes. |
 | **Entrypoints** | `lib/actions/projects.ts`: `crearProyecto`, `actualizarProyecto`, `borrarProyecto`, `alternarProyectoActivo` (el botón Cerrar/Reabrir de Ajustes). |
-| **Lógica** | `lib/prorrateo.ts`: `estaVivo()`, `calcularParticipaciones(projects, fecha)`, `memoParticipaciones()`, `cortesDelReparto()`, `repartirPorRestoMayor()`. `lib/balances.ts` consume todo eso. |
-| **Estado** | `projects`, con la ventana `fecha_inicio`/`fecha_fin`. **La columna `activo` ya no existe** (borrada el 2026-08-11). |
+| **Lógica** | `lib/prorrateo.ts`: `estaVivo()`, `calcularParticipaciones(projects, fecha, restringidoA?)`, `memoParticipaciones()`, `cortesDelReparto()`, `repartirPorRestoMayor()`, `adosarSubconjuntos()`. `lib/balances.ts` consume todo eso. |
+| **Estado** | `projects`, con la ventana `fecha_inicio`/`fecha_fin`. **La columna `activo` ya no existe** (borrada el 2026-08-11). `movement_projects` guarda el **subconjunto explícito** de un compartido. |
 
 **Trampas.** ⚠ **La ventana es la única fuente de verdad**: no hay
 bandera. `estaVivo(p, fecha)` es lo que antes decía `activo`, pero contra
@@ -108,6 +108,29 @@ deshacer el mismo día. No lo "arregles".
 prorrateo, nada más. Esa confusión causó dos bugs (`lib/bitacora.ts` lo
 documenta, y `agentes/despacho.ts` lo repitió: mandaba a "Compartido" en
 silencio los gastos de un proyecto cerrado).
+
+**El subconjunto explícito (2026-08-11).** `movement_projects` deja decir
+"este gasto es compartido entre estos y no entre todos". Sin filas no
+cambia nada: el default sigue siendo la ventana de fecha.
+⚠ **Cuatro lugares leen movimientos y los cuatro tienen que traer el
+subconjunto**: `lib/queries.ts`, `mcp/datos.mts`, la tool `balance` de
+`lib/mcp/tools/balance.ts` y `lib/respaldo.ts` (`TABLAS`). Si uno se
+olvida **no falla**: contesta un número plausible y distinto del de la
+pantalla. Por eso los tres primeros lo leen en el mismo `Promise.all` que
+`movements`, no en una función aparte.
+⚠ **Lo explícito NO se filtra por `estaVivo()`.** Es deliberado y está
+desarrollado en AGENTS.md §2.b: si Beno elige un proyecto cerrado, carga
+su parte.
+⚠ **`memoParticipaciones()` keyea por fecha + subconjunto ordenado.** Con
+la fecha sola, el primer compartido del día dejaba cacheado su reparto y
+todos los demás de ese día se lo comían.
+⚠ **`filtrarMovimientos()` es genérica (`<T extends Movement>`)** para no
+perder el campo por el camino, y `movements-table.tsx` /
+`movement-dialog.tsx` tipan `MovimientoConReparto`: con `Movement` el dato
+viaja igual en runtime pero un refactor que reconstruya el objeto lo
+borra sin que nadie se entere.
+Mínimo **dos** proyectos, validado en `movementSchema`, en el formulario
+y por dos triggers en la base.
 
 ### Categorías, recurrencias y cotización
 
@@ -240,7 +263,7 @@ le pasan. Y `ancla_verificada` entra siempre en `false`. Los dos están en
 | **Qué hace** | Estima **esfuerzo, nunca precio**; el precio lo calcula la app con la tarifa de Ajustes. |
 | **Dónde se usa** | `/presupuestos`, `/presupuestos/nuevo`, `/presupuestos/[id]`, `/presupuestos/[id]/pdf`. |
 | **Entrypoints** | `lib/actions/presupuestos.ts`: `crearPresupuesto`, `actualizarPresupuesto`, `marcarEnviado`, `aceptarPresupuesto`, `descartarPresupuesto`, `archivarPresupuesto`. Estimación en `/api/presupuestos/estimar`. |
-| **Lógica** | `lib/presupuestos/`, `lib/presupuestos-server.ts`. |
+| **Lógica** | `lib/presupuestos/`, `lib/presupuestos-server.ts`. La **tabla de conversión** es `lib/presupuestos/conversion.ts` (pura) + `components/presupuestos/tabla-conversion.tsx`, y se alimenta de `getPresupuestosParaConversion()`. |
 | **Estado** | `quotes`, `quote_items`, `quote_assumptions`, `quote_questions`. |
 
 **Trampas.** Cada entregable trae una **cita literal del pedido**,
@@ -255,6 +278,14 @@ que no hay un reparto solo**. Es deliberado: mostrar rangos daba números
 idénticos para decisiones distintas (retroceder al 01/04 alcanza 15 gastos
 y al 01/06 alcanza 7, y el panel imprimía lo mismo). Honestidad, no
 completitud.
+
+⚠ **La tabla de conversión cuenta los archivados y la lista no.** Son dos
+lecturas distintas de `quotes` a propósito (`getPresupuestos()` filtra
+`archivado_en`, `getPresupuestosParaConversion()` no): la lista es
+interfaz, la conversión es histórico. Si unificás las dos, archivar un
+presupuesto descartado le sube sola la tasa de aceptación. Y **no le
+agregues una lectura del modelo**: eso es la etapa 6 del spec y pide
+≥ 10 resueltos. El porqué largo está en AGENTS.md §10.
 
 ---
 
