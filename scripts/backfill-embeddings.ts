@@ -23,10 +23,9 @@
  * del paquete, que lanza a propósito.
  */
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
+import { leerEnvLocal } from "./env-local.ts";
 import {
   aVectorPg,
   generarEmbedding,
@@ -44,32 +43,6 @@ const LOTE_POR_DEFECTO = 20;
 // ------------------------------------------------------------
 // Utilidades
 // ------------------------------------------------------------
-
-/**
- * Lee `.env.local` a mano. El script corre fuera de Next, así que no hay
- * nadie que cargue el archivo por nosotros. Mismo criterio que
- * `importar-colmena.ts`.
- */
-function leerEnvLocal(raiz: string): Record<string, string> {
-  const contenido = readFileSync(resolve(raiz, ".env.local"), "utf8");
-  const vars: Record<string, string> = {};
-  for (const linea of contenido.split(/\r?\n/)) {
-    const limpia = linea.trim();
-    if (!limpia || limpia.startsWith("#")) continue;
-    const separador = limpia.indexOf("=");
-    if (separador === -1) continue;
-    const clave = limpia.slice(0, separador).trim();
-    let valor = limpia.slice(separador + 1).trim();
-    if (
-      (valor.startsWith('"') && valor.endsWith('"')) ||
-      (valor.startsWith("'") && valor.endsWith("'"))
-    ) {
-      valor = valor.slice(1, -1);
-    }
-    vars[clave] = valor;
-  }
-  return vars;
-}
 
 function fallar(mensaje: string): never {
   console.error(`\n✖ ${mensaje}\n`);
