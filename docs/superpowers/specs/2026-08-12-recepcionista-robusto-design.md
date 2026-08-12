@@ -1,8 +1,27 @@
 # Un recepcionista que se pueda tocar — diseño
 
-> ⏳ **NO EJECUTADO.** Escrito el 2026-08-12. Cuando se ejecute, este
-> bloque dice qué se hizo y qué encontró la ejecución que el spec no
-> preveía.
+> ✅ **EJECUTADO el 2026-08-12**, con una excepción medida: **la etapa B3
+> se corrió, falló su criterio de aceptación y se revirtió.** El plan es
+> `../plans/2026-08-12-recepcionista-robusto.md`.
+>
+> **Lo que la ejecución encontró y este spec no preveía:** el bloque de
+> confianza hacía **dos** cosas, no una. Además de fijar la banda,
+> sus cuatro ejemplos **anclaban qué destino elegir** para una frase
+> ambigua, y a `ambiguedad.ts` se mudó solo lo primero. Medido con
+> `"el hosting de Vercel Pro"`: pasó de `suscripciones` 0.3 a
+> `movimientos` 0.4 —y ese 0.4 es `acotarConfianza()` recortando, no el
+> modelo—, más tres frases que subieron de 0.9 a 1. El detalle está en
+> AGENTS.md §9.
+>
+> **No se reintenta**, y no por prudencia: los 345 tokens no aceleran la
+> medición (5500 ÷ 2268 sigue dando 2 llamadas/min, ya estaba anotado acá
+> abajo) y el comportamiento visible no cambia. El objetivo de la etapa B
+> —que la ambigüedad no dependa del prompt— **lo cumple B2 solo**.
+>
+> **El orden se cambió durante la ejecución**, a pedido de Beno: la etapa
+> C fue primero. Fue la decisión correcta y por un motivo medible: con el
+> atajo puesto antes, 9 de las 29 frases dejan de llamar al modelo y toda
+> medición posterior sale más barata.
 
 El recepcionista (`src/lib/agentes/recepcionista.ts`) es la puerta de
 entrada de toda la app: una frase de Beno entra ahí y sale como una lista

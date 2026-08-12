@@ -1,5 +1,29 @@
 # Un recepcionista que se pueda tocar — plan de implementación
 
+> ✅ **EJECUTADO el 2026-08-12.** Once tareas hechas; **B3 se midió, falló
+> y se revirtió** (ver el spec). Estado final: `npm test` 30/30 y
+> `npm run medir:recepcionista` **11/11 en verde**, sin oscilación.
+>
+> **Cosas que este plan afirmaba y no eran ciertas**, encontradas
+> ejecutándolo:
+>
+> 1. **El corredor no puede ser `.ts`.** Sin `"type": "module"` en
+>    `package.json`, esbuild lo compila a CJS y los `await` de nivel
+>    superior mueren. Va como `.mts`, igual que `mcp/servidor.mts`.
+> 2. **El `veredicto.ts` de la Tarea A4 no compila** tal como está
+>    escrito: `if (corrida.error)` no discrimina la unión porque `string`
+>    no es un tipo unitario. Con `!== undefined` sí.
+> 3. **El paso 2 de la Tarea A1 no falla.** La aserción "que debería
+>    fallar" era `estaVivo(p, "2026-99-99") === false`, y como `estaVivo`
+>    compara strings, `"2026-99-99" > "2026-07-20"` da `false`: el test
+>    diseñado para fallar **pasaba**.
+> 4. **Los tiempos del corpus completo son ~50 min por corrida, no ~33.**
+>    El techo que manda es el de tokens, no el de pedidos.
+> 5. El piso son **11 frases** y el banco **29**, no 10 y 28: durante la
+>    ejecución se agregó `"el hosting de Vercel Pro"`, porque el atajo
+>    dejó a las cuatro anclas sin llegar al modelo y el banco se quedaba
+>    sin ninguna señal sobre la ambigüedad.
+
 > **Para quien lo ejecute:** SUB-SKILL REQUERIDA: usá
 > `superpowers:subagent-driven-development` (recomendado) o
 > `superpowers:executing-plans` para ejecutarlo tarea por tarea. Los pasos
