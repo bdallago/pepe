@@ -1,8 +1,26 @@
 # Presupuestos en Pepe — diseño
 
+> ✅ **APROBADO Y EJECUTADO: las etapas 0 a 5 están en producción** (última
+> al 2026-08-11, la tabla de conversión que cierra la etapa 3). El
+> encabezado de abajo decía "sin aprobar" porque se escribió sin Beno
+> disponible; quedó desactualizado apenas se empezó a construir.
+>
+> **Solo falta la etapa 6**, el análisis del descarte hecho por un
+> razonador, y sigue **bloqueada por diseño** hasta que haya **≥ 10
+> presupuestos resueltos**. Al 2026-08-11 hay **cero presupuestos**
+> cargados, así que no es una deuda: es una puerta que todavía no se abrió.
+> No confundir la 3 con la 6 — la 3 es todo SQL y ya está.
+>
+> Dos cosas que la etapa 3 resolvió distinto de como las plantea la
+> sección "Qué se puede aprender, y cuándo": el **techo** se muestra como
+> corchete (aceptado más caro / descartado más barato) en vez de rangos de
+> monto, porque con cuatro filas los baldes dan 0 % o 100 %; y las
+> **monedas no se mezclan**, porque un presupuesto en USD con tarifa en
+> USD no tiene `tasa_usada` que congelar. AGENTS.md §10.
+
 Fecha: 2026-08-10
-Estado: **diseño propuesto, sin aprobar**. Beno no estuvo disponible; las
-decisiones que eran suyas se tomaron por la opción más conservadora y
+Estado original: diseño propuesto sin aprobar. Beno no estuvo disponible;
+las decisiones que eran suyas se tomaron por la opción más conservadora y
 están listadas al final.
 
 Recoge el caso C de

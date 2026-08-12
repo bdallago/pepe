@@ -56,3 +56,9 @@ se ejecutaron y **qué afirmaban que resultó ser falso** — eso no borra la
 decisión, la contextualiza. El plan del reparto por fecha lo tiene, y vale
 leerlo antes de escribir el próximo: se escribió sin ejecutar nada y
 afirmaba siete cosas que no eran ciertas.
+
+Al 2026-08-11 **los cinco specs llevan ese bloque**, y conviene leerlo
+antes que el cuerpo: cuatro tenían el encabezado desactualizado —dos
+seguían diciendo "sin aprobar" con la feature en producción— y el del
+prorrateo difería una feature que después se construyó igual. El cuerpo
+sigue siendo el de entonces; el bloque dice qué cambió.
