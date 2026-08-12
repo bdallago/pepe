@@ -803,6 +803,32 @@ un egreso; el nombre de un proyecto se busca en tres filas; "el mes
 pasado" es aritmética de calendario. Las cinco frases telegráficas reales
 de Beno se parsean con **cero llamadas**.
 
+Desde el 2026-08-12 esa regla se cobra **antes** de llamar al
+recepcionista, en `agentes/atajo.ts`: una frase telegráfica y un nombre
+suelto de hasta dos palabras **no llegan al modelo**. Antes pagaban una
+llamada entera para que contestara `"movimientos"` o para que el prompt
+les bajara la confianza, dos cosas que resuelve una expresión regular.
+
+**Lo que se gana no es la llamada, es la espera.** Medido en el log del
+arnés: la llamada tarda **653 ms** y el limitador espera **59 segundos**
+después de cada dos. El 99 % del tiempo que sentís usando la caja es
+nuestro propio `setTimeout`, no Groq pensando.
+
+⚠ **Entran solo esos dos casos y no se agregan más.** Cada atajo es una
+regla que puede equivocarse en silencio, y el modelo es mejor que una
+regexp en todo lo que no sea estrictamente mecánico. Y **ninguno puede
+tener la última palabra sobre algo que escriba directo**: los dos
+elegidos cumplen —`movimientos` termina en un formulario que Beno
+confirma y la frase ambigua termina en una pregunta—. Si aparece la
+tentación de atajar `bitacora`, la respuesta es que no.
+
+**Y el bloque de confianza del prompt ya no es lo único que sostiene la
+ambigüedad.** `agentes/ambiguedad.ts` tiene la comprobación mecánica
+—¿verbo conjugado? ¿palabra de pregunta? ¿dígito?— como función pura con
+44 casos que corren **sin tocar Groq**, y `acotarConfianza()` solo puede
+**bajar** una confianza, nunca subirla. El peor caso de un error suyo es
+una pregunta de más.
+
 **Multi-acción es seguro por una razón concreta**: nada entra al dominio
 sin confirmación, así que una frase con tres pedidos son tres propuestas
 y si la segunda falla quedan dos. No hay transacción que deshacer. La
@@ -833,12 +859,68 @@ nombres.** No es una sospecha, son cuatro incidentes con medición:
    Las mismas dos reglas en **seis líneas y léxicas** (listas de palabras,
    no descripciones) pasaron limpio.
 
-Por eso: **antes de tocar ese prompt, medí; después de tocarlo, volvé a
-medir.** El piso de regresión son las cuatro ambiguas sueltas
-(`"Claude Code"`, `"Proder"`, `"pricing"`, `"Vercel Pro"`, todas por
-debajo de 0.6) y las seis simples con **una sola acción** cada una. Y si
-la regla que querés agregar se puede resolver con un test sobre un string
-en `despacho.ts`, hacelo ahí — como `textoDelMovimiento()`.
+**Por eso: antes de tocar ese prompt, medí; después de tocarlo, volvé a
+medir.** Y ahora eso es un comando y no un ritual:
+
+```bash
+npm run medir:recepcionista            # el piso: 11 frases, ~11 min
+npm run medir:recepcionista -- --todo  # completo: ~32 min
+```
+
+El piso de regresión vive en `src/lib/agentes/banco.ts` y la línea base
+commiteada en `docs/dev/recepcionista-linea-base.json`, así que el diff de
+un PR muestra **qué confianzas se movieron**. Son las cuatro ambiguas
+sueltas (`"Claude Code"`, `"Proder"`, `"pricing"`, `"Vercel Pro"`, todas
+por debajo de 0.6), las seis simples con **una sola acción** cada una, y
+`"el hosting de Vercel Pro"` — la única ambigua que todavía llega al
+modelo, porque las cuatro anclas las cortocircuita `atajo.ts`. Y si la
+regla que querés agregar se puede resolver con un test sobre un string en
+`despacho.ts`, hacelo ahí — como `textoDelMovimiento()`.
+
+⚠ **Oscilar cuenta como fallar.** Cada frase se dispara tres veces: el
+modelo **no es determinístico ni con `temperatura: 0`** —está medido con
+`"agreguemos lecciones"`—, así que una corrida por frase no distingue "lo
+arreglé" de "salió bien esta vez". Las seis mediciones históricas de este
+prompt tienen ese sesgo.
+
+⚠ **Medir cuesta 2 llamadas por minuto** y no se puede apurar: el prompt
+reserva ~2613 tokens contra un techo de 5500 por minuto. Por eso el
+corredor es retomable.
+
+#### El bloque de confianza se intentó sacar, se midió y se dejó donde estaba
+
+El 2026-08-12, con el arnés recién construido, se intentó mudar las 24
+líneas del bloque de confianza al código —ya vivían replicadas en
+`ambiguedad.ts`— y **la medición dijo que no**. Se revirtió. Lo que
+encontró es lo que hay que saber antes de volver a intentarlo:
+
+**El bloque hacía DOS cosas, no una.** Además de fijar la banda de
+confianza, sus cuatro ejemplos **anclaban qué destino elegir** para una
+frase ambigua. A `ambiguedad.ts` se mudó solo lo primero.
+
+La evidencia es `"el hosting de Vercel Pro"`, la única ambigua que llega
+al modelo: pasó de `suscripciones` **0.3** a `movimientos` **0.4**. Y ese
+0.4 **no lo contestó el modelo**: es `acotarConfianza()` recortando. O
+sea que sin el bloque el modelo dejó de reconocerla como ambigua y el
+código sostuvo la línea solo. Lo confirma un efecto colateral: tres
+frases de confianza alta subieron **0.9 → 1**. Sacarlo volvió al modelo
+globalmente más confiado.
+
+**Y el motivo por el que no vale la pena volver a intentarlo** es que no
+compra nada medible: los 345 tokens que ahorra **no aceleran la
+medición** —5500 ÷ 2268 sigue dando 2 llamadas por minuto— y el
+comportamiento visible no cambia, porque con confianza < 0.6 `cadena.ts`
+descarta el destino igual.
+
+**El bloque dejó de ser peligroso, que era el motivo original para
+sacarlo.** Era frágil porque era lo *único* que protegía a las frases
+ambiguas: un punto único de falla que se rompía con cualquier texto
+agregado. Ahora `acotarConfianza()` garantiza esa propiedad **pase lo que
+pase con el prompt**, así que el bloque pasó de ser el guardia a ser un
+refuerzo redundante. Que se quede no cuesta nada.
+
+Si algún día se quiere igual, el camino es **mudar también el anclaje de
+destino**, no borrar los ejemplos y esperar que no pase nada.
 
 **El quinto agregado pasó limpio al primer intento, y confirma la
 receta.** `presupuesto` (2026-08-10) entró con **cinco líneas léxicas** —

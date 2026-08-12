@@ -358,6 +358,12 @@ las mismas listas que `REGLAS`. Hubo una copia a mano y se separó en los
 dos sentidos: nació sin la regla de días de la semana y más ancha que el
 original. No la vuelvas a copiar.
 
+**Y ahora se puede medir sin armar el arnés a mano:**
+
+| Función | Dónde | Qué escribe | Nota |
+|---|---|---|---|
+| **Medir el recepcionista** | `npm run medir:recepcionista` · `src/lib/agentes/banco.ts` (datos) · `veredicto.ts` (puro) · `scripts/medir-recepcionista.mts` (red) | nada: solo lee | Tarda ~11 min el piso y ~32 el completo, a 2 llamadas/min. Es retomable: `.medidas/` guarda el progreso. Oscilar entre corridas cuenta como fallar. |
+
 ---
 
 ## Los dos MCP, que no se pisan

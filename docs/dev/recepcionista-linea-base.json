@@ -1,0 +1,197 @@
+{
+  "fecha": "2026-08-12T13:38:11.670Z",
+  "veredictos": [
+    {
+      "frase": "Claude Code",
+      "ok": false,
+      "oscilo": false,
+      "destinos": [
+        "desconocido",
+        "desconocido",
+        "desconocido"
+      ],
+      "confianzas": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "problemas": [
+        "corrida 1: destino \"desconocido\", se esperaba movimientos",
+        "corrida 2: destino \"desconocido\", se esperaba movimientos",
+        "corrida 3: destino \"desconocido\", se esperaba movimientos"
+      ]
+    },
+    {
+      "frase": "Proder",
+      "ok": false,
+      "oscilo": false,
+      "destinos": [
+        "desconocido",
+        "desconocido",
+        "desconocido"
+      ],
+      "confianzas": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "problemas": [
+        "corrida 1: destino \"desconocido\", se esperaba consultas",
+        "corrida 2: destino \"desconocido\", se esperaba consultas",
+        "corrida 3: destino \"desconocido\", se esperaba consultas"
+      ]
+    },
+    {
+      "frase": "pricing",
+      "ok": false,
+      "oscilo": false,
+      "destinos": [
+        "desconocido",
+        "desconocido",
+        "desconocido"
+      ],
+      "confianzas": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "problemas": [
+        "corrida 1: destino \"desconocido\", se esperaba buscador",
+        "corrida 2: destino \"desconocido\", se esperaba buscador",
+        "corrida 3: destino \"desconocido\", se esperaba buscador"
+      ]
+    },
+    {
+      "frase": "Vercel Pro",
+      "ok": false,
+      "oscilo": false,
+      "destinos": [
+        "desconocido",
+        "desconocido",
+        "desconocido"
+      ],
+      "confianzas": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "problemas": [
+        "corrida 1: destino \"desconocido\", se esperaba suscripciones",
+        "corrida 2: destino \"desconocido\", se esperaba suscripciones",
+        "corrida 3: destino \"desconocido\", se esperaba suscripciones"
+      ]
+    },
+    {
+      "frase": "el hosting de Vercel Pro",
+      "ok": true,
+      "oscilo": false,
+      "destinos": [
+        "suscripciones",
+        "suscripciones",
+        "suscripciones"
+      ],
+      "confianzas": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "problemas": []
+    },
+    {
+      "frase": "cómo viene Proder",
+      "ok": true,
+      "oscilo": false,
+      "destinos": [
+        "consultas",
+        "consultas",
+        "consultas"
+      ],
+      "confianzas": [
+        0.9,
+        0.9,
+        0.9
+      ],
+      "problemas": []
+    },
+    {
+      "frase": "qué me toca hoy",
+      "ok": true,
+      "oscilo": false,
+      "destinos": [
+        "roadmap",
+        "roadmap",
+        "roadmap"
+      ],
+      "confianzas": [
+        1,
+        1,
+        1
+      ],
+      "problemas": []
+    },
+    {
+      "frase": "qué estoy pagando que no uso",
+      "ok": true,
+      "oscilo": false,
+      "destinos": [
+        "suscripciones",
+        "suscripciones",
+        "suscripciones"
+      ],
+      "confianzas": [
+        0.9,
+        0.9,
+        0.9
+      ],
+      "problemas": []
+    },
+    {
+      "frase": "hacé la retro de Gentius",
+      "ok": true,
+      "oscilo": false,
+      "destinos": [
+        "retro",
+        "retro",
+        "retro"
+      ],
+      "confianzas": [
+        1,
+        1,
+        1
+      ],
+      "problemas": []
+    },
+    {
+      "frase": "qué anotaciones tengo sobre gestión de presupuestos",
+      "ok": true,
+      "oscilo": false,
+      "destinos": [
+        "buscador",
+        "buscador",
+        "buscador"
+      ],
+      "confianzas": [
+        1,
+        1,
+        1
+      ],
+      "problemas": []
+    },
+    {
+      "frase": "quiero aprender sobre eso",
+      "ok": true,
+      "oscilo": false,
+      "destinos": [
+        "tema_estudio",
+        "tema_estudio",
+        "tema_estudio"
+      ],
+      "confianzas": [
+        1,
+        1,
+        1
+      ],
+      "problemas": []
+    }
+  ]
+}

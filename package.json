@@ -9,8 +9,10 @@
     "lint": "eslint",
     "descargar:modelo": "node --experimental-strip-types --conditions=react-server scripts/descargar-modelo.ts",
     "backfill:embeddings": "node --experimental-strip-types --conditions=react-server scripts/backfill-embeddings.ts",
+    "medir:recepcionista": "tsx --conditions=react-server scripts/medir-recepcionista.mts",
     "import:colmena": "node --experimental-strip-types scripts/importar-colmena.ts",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"tests/**/*.test.mts\"",
     "mcp": "tsx mcp/servidor.mts"
   },
   "dependencies": {

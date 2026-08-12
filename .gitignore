@@ -73,6 +73,11 @@ next-env.d.ts
 # GitHub rechaza archivos de más de 100 MB.
 /.modelos/
 
+# Estado de `npm run medir:recepcionista`. La línea base SÍ se commitea
+# (docs/dev/recepcionista-linea-base.json); esto es el scratch de una
+# corrida a medio hacer.
+.medidas/
+
 # ─────────────────────────────────────────────────────────────
 # Testing y cobertura
 # ─────────────────────────────────────────────────────────────
