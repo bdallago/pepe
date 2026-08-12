@@ -1,6 +1,7 @@
 import "server-only";
 
 import { completarJSON, MODELO_CHICO } from "@/lib/llm";
+import { acotarConfianza, esAmbigua } from "@/lib/agentes/ambiguedad";
 import { atajar } from "@/lib/agentes/atajo";
 import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
 
@@ -476,5 +477,10 @@ export async function decidirDestinos(frase: string): Promise<Decision[]> {
     etiqueta: "recepcionista",
   });
 
-  return datos.acciones.slice(0, MAX_ACCIONES);
+  const acciones = datos.acciones.slice(0, MAX_ACCIONES);
+
+  // La comprobación mecánica se aplica acá y no la pide el prompt: ver
+  // `ambiguedad.ts`. Solo puede BAJAR la confianza, así que lo peor que
+  // puede provocar un error suyo es una pregunta de más.
+  return esAmbigua(frase) ? acciones.map(acotarConfianza) : acciones;
 }
