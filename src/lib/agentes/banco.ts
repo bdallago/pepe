@@ -57,7 +57,6 @@ const ALTA: [number, number] = [0.6, 1];
 const AMBIGUA: [number, number] = [0, 0.4];
 
 export const BANCO: readonly CasoDelBanco[] = [
-  // ── Las cuatro anclas ambiguas ──────────────────────────────
   // Se rompieron las cuatro veces. Un nombre suelto sin verbo no dice si
   // Beno quiere anotarlo, consultarlo, buscarlo o cerrarlo.
   //
@@ -82,29 +81,30 @@ export const BANCO: readonly CasoDelBanco[] = [
     frase: "Claude Code",
     origen: "sintetica",
     piso: true,
-    porque: "Ancla. Con los ejemplos fuera del prompt vuelve a confianza 1.",
-    espera: { destinos: ["movimientos"], acciones: 1, confianza: AMBIGUA },
+    porque: "Ancla. Con los ejemplos fuera del prompt volvía a confianza 1; hoy
+      ni llega al modelo.",
+    espera: { destinos: ["desconocido"], acciones: 1, confianza: AMBIGUA },
   },
   {
     frase: "Proder",
     origen: "sintetica",
     piso: true,
     porque: "Ancla. Subió de 0.3 a 0.8 con un párrafo que ni la nombraba.",
-    espera: { destinos: ["consultas"], acciones: 1, confianza: AMBIGUA },
+    espera: { destinos: ["desconocido"], acciones: 1, confianza: AMBIGUA },
   },
   {
     frase: "pricing",
     origen: "sintetica",
     piso: true,
     porque: "Ancla. Subió a 0.8 al usarse como ejemplo de tema.",
-    espera: { destinos: ["buscador"], acciones: 1, confianza: AMBIGUA },
+    espera: { destinos: ["desconocido"], acciones: 1, confianza: AMBIGUA },
   },
   {
     frase: "Vercel Pro",
     origen: "sintetica",
     piso: true,
     porque: "Ancla. La tabla de valores fijos la empeoró de 0.8 a 0.9.",
-    espera: { destinos: ["suscripciones"], acciones: 1, confianza: AMBIGUA },
+    espera: { destinos: ["desconocido"], acciones: 1, confianza: AMBIGUA },
   },
   {
     frase: "el hosting de Vercel Pro",
