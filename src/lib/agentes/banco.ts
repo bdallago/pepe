@@ -60,6 +60,24 @@ export const BANCO: readonly CasoDelBanco[] = [
   // ── Las cuatro anclas ambiguas ──────────────────────────────
   // Se rompieron las cuatro veces. Un nombre suelto sin verbo no dice si
   // Beno quiere anotarlo, consultarlo, buscarlo o cerrarlo.
+  //
+  // ⚠ **Las cuatro dan ROJO desde el 2026-08-12, y el rojo se deja.**
+  // Medido: las tres corridas devuelven `desconocido` con confianza 0.4,
+  // porque `atajo.ts` las resuelve sin llamar al modelo y ahí el destino
+  // no se elige — con esa confianza la cadena pregunta antes de despachar,
+  // así que cuál sea da igual.
+  //
+  // El `espera` de acá abajo dice `movimientos`, `consultas`, `buscador` y
+  // `suscripciones` porque eso es lo que documentan los comentarios de
+  // `recepcionista.ts`, y **el banco escribe lo documentado, no lo que da
+  // hoy** (ver el ⚠ de arriba). Ajustarlo a `desconocido` para ver verde
+  // sería borrar la única marca de que estas cuatro frases cambiaron de
+  // camino: es la deriva silenciosa que este archivo viene a hacer
+  // visible. Se corrige recién cuando alguien decida —con Beno— que el
+  // atajo es el comportamiento definitivo para las anclas.
+  //
+  // Lo que el rojo NO dice es que haya una regresión: la confianza sigue
+  // ≤ 0.4 en las tres corridas, que era la propiedad que el piso protegía.
   {
     frase: "Claude Code",
     origen: "sintetica",
