@@ -306,11 +306,14 @@ tarea sin leerla, reintroducís ocho defectos silenciosos.
 
 **Trampas.** ⚠ **El prompt del recepcionista es de vidrio: cuatro
 incidentes medidos** donde agregarle texto rompió casos que ni nombraba.
-Antes de tocarlo, medir; después, volver a medir. Si la regla se puede
-resolver con un test sobre un string, va en `despacho.ts`. **Medir cuesta
-~8 minutos por corrida**: el prompt son ~2275 tokens contra un techo de
-5500/minuto, o sea 2 frases por minuto — y **cada línea que le agregues
-sube ese costo**. Los dos agregados que pasaron limpios al primer intento
+Antes de tocarlo, medir; después, volver a medir — y desde el 2026-08-12
+**medir es `npm run medir:recepcionista`**, no un ritual a mano (ver su
+fila abajo). Si la regla se puede resolver con un test sobre un string,
+va en `despacho.ts`, en `ambiguedad.ts` o en `atajo.ts`. **Medir cuesta
+~11 minutos el piso y ~50 el corpus completo**: el prompt son ~2613
+tokens contra un techo de 5500/minuto, o sea 2 frases por minuto — y
+**cada línea que le agregues sube ese costo**. Los dos agregados que
+pasaron limpios al primer intento
 (`presupuesto` y `proyecto`) usaron la misma receta: pocas líneas,
 **léxicas y no en prosa**, y todas **arriba** del bloque de confianza, que
 queda último. Y antes de agregar un destino, buscá si el prompt ya dice lo
@@ -362,7 +365,10 @@ original. No la vuelvas a copiar.
 
 | Función | Dónde | Qué escribe | Nota |
 |---|---|---|---|
-| **Medir el recepcionista** | `npm run medir:recepcionista` · `src/lib/agentes/banco.ts` (datos) · `veredicto.ts` (puro) · `scripts/medir-recepcionista.mts` (red) | nada: solo lee | Tarda ~11 min el piso y ~32 el completo, a 2 llamadas/min. Es retomable: `.medidas/` guarda el progreso. Oscilar entre corridas cuenta como fallar. |
+| **Medir el recepcionista** | `npm run medir:recepcionista` (`-- --todo` para el corpus entero) · `src/lib/agentes/banco.ts` (datos) · `veredicto.ts` (puro) · `scripts/medir-recepcionista.mts` (red) | nada: solo lee | Tarda **~11 min el piso (11 frases) y ~50 el completo (29)**, a 2 llamadas/min. Retomable: `.medidas/` guarda el progreso llamada a llamada y está gitignoreado; la línea base sí se commitea (`dev/recepcionista-linea-base.json`). ⚠ **Oscilar entre corridas cuenta como fallar**: cada frase se dispara 3 veces porque el modelo no es determinístico ni con `temperatura: 0`. El corredor es `.mts` y no `.ts` porque sin `"type": "module"` esbuild lo pasa a CJS y mueren los `await` de nivel superior. |
+| **La ambigüedad de una frase** | `lib/agentes/ambiguedad.ts` — `esAmbigua()` y `acotarConfianza()` | nada: puro | Era el bloque de confianza del prompt, el que se rompió las cuatro veces. **Solo puede BAJAR una confianza, nunca subirla**, así que el peor caso de un error suyo es una pregunta de más. Sus 44 casos corren **sin tocar Groq**. ⚠ No le agregues `-an` ni `-en` como terminación verbal: matchean `orden`, `imagen`, `margen`. Y **no hay regla de enclíticos**: la había y rompía `"Google Ads"` (`google` termina en `le`). |
+| **Las frases que no llaman al modelo** | `lib/agentes/atajo.ts` — `atajar()`, llamado al principio de `decidirDestinos()` | nada: puro | Telegráficas (`-20usd Claude Code 06/08`) y nombres sueltos de ≤ 2 palabras. **Lo que se gana no es la llamada, es la espera**: medido, la llamada tarda 653 ms y el limitador espera 59 s después de cada dos. ⚠ **Entran solo esos dos casos y ninguno puede tener la última palabra sobre algo que escriba directo** — si aparece la tentación de atajar `bitacora`, la respuesta es que no. |
+| **Los tests** | `npm test` → `tsx --test "tests/**/*.test.mts"` · `tests/` | nada | 30 tests, **cero dependencias nuevas** (`node:test` es built-in y `tsx` ya estaba). ⚠ `node --test` **no sirve**: no resuelve el alias `@/` que `prorrateo.ts` usa por dentro. Todo lo que testean es puro: ningún test toca Groq ni la base. |
 
 ---
 

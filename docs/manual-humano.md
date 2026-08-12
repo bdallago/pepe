@@ -205,6 +205,24 @@ anotado hoy cae en el mes equivocado y agarra la cotización equivocada. Y
 equivocado con confianza alta te contesta cualquier cosa con seguridad, que
 es mucho peor que admitir la duda.
 
+### Las frases cortas ahora contestan al instante
+
+Desde el 12 de agosto de 2026, escribir un gasto en formato telegráfico
+—`-20usd Claude Code 06/08`— **contesta de inmediato**. Antes esa frase
+se iba a consultar a un modelo y podías esperar hasta un minuto.
+
+La espera no era del modelo: contestaba en medio segundo. Era la app
+frenándose sola para no pasarse del cupo gratuito, y esperaba un minuto
+cada dos frases. Ahora esas frases ni preguntan: el signo, el monto y la
+fecha se leen directamente, que es lo que se venía haciendo igual después.
+Lo mismo si escribís un nombre suelto como `Proder`: te pregunta a qué te
+referías sin gastar el viaje.
+
+**Todo lo demás sigue pasando por el modelo**, porque distinguir "buscá lo
+que anoté sobre presupuestos" de "armame un presupuesto" no es algo que se
+pueda leer de la forma de la frase. Se ganó el tiempo justo donde no hacía
+falta pensar.
+
 También se puede operar desde afuera. Pepe se agrega a Claude.ai como
 conector: preguntarle cuánto gastaste, buscar entre tus lecciones, dictarle
 un movimiento, dictarle un proyecto nuevo con su presupuesto. Lo que se

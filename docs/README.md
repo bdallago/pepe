@@ -38,6 +38,28 @@ historial fino sigue en los mensajes de commit, largos a propósito y con
 el porqué de cada cambio: `git log` es el detalle; el registro guarda el
 estado y el resumen de una o dos líneas por corrección.
 
+## Lo que se verifica solo
+
+Desde el 2026-08-12 hay dos comandos que reemplazan trabajo que antes se
+hacía a mano y se olvidaba:
+
+```bash
+npm test                        # 30 casos puros, ninguno toca Groq ni la base
+npm run medir:recepcionista     # el piso del recepcionista, ~11 min
+npm run medir:recepcionista -- --todo   # el corpus entero, ~50 min
+```
+
+El segundo es el que importa antes de tocar el prompt del recepcionista,
+que tiene **cuatro incidentes medidos** de romperse por agregarle texto.
+El banco de frases vive en `src/lib/agentes/banco.ts` y la línea base
+commiteada en [`dev/recepcionista-linea-base.json`](dev/recepcionista-linea-base.json),
+así que el diff de un PR muestra qué confianzas se movieron. **Oscilar
+entre corridas cuenta como fallar**: el modelo no es determinístico ni con
+`temperatura: 0`.
+
+Tarda porque tiene que tardar: el limitador de Groq deja pasar **2
+llamadas por minuto**. La llamada en sí son 653 ms.
+
 **Tampoco hay índice estructural generado.** Con `rg` sobre `src/` alcanza:
 el vocabulario del repo es dominio en castellano, donde el match exacto
 gana.

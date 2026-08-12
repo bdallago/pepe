@@ -8,11 +8,30 @@
 > producto (con datos reales del usuario y una tool `escribir_bitacora` que escribe en firme).
 > Esto otro es el historial de bugs y correcciones del desarrollo.
 
-## Estado actual (2026-08-11)
+## Estado actual (2026-08-12)
 
 **En producción no hay bugs conocidos abiertos.** La app sigue con las tres pantallas de balance
 diciendo el mismo número y el invariante `suma(por proyecto) === balance general` cerrando exacto
-en ARS y en USD.
+en ARS y en USD. Verificado el 2026-08-12 corriendo el código de prorrateo de la app: general
+**$302.411**, Proder $469.472, Gentius −$12.333, El Prode de Beno −$154.728.
+
+**Desde el 2026-08-12 este documento dejó de ser la única red.** Hay `npm test` (30 casos, ninguno
+toca Groq ni la base) y `npm run medir:recepcionista`, que dispara el banco de frases contra el
+modelo y tabula destino, confianza, literalidad del argumento y **oscilación entre corridas**. El
+piso da **11/11 en verde**. Lo que antes se descubría usando la app y se anotaba acá, ahora en
+buena parte lo agarra un comando.
+
+⚠ **El hallazgo metodológico de esta jornada:** de los cinco defectos registrados abajo, **cuatro
+los encontró la ejecución de un plan que se había escrito midiendo** — incluido un test escrito
+para fallar que pasaba, y un `git commit` encadenado detrás de un pipe que hacía que el typecheck
+nunca frenara nada. Ninguno se veía leyendo. Es la tercera jornada seguida en que pasa lo mismo, y
+la conclusión ya no es sobre este plan sino sobre el método: **escribir el plan midiendo no
+sustituye ejecutarlo.**
+
+**El subconjunto explícito de proyectos quedó CERRADO Y EN PRODUCCIÓN el 2026-08-12** (migración
+`20260812000001_compartido_entre.sql` aplicada, tipos regenerados, commit `ff15eb2`). La tabla
+`movement_projects` tiene **0 filas y eso es correcto**: sin filas manda el reparto por ventana de
+fecha, así que no se movió ni un peso.
 
 **`docs/superpowers/plans/2026-08-11-operar-conversando.md` está TERMINADO —las once tareas— y
 MERGEADO A `main` el 2026-08-11**, con `typecheck`, `lint` y `build` limpios. La ola 1 arregla dos
@@ -55,6 +74,27 @@ el `SUPABASE_ACCESS_TOKEN`, que tiene Beno.
 
 ## Historial
 
+- **2026-08-12 — Se commiteó `banco.ts` roto porque la verificación estaba detrás de un pipe.**
+  El commit se encadenó con `npm run typecheck | tail && git commit`, y el pipe devuelve el exit
+  code de `tail`, no el de `tsc`: el chequeo pasaba siempre. Arreglado en `033b0fd`. Regla que
+  queda: **nunca encadenar una verificación detrás de un pipe.**
+- **2026-08-12 — Un test escrito para fallar, pasaba.** El paso "verificá que el test falla" del
+  plan usaba `estaVivo(p, "2026-99-99") === false`; como `estaVivo` compara strings,
+  `"2026-99-99" > "2026-07-20"` y devolvía `false`, que era lo que la aserción afirmaba. El runner
+  se validó después con una aserción genuinamente falsa.
+- **2026-08-12 — El corredor del arnés no compilaba como `.ts`.** Sin `"type": "module"` en
+  `package.json`, esbuild lo pasa a CJS y mueren los `await` de nivel superior. Va `.mts`, igual
+  que `mcp/servidor.mts`. El `await` no era removible: `cargarEnvLocal()` tiene que correr antes de
+  que se importe nada que lea `GROQ_API_KEY`, y un `import` estático se hoistea.
+- **2026-08-12 — El `veredicto.ts` del plan no discriminaba la unión.** `if (corrida.error)` no
+  angosta el tipo porque `string` no es un tipo unitario, así que `acciones` quedaba
+  `AccionCruda[] | undefined` en la otra rama: 6 errores de `tsc`. Con `!== undefined` sí.
+- **2026-08-12 — Sacar el bloque de confianza del prompt se midió, falló y se revirtió.**
+  No es un bug sino el arnés funcionando, y es el resultado más valioso de la jornada: el bloque
+  hacía **dos** cosas —fijaba la banda de confianza **y** anclaba qué destino elegir para una frase
+  ambigua— y a `ambiguedad.ts` se había mudado solo la primera. Medido con
+  `"el hosting de Vercel Pro"`: `suscripciones` 0.3 → `movimientos` 0.4, con ese 0.4 puesto por
+  `acotarConfianza()` y no por el modelo. El detalle en AGENTS.md §9.
 - **2026-08-11 — Se difirió por "falta de evidencia" una feature que Beno había pedido explícitamente.**
   Ante "hacé todo", el subconjunto explícito de proyectos se convirtió en una pregunta en vez de en
   código, con el argumento de que el caso ocurre cero veces en los datos de hoy. El argumento era
