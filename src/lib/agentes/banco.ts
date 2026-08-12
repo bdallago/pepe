@@ -57,32 +57,40 @@ const ALTA: [number, number] = [0.6, 1];
 const AMBIGUA: [number, number] = [0, 0.4];
 
 export const BANCO: readonly CasoDelBanco[] = [
+  // ── Las cuatro anclas ambiguas ──────────────────────────────
+  //
   // Se rompieron las cuatro veces. Un nombre suelto sin verbo no dice si
   // Beno quiere anotarlo, consultarlo, buscarlo o cerrarlo.
   //
-  // ⚠ **Las cuatro dan ROJO desde el 2026-08-12, y el rojo se deja.**
-  // Medido: las tres corridas devuelven `desconocido` con confianza 0.4,
-  // porque `atajo.ts` las resuelve sin llamar al modelo y ahí el destino
-  // no se elige — con esa confianza la cadena pregunta antes de despachar,
-  // así que cuál sea da igual.
+  // ⚠ **Desde el 2026-08-12 no las contesta el modelo: las ataja
+  // `atajo.ts`**, porque son de una o dos palabras. Por eso esperan
+  // `desconocido` y no el destino que documentan los comentarios de
+  // `recepcionista.ts` (`movimientos`, `consultas`, `buscador`,
+  // `suscripciones`). La primera corrida del arnés las marcó en rojo, y
+  // el rojo se dejó puesto hasta decidirlo con Beno: lo decidió ese
+  // mismo día, después de verlo medido.
   //
-  // El `espera` de acá abajo dice `movimientos`, `consultas`, `buscador` y
-  // `suscripciones` porque eso es lo que documentan los comentarios de
-  // `recepcionista.ts`, y **el banco escribe lo documentado, no lo que da
-  // hoy** (ver el ⚠ de arriba). Ajustarlo a `desconocido` para ver verde
-  // sería borrar la única marca de que estas cuatro frases cambiaron de
-  // camino: es la deriva silenciosa que este archivo viene a hacer
-  // visible. Se corrige recién cuando alguien decida —con Beno— que el
-  // atajo es el comportamiento definitivo para las anclas.
+  // **El destino dejó de importar para estas cuatro, y es verificable:**
+  // con `confianza < UMBRAL_CONFIANZA`, `cadena.ts` **descarta el
+  // destino** y ofrece tres opciones fijas —anotar un gasto, buscar algo,
+  // ver números—. `desconocido` y `movimientos` se ven exactamente igual
+  // en pantalla.
   //
-  // Lo que el rojo NO dice es que haya una regresión: la confianza sigue
-  // ≤ 0.4 en las tres corridas, que era la propiedad que el piso protegía.
+  // Lo que estas cuatro siguen protegiendo, que es lo que protegieron
+  // siempre, es **que la confianza quede abajo del umbral**. Eso ahora lo
+  // garantiza código (`ambiguedad.ts`) y no un prompt, así que ya no
+  // puede romperse agregándole texto al prompt — que es exactamente lo
+  // que pasó las cuatro veces.
+  //
+  // Y por eso se corrigió en vez de dejarlo: un arnés con cuatro rojos
+  // permanentes entrena a ignorar el rojo, y ahí deja de servir.
   {
     frase: "Claude Code",
     origen: "sintetica",
     piso: true,
-    porque: "Ancla. Con los ejemplos fuera del prompt volvía a confianza 1; hoy
-      ni llega al modelo.",
+    porque:
+      "Ancla. Con los ejemplos fuera del prompt volvía a confianza 1; " +
+      "hoy ni siquiera llega al modelo.",
     espera: { destinos: ["desconocido"], acciones: 1, confianza: AMBIGUA },
   },
   {
