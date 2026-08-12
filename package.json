@@ -11,6 +11,7 @@
     "backfill:embeddings": "node --experimental-strip-types --conditions=react-server scripts/backfill-embeddings.ts",
     "import:colmena": "node --experimental-strip-types scripts/importar-colmena.ts",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"tests/**/*.test.mts\"",
     "mcp": "tsx mcp/servidor.mts"
   },
   "dependencies": {
