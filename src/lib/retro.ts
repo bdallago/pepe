@@ -7,7 +7,11 @@ import {
   type Balances,
 } from "@/lib/balances";
 import { todayISO } from "@/lib/dates";
-import { MODELO_RAZONADOR, completarJSON } from "@/lib/llm";
+import {
+  MODELO_RAZONADOR,
+  completarJSON,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type {
   CategoriaLeccion,
@@ -145,6 +149,46 @@ Respondé SOLO un objeto JSON con esta forma exacta:
   ]
 }`;
 
+/**
+ * El prompt de la retro, declarado para que el arnés mida **este** y no una
+ * copia (ver `PromptDeclarado`).
+ *
+ * Es la familia más peligrosa de las trece: está medido que el
+ * razonamiento **confabula más**, y acá el falso positivo termina adentro
+ * de un documento que se relee dentro de un año. La primera corrida
+ * inventó un plazo previsto que no existía, procesos que supuestamente
+ * faltaron y consecuencias que nadie registró. El juez de
+ * `src/lib/arnes/registro.ts` cobra justamente eso: ningún número de la
+ * salida que no esté en la entrada.
+ */
+export const PROMPT_RETRO: PromptDeclarado<z.infer<typeof respuestaSchema>> = {
+  modelo: MODELO_RAZONADOR,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "retro-proyecto",
+  temperatura: 0.4,
+  // Con llama-70b las lecciones candidatas salían desparejas: una buena y
+  // una genérica ("Es importante evaluar el gasto en herramientas"). Beno
+  // prefirió pagar latencia y tokens a cambio de calidad, y el balde de
+  // gpt-oss-120b (8000 TPM propios) da para esto sin salirse del tier
+  // gratuito.
+  esfuerzo: "medium",
+  // Los tokens de razonamiento salen de acá. Medido el 2026-08-08 contra
+  // los dos proyectos reales: 1000 a 1750 de entrada y 1200 a 2400 de
+  // salida. El 4500 es margen contra un proyecto más gordo, porque
+  // quedarse corto no degrada la respuesta: la trunca, no valida contra el
+  // esquema y se pierde la llamada entera.
+  //
+  // El costo de ese margen es que el limitador reserva 4500 hasta que
+  // llega el `usage` real, así que dos retros seguidas dentro del mismo
+  // minuto esperan. No importa: se dispara a mano al cerrar un proyecto,
+  // de a una.
+  maxTokens: 4500,
+  // Es la llamada más pesada: mucho contexto de entrada y una salida
+  // larga. El timeout por defecto se le queda corto.
+  timeoutMs: 180_000,
+};
+
 /** Lo que queda en `inbox.payload` para una lección salida de una retro. */
 export interface PayloadLeccionRetro {
   titulo: string;
@@ -240,34 +284,7 @@ export async function generarRetro(
     bitacora: bitacoraRes.data ?? [],
   });
 
-  const { datos, uso } = await completarJSON({
-    modelo: MODELO_RAZONADOR,
-    sistema: SISTEMA,
-    usuario,
-    esquema: respuestaSchema,
-    etiqueta: "retro-proyecto",
-    temperatura: 0.4,
-    // Con llama-70b las lecciones candidatas salían desparejas: una
-    // buena y una genérica ("Es importante evaluar el gasto en
-    // herramientas"). Beno prefirió pagar latencia y tokens a cambio de
-    // calidad, y el balde de gpt-oss-120b (8000 TPM propios) da para
-    // esto sin salirse del tier gratuito.
-    esfuerzo: "medium",
-    // Los tokens de razonamiento salen de acá. Medido el 2026-08-08
-    // contra los dos proyectos reales: 1000 a 1750 de entrada y 1200 a
-    // 2400 de salida. El 4500 es margen contra un proyecto más gordo,
-    // porque quedarse corto no degrada la respuesta: la trunca, no
-    // valida contra el esquema y se pierde la llamada entera.
-    //
-    // El costo de ese margen es que el limitador reserva 4500 hasta que
-    // llega el `usage` real, así que dos retros seguidas dentro del
-    // mismo minuto esperan. No importa: se dispara a mano al cerrar un
-    // proyecto, de a una.
-    maxTokens: 4500,
-    // Es la llamada más pesada: mucho contexto de entrada y una salida
-    // larga. El timeout por defecto se le queda corto.
-    timeoutMs: 180_000,
-  });
+  const { datos, uso } = await completarJSON({ ...PROMPT_RETRO, usuario });
 
   const fecha = todayISO();
   let propuestas = 0;

@@ -419,6 +419,31 @@ export interface OpcionesLLM<T> {
   etiqueta?: string;
 }
 
+/**
+ * Un prompt declarado: todo lo que `completarJSON` necesita **menos el
+ * dato concreto sobre el que trabaja**.
+ *
+ * ## Por qué existe, que no es prolijidad
+ *
+ * ⚠ **Para que el arnés (`src/lib/arnes/`) mida el prompt que corre en
+ * producción y no una copia.** Si el arnés tuviera su propio texto del
+ * prompt, mediría algo que nadie ejecuta: daría tranquilidad sin dar
+ * información, que es peor que no medir — es el mismo modo de fallar que
+ * tenían las seis mediciones a mano del recepcionista, donde el resultado
+ * quedaba escrito en prosa y nadie podía verificar que siguiera valiendo.
+ *
+ * Con un solo descriptor **no se puede tocar el prompt sin tocar lo que se
+ * mide**. El call site de producción queda
+ * `completarJSON({ ...PROMPT_X, usuario })`.
+ *
+ * `imagenes` y `signal` quedan afuera a propósito: son datos de entrada de
+ * cada llamada, igual que `usuario`.
+ */
+export type PromptDeclarado<T> = Omit<
+  OpcionesLLM<T>,
+  "usuario" | "imagenes" | "signal"
+>;
+
 export interface RespuestaLLM<T> {
   datos: T;
   uso: {

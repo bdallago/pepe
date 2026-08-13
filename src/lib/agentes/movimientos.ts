@@ -4,7 +4,12 @@ import { z } from "zod";
 
 import { leerFecha, partirFechaFinal } from "@/lib/agentes/fechas";
 import { parseAmount } from "@/lib/format";
-import { MODELO_CHICO, completarJSON, hayModeloConfigurado } from "@/lib/llm";
+import {
+  MODELO_CHICO,
+  completarJSON,
+  hayModeloConfigurado,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import type { Moneda, TipoMovimiento } from "@/lib/supabase/database.types";
 
 /**
@@ -231,6 +236,35 @@ Respondé SOLO un objeto JSON:
 {"monto": number|null, "moneda": "ARS"|"USD"|null, "descripcion": string|null, "fecha_texto": string|null}`;
 
 /**
+ * El prompt del extractor, declarado para que el arnés mida **este** (ver
+ * `PromptDeclarado`).
+ *
+ * Lo que su juez cobra es el **COPIALA ENTERA** de arriba: la descripción
+ * que devuelve tiene que ser una subcadena de la frase. Es una regla que
+ * hoy solo vive como mayúsculas dentro del prompt, y su modo de fallar
+ * está medido y es silencioso — con un prompt más largo, `"Venta Proder a
+ * cliente nuevo"` volvía como `"Venta"` y el histórico, de donde sale la
+ * clasificación de todo lo que venga después, quedaba sucio.
+ */
+export const PROMPT_MOVIMIENTO: PromptDeclarado<
+  z.infer<typeof respuestaSchema>
+> = {
+  modelo: MODELO_CHICO,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "extraccion-movimiento",
+  // Leer, no redactar: la misma frase tiene que dar siempre lo mismo.
+  temperatura: 0,
+  // Cuatro campos cortos. De sobra, y el techo del modelo chico es de
+  // 6000 tokens por minuto.
+  maxTokens: 200,
+  // Un solo reintento: hay alguien mirando la caja. Si no sale rápido, el
+  // regex de emergencia y a mano.
+  reintentos: 1,
+  timeoutMs: 15_000,
+};
+
+/**
  * El camino con modelo, solo para las frases que no son telegráficas.
  *
  * **Nunca lanza.** Si Groq está caído, sin cuota o contesta cualquier cosa,
@@ -246,20 +280,8 @@ async function leerConModelo(
 
   try {
     const { datos } = await completarJSON({
-      modelo: MODELO_CHICO,
-      sistema: SISTEMA,
+      ...PROMPT_MOVIMIENTO,
       usuario: frase,
-      esquema: respuestaSchema,
-      etiqueta: "extraccion-movimiento",
-      // Leer, no redactar: la misma frase tiene que dar siempre lo mismo.
-      temperatura: 0,
-      // Cuatro campos cortos. De sobra, y el techo del modelo chico es de
-      // 6000 tokens por minuto.
-      maxTokens: 200,
-      // Un solo reintento: hay alguien mirando la caja. Si no sale rápido,
-      // el regex de emergencia y a mano.
-      reintentos: 1,
-      timeoutMs: 15_000,
     });
 
     const monto = normalizarMonto(datos.monto);

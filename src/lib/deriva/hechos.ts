@@ -168,11 +168,12 @@ export function medirHechos(raiz: string): Hechos {
       /^import "server-only"/m,
     ),
 
-    promptsDeSistema: contar(
-      todoLib,
-      raiz,
-      /^const (?:SISTEMA|PROMPT)\w*\s*=/gm,
-    ),
+    // ⚠ Solo los `SISTEMA*`, que son los TEXTOS de prompt. Los descriptores
+    // (`export const PROMPT_*`, ver `PromptDeclarado`) quedan afuera a
+    // propósito: si contaran, cada prompt valdría dos y se rompería la
+    // invariante que sostiene al arnés — un `SISTEMA` es un prompt, es una
+    // llamada a `completarJSON` y es una familia del registro.
+    promptsDeSistema: contar(todoLib, raiz, /^const SISTEMA\w*\s*=/gm),
     callSitesLLM: contar(todoLib, raiz, /await completarJSON[<(]/g),
 
     tiposBandeja: valoresDeEnum(tipos, "tipo_bandeja"),
