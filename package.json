@@ -12,6 +12,7 @@
     "medir:recepcionista": "tsx --conditions=react-server scripts/medir-recepcionista.mts",
     "import:colmena": "node --experimental-strip-types scripts/importar-colmena.ts",
     "typecheck": "tsc --noEmit",
+    "verificar:doc": "tsx --conditions=react-server scripts/verificar-doc.mts",
     "test": "tsx --test \"tests/**/*.test.mts\"",
     "mcp": "tsx mcp/servidor.mts"
   },
