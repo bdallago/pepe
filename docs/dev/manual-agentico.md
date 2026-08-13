@@ -121,6 +121,22 @@ pantalla. Por eso los tres primeros lo leen en el mismo `Promise.all` que
 ⚠ **Lo explícito NO se filtra por `estaVivo()`.** Es deliberado y está
 desarrollado en AGENTS.md §2.b: si Beno elige un proyecto cerrado, carga
 su parte.
+
+**Y se puede dictar (2026-08-13).** `"-15000 hosting compartido entre
+Proder y Gentius"` por la caja, `compartido_entre` en
+`registrar_movimiento` por el conector. Lo resuelve
+`lib/agentes/subconjunto.ts`, **puro y sin modelo**.
+⚠ **La cola se parte ANTES de `leerMovimiento()`**, y ese orden es la
+mitad de la feature: partiéndola después, `"compartido entre Proder y
+Gentius"` queda adentro de la descripción, que es la columna de la que
+sale `descripcion_normalizada` y con ella la sugerencia por histórico.
+⚠ **Si no resuelven TODOS los nombres no se toca nada** —ni el texto ni
+los ids— y **mínimo dos**. El peor caso de un error ahí es que la feature
+no se active, nunca un gasto repartido entre proyectos que no nombró.
+⚠ **No es un tercer atajo**: no decide destino. Siguen siendo dos.
+⚠ **La fecha se rescata de la cola** si quedó del otro lado
+(`"…y Gentius 13/08"`), solo en formato numérico. Sin eso, el último tramo
+no resolvía y por la condición de todo-o-nada no se activaba nada.
 ⚠ **`memoParticipaciones()` keyea por fecha + subconjunto ordenado.** Con
 la fecha sola, el primer compartido del día dejaba cacheado su reparto y
 todos los demás de ese día se lo comían.
@@ -370,7 +386,10 @@ original. No la vuelvas a copiar.
 | **Medir el recepcionista** | `npm run medir:recepcionista` (`-- --todo` para el corpus entero) · `src/lib/agentes/banco.ts` (datos) · `veredicto.ts` (puro) · `scripts/medir-recepcionista.mts` (red) | nada: solo lee | Tarda **~11 min el piso (11 frases) y ~50 el completo (29)**, a 2 llamadas/min. Retomable: `.medidas/` guarda el progreso llamada a llamada y está gitignoreado; la línea base sí se commitea (`dev/recepcionista-linea-base.json`). ⚠ **Oscilar entre corridas cuenta como fallar**: cada frase se dispara 3 veces porque el modelo no es determinístico ni con `temperatura: 0`. El corredor es `.mts` y no `.ts` porque sin `"type": "module"` esbuild lo pasa a CJS y mueren los `await` de nivel superior. |
 | **La ambigüedad de una frase** | `lib/agentes/ambiguedad.ts` — `esAmbigua()` y `acotarConfianza()` | nada: puro | Era el bloque de confianza del prompt, el que se rompió las cuatro veces. **Solo puede BAJAR una confianza, nunca subirla**, así que el peor caso de un error suyo es una pregunta de más. Sus 44 casos corren **sin tocar Groq**. ⚠ No le agregues `-an` ni `-en` como terminación verbal: matchean `orden`, `imagen`, `margen`. Y **no hay regla de enclíticos**: la había y rompía `"Google Ads"` (`google` termina en `le`). |
 | **Las frases que no llaman al modelo** | `lib/agentes/atajo.ts` — `atajar()`, llamado al principio de `decidirDestinos()` | nada: puro | Telegráficas (`-20usd Claude Code 06/08`) y nombres sueltos de ≤ 2 palabras. **Lo que se gana no es la llamada, es la espera**: medido, la llamada tarda 653 ms y el limitador espera 59 s después de cada dos. ⚠ **Entran solo esos dos casos y ninguno puede tener la última palabra sobre algo que escriba directo** — si aparece la tentación de atajar `bitacora`, la respuesta es que no. |
-| **Los tests** | `npm test` → `tsx --test "tests/**/*.test.mts"` · `tests/` | nada | 30 tests, **cero dependencias nuevas** (`node:test` es built-in y `tsx` ya estaba). ⚠ `node --test` **no sirve**: no resuelve el alias `@/` que `prorrateo.ts` usa por dentro. Todo lo que testean es puro: ningún test toca Groq ni la base. |
+| **Los tests** | `npm test` → `tsx --test "tests/**/*.test.mts"` · `tests/` | nada | **Cero dependencias nuevas** (`node:test` es built-in y `tsx` ya estaba). ⚠ `node --test` **no sirve**: no resuelve el alias `@/` que `prorrateo.ts` usa por dentro. Todo lo que testean es puro: ningún test toca Groq ni la base. Corren solos antes de cada commit (`.githooks/pre-commit`); la salida es `--no-verify`. ⚠ Corren **sin** `--conditions=react-server` a propósito: eso los vuelve la garantía de que los módulos de dominio no arrastren nada de Next. |
+| **Medir cualquier otro prompt** | `npm run medir <familia>` (`-- --lista` para verlas) · `src/lib/arnes/` | nada: solo lee | Los **13** prompts, no solo el recepcionista. `fixtures.ts` (entradas sintéticas: el repo es público), `registro.ts` (familias) y `jueces.ts` (varas puras, corren en `npm test`). ⚠ **El prompt viene importado del módulo real** (`PROMPT_X: PromptDeclarado`), nunca copiado: un arnés que mide una copia da tranquilidad sin información. ⚠ **La corrida guarda la salida cruda y el juicio se calcula al reportar**, así que refinar un juez no cuesta ni una llamada. ⚠ **No hay `--todo`**: las seis del razonador son ~20 min y media cuota diaria. |
+| **Las varas mecanizadas** | `src/lib/arnes/jueces.ts` | nada: puro | `pareceRotulo()` (el título tiene que ser una afirmación, no un rótulo), `numerosSinRespaldo()`, `estaContenido()`, `tonoDeAsistente()`. ⚠ **El chequeo de números es opt-in por familia**: donde el prompt pide proponer —horas de un presupuesto, una consigna— un número nuevo es lo correcto, y aplicarlo ahí da rojos permanentes. ⚠ **`pareceRotulo` no se le aplica a `extraccion`**: ahí el modelo transcribe lo que Beno vivió, y su juez falla al revés, por descartar de más. |
+| **La deriva documental** | `npm run verificar:doc` · `src/lib/deriva/` · `tests/deriva.test.mts` | nada | Cruza los números que la doc afirma contra el código: módulos `server-only`, tools del conector, destinos, valores de los enums, `VERSION_RESPALDO`. ⚠ **Que la regex no matchee es TAMBIÉN una falla**, o el chequeo se apagaría solo al reescribir un párrafo. ⚠ Solo documentos **vivos** (AGENTS.md y este): los specs y los planes dicen lo que era cierto ese día. ⚠ Solo números **derivables del código**: un tiempo de reloj medido contra Groq no entra. |
 
 ---
 

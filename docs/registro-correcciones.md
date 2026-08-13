@@ -8,18 +8,35 @@
 > producto (con datos reales del usuario y una tool `escribir_bitacora` que escribe en firme).
 > Esto otro es el historial de bugs y correcciones del desarrollo.
 
-## Estado actual (2026-08-12)
+## Estado actual (2026-08-13)
 
 **En producción no hay bugs conocidos abiertos.** La app sigue con las tres pantallas de balance
 diciendo el mismo número y el invariante `suma(por proyecto) === balance general` cerrando exacto
 en ARS y en USD. Verificado el 2026-08-12 corriendo el código de prorrateo de la app: general
 **$302.411**, Proder $469.472, Gentius −$12.333, El Prode de Beno −$154.728.
 
-**Desde el 2026-08-12 este documento dejó de ser la única red.** Hay `npm test` (30 casos, ninguno
-toca Groq ni la base) y `npm run medir:recepcionista`, que dispara el banco de frases contra el
-modelo y tabula destino, confianza, literalidad del argumento y **oscilación entre corridas**. El
-piso da **11/11 en verde**. Lo que antes se descubría usando la app y se anotaba acá, ahora en
-buena parte lo agarra un comando.
+**Desde el 2026-08-12 este documento dejó de ser la única red, y el 2026-08-13 dejó de depender de
+que alguien se acuerde de correrla.** Hay `npm test` (69 casos, ninguno toca Groq ni la base) y
+`npm run medir:recepcionista`, que tabula destino, confianza, literalidad del argumento y
+**oscilación entre corridas**; el piso da **11/11 en verde**. Ahora además: `npm run medir
+<familia>` mide **los trece prompts** y no solo el recepcionista, `npm run verificar:doc` cruza los
+números que la documentación afirma contra el código, y **`.githooks/pre-commit` corre `npm test`
+antes de cada commit**. Lo que antes se descubría usando la app y se anotaba acá, ahora en buena
+parte lo agarra un comando que corre solo.
+
+⚠ **El hallazgo del 2026-08-13, y es el mismo de siempre visto desde el otro lado.** Las trece
+familias del arnés dieron **13/13 en verde con 42 llamadas reales**, y aun así la corrida encontró
+cinco cosas: **cuatro eran de los jueces y una de una fixture, ninguna de un prompt.** Dos títulos
+que son afirmaciones discutibles se marcaban como rótulos, un porcentaje calculado se marcaba como
+invención, y un PNG de 1×1 se comió tres HTTP 400. La lección: **un arnés recién escrito mide su
+propia calibración antes que la del sistema**, y eso solo se ve corriéndolo. El corolario de
+diseño quedó en el código —la corrida guarda la salida cruda y el juicio se calcula al reportar,
+así que refinar un juez no cuesta ni una llamada—.
+
+⚠ **Y el linter de deriva nació con cuatro rojos**, todos ciertos: AGENTS.md decía **11 módulos
+`server-only` cuando eran 15**, 11 prompts cuando eran 13, `VERSION_RESPALDO` en 3 cuando vale 4, y
+el corredor decía "~32 min" donde el manual decía ~50. Ninguno se veía leyendo; los cuatro son
+números que viven en dos lados.
 
 ⚠ **El hallazgo metodológico de esta jornada:** de los cinco defectos registrados abajo, **cuatro
 los encontró la ejecución de un plan que se había escrito midiendo** — incluido un test escrito
@@ -74,6 +91,38 @@ el `SUPABASE_ACCESS_TOKEN`, que tiene Beno.
 
 ## Historial
 
+- **2026-08-13 — Dictar el subconjunto no era "falta una feature": ensuciaba el histórico.** Medido
+  antes de construirlo, `"-15000 hosting compartido entre Proder y Gentius"` dejaba
+  `descripcion: "hosting compartido entre Proder y Gentius"`. Esa columna alimenta
+  `descripcion_normalizada`, o sea toda la sugerencia de categoría por histórico (regla 6.c): el
+  daño no era la ausencia de la feature, era el gasto quedando cargado con basura adentro. Por eso
+  la cola se parte **antes** de la extracción.
+- **2026-08-13 — El server encontró un caso que los tests unitarios no.** Con la fecha **después**
+  de la cola (`"…y Gentius 13/08"`) el último tramo no resolvía a ningún proyecto y —por la
+  condición de todo-o-nada— no se activaba nada: el reparto se perdía y la fecha se quedaba adentro
+  de la descripción. Las cinco frases telegráficas reales de Beno tienen la fecha al final, así que
+  ahora se rescata. Trece tests puros pasaban y el caso apareció recién contra el server real.
+- **2026-08-13 — Cuatro afirmaciones falsas en la propia documentación, encontradas por un linter
+  que se escribió para eso.** 15 módulos `server-only` donde decía 11, 13 prompts donde decía 11,
+  `VERSION_RESPALDO` en 4 donde lo último escrito era 3, y el costo de `--todo`. El chequeo que las
+  atrapa tiene una propiedad que vale más que la lista: **que su regex no matchee también es una
+  falla**, o se apagaría solo la primera vez que alguien reescriba el párrafo.
+- **2026-08-13 — El chequeo de números inventados marcaba en rojo el trabajo bien hecho.** Aplicado
+  a toda salida, marcó un `"60,7 %"` de las observaciones —que es `981.400 / 1.615.900`, o sea
+  exactamente el cruce que el prompt pide— y dos números propuestos en una consigna y en una
+  lección. Pasó a ser **opt-in por familia**, con el texto que cada prompt promete apoyar en los
+  datos. La regla que queda: **un arnés con rojos permanentes entrena a ignorar el rojo**, así que
+  un juez que no distingue proponer de afirmar es peor que no tenerlo.
+- **2026-08-13 — La vara del título confundía el arranque con el predicado.** `pareceRotulo()`
+  marcaba `"Priorizar infraestructura sobre desarrollo externo no garantiza rentabilidad"` y
+  `"Documentar el impacto de cada cambio en horas evita negociaciones largas"`: las dos arrancan con
+  un infinitivo de consejo y las dos **afirman algo discutible**, que es lo que el prompt pide. Lo
+  que distingue a un rótulo no es cómo empieza sino que no trae predicado. Los dos títulos entraron
+  al corpus del test.
+- **2026-08-13 — La fixture de la captura era una imagen que Groq no acepta.** El PNG mínimo de 1×1
+  devolvió tres `HTTP 400: "Image must have at least 2 pixels in each dimension"`. Ahora es ruido de
+  64×64 con semilla fija, generado en código: sin dependencias, sin binarios en el repo y sin que el
+  ruido cambie entre corridas —que mezclaría la inestabilidad del modelo con la de la entrada—.
 - **2026-08-12 — Se commiteó `banco.ts` roto porque la verificación estaba detrás de un pipe.**
   El commit se encadenó con `npm run typecheck | tail && git commit`, y el pipe devuelve el exit
   code de `tail`, no el de `tsc`: el chequeo pasaba siempre. Arreglado en `033b0fd`. Regla que

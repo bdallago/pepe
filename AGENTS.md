@@ -43,11 +43,21 @@ npm run dev        # desarrollo
 npm run build      # build de producción (baja el modelo si falta)
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
+npm test           # los tests puros: ~1,4 s, ninguno toca Groq ni la base
+
+npm run verificar:doc         # deriva documental: doc vs. código (§7.c)
+npm run medir -- --lista      # las familias del arnés de prompts (§7.b)
+npm run medir <familia>       # mide una contra Groq, retomable
+npm run medir:recepcionista   # el piso del recepcionista, aparte (§9)
 
 npm run descargar:modelo      # pesos del modelo de embeddings (266 MB)
 npm run backfill:embeddings   # embeddings faltantes, por lotes y retomable
 npm run import:colmena        # importador de la app de estudio (histórico)
 ```
+
+`npm test` corre solo antes de cada commit (`.githooks/pre-commit`, lo
+engancha `npm install`). La salida de emergencia es
+`git commit --no-verify`.
 
 Para aplicar migraciones y regenerar tipos hace falta el access token de
 Supabase (`SUPABASE_ACCESS_TOKEN=sbp_…`, lo tiene Beno):
@@ -65,8 +75,16 @@ lo parchees en el archivo generado —se pierde en la próxima corrida—:
 pasá `?? undefined` en el call site, que omite el parámetro y deja que
 Postgres aplique su default.
 
-No hay suite de tests versionada. Antes de dar algo por terminado, corré
-`npm run typecheck && npm run lint && npm run build`.
+Los tests versionados son **puros**: ninguno toca Groq ni la base, y por
+eso corren en el pre-commit. Lo que no cubren —que compile, que lintee y
+que buildee— sigue siendo a mano: antes de dar algo por terminado, corré
+`npm test && npm run typecheck && npm run lint && npm run build`.
+
+⚠ **`npm test` corre SIN `--conditions=react-server`, y es a propósito.**
+Eso lo convierte además en la garantía de que los módulos de dominio —los
+que el MCP tiene que poder importar, §8— no arrastren nada de Next: si
+alguno empieza a depender de un `server-only`, los tests dejan de correr.
+Por eso el registro del arnés trae los prompts con un import **dinámico**.
 
 Para probar las pantallas privadas hace falta una sesión, y la app entra
 **solo con Google OAuth**, así que no se puede automatizar el login. La
@@ -652,6 +670,117 @@ discreto y no interrumpe el flujo.
 
 Lo mismo vale para el buscador: si el embedding falla o tarda, la
 búsqueda responde igual solo con full-text y **eso no es un error**.
+
+### 7.b El arnés de los prompts
+
+Desde el 2026-08-13 los trece prompts tienen red, no solo el
+recepcionista. Vive en `src/lib/arnes/` y se corre con
+`npm run medir <familia>`.
+
+**Las tres piezas son las mismas que ya funcionaron una vez** —datos,
+juicio puro, corredor— y por eso el archivo que las nombra dice de cuál
+es hermano cada una:
+
+| Pieza | Qué |
+|---|---|
+| `arnes/fixtures.ts` | Las entradas. **Sintéticas: el repo es público** y la bitácora real de Beno está gitignoreada justamente por eso |
+| `arnes/registro.ts` | Las trece familias: qué prompt, qué caso, qué juez |
+| `arnes/jueces.ts` | Las varas mecanizadas, **puras y gratis** |
+| `scripts/medir.mts` | El corredor: retomable, tres corridas por caso |
+| `docs/dev/lineas-base/*.json` | El "antes" commiteado, uno por familia |
+
+#### Las tres propiedades que lo hacen servir
+
+**1. El prompt se declara una vez y lo usan los dos.** Cada módulo
+exporta `PROMPT_X: PromptDeclarado<T>` —todo lo que recibe
+`completarJSON` menos el dato concreto— y **su propio call site lo
+consume**: `completarJSON({ ...PROMPT_X, usuario })`. Si el arnés tuviera
+su propia copia mediría un prompt que nadie ejecuta: tranquilidad sin
+información, que es peor que no medir.
+
+**2. Los jueces corren en `npm test`, sin tocar Groq.** Es la mitad que
+más compra. `pareceRotulo()` cobra la vara del título —escrita **tres
+veces** en este archivo y nunca verificada—; `numerosSinRespaldo()` ataca
+lo único que está medido de la retro, que confabula más.
+
+**3. La corrida guarda la salida cruda y el juicio se calcula al
+reportar.** Refinar un juez no cuesta ni una llamada: se vuelve a correr
+`npm run medir` y re-juzga lo que ya está guardado.
+
+#### El chequeo de números es opt-in, y eso se midió
+
+⚠ **`numerosSinRespaldo` NO se aplica a toda salida.** La primera corrida
+real lo tenía global y produjo tres rojos que eran del juez: un `"60,7 %"`
+de las observaciones —que es `981.400 / 1.615.900`, o sea lo que el
+prompt **pide**—, y dos números de una consigna y de una lección, donde
+**proponer un número nuevo es la respuesta correcta**. Cada familia dice
+qué texto suyo tiene que apoyarse en la entrada. Aplicarlo donde el prompt
+propone da rojos permanentes, y **un arnés con rojos permanentes entrena a
+ignorar el rojo**.
+
+Por lo mismo, la vara del título **no se le aplica a `extraccion`**: ahí
+el modelo reescribe lo que Beno vivió (§6), no produce afirmaciones. Su
+juez falla al revés — se queja si **descarta** de más.
+
+#### Lo que cuesta medir, y por qué es de a una familia
+
+Medido el 2026-08-13 corriendo las trece: **42 llamadas**. El razonador
+entra ~1 por minuto (reserva ~5000 tokens contra un techo de 7300) y
+tiene techo diario de 200 000; el chico entra de a dos o tres. Las seis
+del razonador son ~20 minutos de reloj. **No hay `--todo` a propósito**:
+dispararlas todas juntas se come el cupo del día y deja la app sin retro
+ni presupuestos.
+
+⚠ **Un prompt nuevo sin familia rompe `npm test`.** El test de
+completitud cruza los `SISTEMA*` del repo contra el registro, así que el
+pre-commit no deja entrar un prompt sin red.
+
+⚠ **El recepcionista delega y no duplica.** Su banco juzga destino,
+confianza y argumento, que es más específico que cualquier cosa que se
+pueda escribir en el registro genérico. `npm run medir:recepcionista`
+sigue siendo el suyo.
+
+### 7.c El linter de deriva documental y el hook
+
+**El problema, con siete casos ya ocurridos.** Este archivo negó el techo
+de 30 pedidos/minuto de Groq durante **dos días**; afirmó que los
+adjuntos no se respaldaban durante uno; el plan de pruebas publicado tuvo
+tres números viejos; el manual decía ~32 minutos cuando eran ~50. Y
+escribiendo el spec del 2026-08-13 aparecieron cuatro más: **15 módulos
+`server-only` donde decía 11**, 13 prompts donde decía 11,
+`VERSION_RESPALDO` en 4 donde lo último escrito era 3, y el `~32 min` del
+corredor.
+
+Nadie miente: **el código cambia y la prosa se queda.** Siempre es un
+número que vive en dos lados.
+
+`src/lib/deriva/` lo cruza: `hechos.ts` mide el código,
+`afirmaciones.ts` es la tabla de qué documento dice qué, y
+`verificar.ts` compara. Corre en `npm test` y a mano con
+`npm run verificar:doc`.
+
+Cuatro decisiones que no son obvias:
+
+1. ⚠ **Que la regex no matchee es TAMBIÉN una falla.** Es lo que sostiene
+   todo: un chequeo que deja de encontrar su línea porque alguien
+   reescribió el párrafo se apagaría solo y en silencio.
+2. **Solo se lintean los documentos vivos** (este archivo y los manuales).
+   Los specs, los planes y el registro de correcciones dicen lo que era
+   cierto ese día: lintearlos obligaría a reescribir el pasado.
+3. **Solo números derivables del código.** Un tiempo de reloj medido
+   contra Groq no sale de ningún archivo. Los techos de la tabla de §6.b
+   tampoco: esos son de la documentación de Groq y los de
+   `TOKENS_POR_MINUTO` son nuestro margen.
+4. **Nada que solo crezca sin causar una acción equivocada.** La cantidad
+   de tests no entra: obligaría a editar prosa en cada commit y su lugar
+   natural es la salida de `npm test`.
+
+Y el que hace que todo esto corra sin que nadie se acuerde:
+**`.githooks/pre-commit`**, que corre `npm test` (~1,4 s medidos) y lo
+engancha `"prepare"` con `git config core.hooksPath`, sin husky. **Solo
+los tests**: `typecheck`, `lint` y `build` son minutos, y un pre-commit
+de minutos se termina saltando siempre con `--no-verify` —que sigue
+siendo la salida de emergencia—.
 
 ### 8. El MCP se construye en dos tiempos, y el corte está en quién escribe
 

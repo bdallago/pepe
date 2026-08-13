@@ -40,25 +40,44 @@ estado y el resumen de una o dos líneas por corrección.
 
 ## Lo que se verifica solo
 
-Desde el 2026-08-12 hay dos comandos que reemplazan trabajo que antes se
-hacía a mano y se olvidaba:
+Desde el 2026-08-12, y bastante más desde el 2026-08-13, hay comandos que
+reemplazan trabajo que antes se hacía a mano y se olvidaba:
 
 ```bash
-npm test                        # 30 casos puros, ninguno toca Groq ni la base
+npm test                        # los casos puros: ninguno toca Groq ni la base
+npm run verificar:doc           # la doc contra el código, ~1 s y cero tokens
+
 npm run medir:recepcionista     # el piso del recepcionista, ~11 min
-npm run medir:recepcionista -- --todo   # el corpus entero, ~50 min
+npm run medir:recepcionista -- --todo   # el corpus entero (29 frases), ~50 min
+
+npm run medir -- --lista        # las 13 familias de prompt y lo que cuestan
+npm run medir retro             # una familia contra Groq, retomable
 ```
 
-El segundo es el que importa antes de tocar el prompt del recepcionista,
-que tiene **cuatro incidentes medidos** de romperse por agregarle texto.
-El banco de frases vive en `src/lib/agentes/banco.ts` y la línea base
-commiteada en [`dev/recepcionista-linea-base.json`](dev/recepcionista-linea-base.json),
+**Y desde el 2026-08-13 `npm test` corre solo antes de cada commit**
+(`.githooks/pre-commit`, lo engancha `npm install`; la salida de
+emergencia es `git commit --no-verify`). Adentro va el linter de deriva
+documental, así que eso es también lo único que impide commitear
+documentación que afirma números que el código desmiente. Nació
+encontrando cuatro.
+
+`medir:recepcionista` es el que importa antes de tocar el prompt del
+recepcionista, que tiene **cuatro incidentes medidos** de romperse por
+agregarle texto. El banco de frases vive en `src/lib/agentes/banco.ts` y la
+línea base commiteada en [`dev/recepcionista-linea-base.json`](dev/recepcionista-linea-base.json),
 así que el diff de un PR muestra qué confianzas se movieron. **Oscilar
 entre corridas cuenta como fallar**: el modelo no es determinístico ni con
 `temperatura: 0`.
 
 Tarda porque tiene que tardar: el limitador de Groq deja pasar **2
 llamadas por minuto**. La llamada en sí son 653 ms.
+
+`medir` es el hermano genérico, para los otros doce prompts: mismo corte
+—banco, juez puro, corredor retomable— con las líneas base en
+[`dev/lineas-base/`](dev/lineas-base/). **De a una familia por vez**: las
+seis del razonador juntas son ~20 minutos y media cuota diaria. Lo que
+corre gratis y en cada commit son sus **jueces**, que es donde vive la
+mitad que más sirve.
 
 **Tampoco hay índice estructural generado.** Con `rg` sobre `src/` alcanza:
 el vocabulario del repo es dominio en castellano, donde el match exacto
