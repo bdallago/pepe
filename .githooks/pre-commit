@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# Corre los tests puros antes de cada commit.
+#
+# Son ~1,4 segundos medidos y ninguno toca Groq ni la base, así que el
+# costo es invisible. Adentro va también el linter de deriva documental
+# (`tests/deriva.test.mts`), así que esto es lo único que impide commitear
+# documentación que afirma números que el código desmiente.
+#
+# ⚠ **Solo `npm test`, a propósito.** `typecheck`, `lint` y `build` son
+# minutos: un pre-commit de minutos se termina saltando siempre con
+# --no-verify, y entonces la red no existe. El trío completo se sigue
+# corriendo a mano antes de dar algo por terminado, como dice AGENTS.md.
+#
+# Salida de emergencia: git commit --no-verify
+echo "→ npm test (pre-commit)"
+
+if ! npm test --silent; then
+  echo ""
+  echo "✗ Los tests no pasan, así que no commiteo."
+  echo "  Si esto es a propósito: git commit --no-verify"
+  exit 1
+fi
