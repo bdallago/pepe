@@ -217,6 +217,55 @@ Y `memoParticipaciones()` **keyea por fecha + subconjunto ordenado**. Con
 la fecha sola, el primer compartido de un día dejaba cacheado su reparto
 y todos los demás de ese día se lo comían.
 
+#### 2.c Se puede dictar, y sin tocar el prompt del recepcionista
+
+Desde el 2026-08-13 el subconjunto no se elige solo tildando casillas:
+`"-15000 hosting compartido entre Proder y Gentius"` por la caja, y
+`compartido_entre: ["proder", "gentius"]` en `registrar_movimiento` por el
+conector.
+
+**Lo que hay que saber para no romperlo está en `agentes/subconjunto.ts`,
+y son dos condiciones:**
+
+1. ⚠ **Si no resuelven TODOS los nombres, no se toca nada** — ni el texto
+   ni los ids. El peor caso de un error ahí es que la feature no se active
+   y Beno tilde las casillas a mano, nunca una descripción rota ni un
+   gasto repartido entre proyectos que no nombró.
+2. **Mínimo dos**, igual que el formulario, el schema y los triggers.
+
+**No arreglaba "falta una feature": arreglaba un daño.** Medido el
+2026-08-13, antes de que existiera, esa frase dejaba
+`descripcion: "hosting compartido entre Proder y Gentius"`. Esa columna
+alimenta `descripcion_normalizada` y con ella toda la sugerencia de
+categoría por histórico (regla 6.c), así que **dictar el reparto
+ensuciaba el histórico de ese gasto para siempre.** Por eso la cola se
+parte **antes** de `leerMovimiento()`, y ese orden es la mitad de la
+feature.
+
+**El prompt del recepcionista no se tocó, y eso bajó el costo de medio a
+bajo.** `"compartido entre A y B"` es léxico y mecánico —una preposición
+fija y dos nombres que se buscan en tres filas—, o sea el caso más claro
+de la regla de §9. El destino sigue siendo `movimientos`; lo único que
+cambia es cómo se parte el argumento. Sin tocar el prompt no hubo que
+medir el piso antes y después.
+
+⚠ **Y no es un tercer atajo de `atajo.ts`.** Un atajo decide **el
+destino** sin llamar al modelo, y siguen siendo dos. Esto no decide
+ningún destino: parte un argumento, como `partirArgumento()` y
+`textoDelMovimiento()`.
+
+Dos detalles que salieron de medir contra el server real:
+
+- **La fecha se rescata de la cola.** Las cinco frases telegráficas
+  reales tienen la fecha al final, así que
+  `"…compartido entre Proder y Gentius 13/08"` es plausible: sin el
+  rescate, `"Gentius 13/08"` no resolvía, no se activaba nada y la fecha
+  se quedaba adentro de la descripción. Solo el formato en números —un
+  `"…y Gentius ayer"` no se rescata, porque `"ayer"` podría ser parte de
+  un nombre—.
+- **Con subconjunto declarado no se pregunta de qué proyecto es.** Ya
+  está contestado, y con más precisión que la pregunta.
+
 ### 3. Moneda de origen vs. derivada
 
 El formulario muestra ARS y USD a la vez. El campo que se escribe define
@@ -781,6 +830,7 @@ esa ya es la carga rápida de movimientos).
 | `agentes/despacho.ts` | Un `case` por destino, cáscara sobre lo que ya existe |
 | `agentes/resolver.ts`, `rango.ts`, `fechas.ts`, `movimientos.ts` | Resolución **determinística**: proyectos, tracks, rangos, fechas, el formato telegráfico |
 | `agentes/proyectos.ts` | Qué se le pide a un proyecto y con qué fechas, determinístico |
+| `agentes/subconjunto.ts` | `"… compartido entre A y B"` → texto limpio + ids. **No es un atajo**: no decide destino (ver §2.c) |
 
 ⚠ **`bitacora` era el sumidero de todo lo que la app no sabe hacer**, y eso
 se descubrió usándolo el 2026-08-10. Tiene el gancho léxico más ancho

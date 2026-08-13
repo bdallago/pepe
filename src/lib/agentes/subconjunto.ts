@@ -67,6 +67,22 @@ const COLA =
 /** Cuántos caracteres tiene que tener un tramo para intentar el match parcial. */
 const MINIMO_PARA_PARCIAL = 3;
 
+/**
+ * Una fecha en números al final, del estilo telegráfico de Beno.
+ *
+ * ⚠ **Existe porque la cola se puede escribir DESPUÉS de la fecha**, y las
+ * cinco frases telegráficas reales tienen la fecha al final:
+ * `"-15000 hosting compartido entre Proder y Gentius 13/08"`. Sin esto, el
+ * último tramo sería `"Gentius 13/08"`, no resolvería a ningún proyecto y
+ * —por la condición de todo-o-nada— **no se activaría nada**: el reparto se
+ * perdería y la fecha se quedaría adentro de la descripción, que es
+ * justamente el daño que este archivo viene a evitar.
+ *
+ * Solo el formato en números. Un `"…y Gentius ayer"` no se rescata, y está
+ * bien que no: `"ayer"` es una palabra y podría ser parte de un nombre.
+ */
+const FECHA_AL_FINAL = /\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s*$/;
+
 export function partirSubconjunto(
   texto: string,
   proyectos: readonly (Nombrado & { id: string })[],
@@ -76,10 +92,24 @@ export function partirSubconjunto(
   const encontrado = texto.match(COLA);
   if (!encontrado) return sinCambios;
 
-  const ids = resolverLista(encontrado[1]!, proyectos);
+  const antes = texto.slice(0, encontrado.index!).trim();
+  const cola = encontrado[1]!;
+
+  const directo = resolverLista(cola, proyectos);
+  if (directo !== null && directo.length >= 2) {
+    return { texto: antes, ids: directo };
+  }
+
+  // Segundo intento: la fecha se colgó del último proyecto. Se la saca de la
+  // cola y se la devuelve al final del texto, donde `leerTelegrafico()` la
+  // busca.
+  const conFecha = cola.match(FECHA_AL_FINAL);
+  if (!conFecha) return sinCambios;
+
+  const ids = resolverLista(cola.slice(0, conFecha.index!), proyectos);
   if (ids === null || ids.length < 2) return sinCambios;
 
-  return { texto: texto.slice(0, encontrado.index!).trim(), ids };
+  return { texto: `${antes} ${conFecha[1]}`.trim(), ids };
 }
 
 /**

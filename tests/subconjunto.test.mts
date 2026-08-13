@@ -140,6 +140,40 @@ test("resuelve por slug y por nombre corto, sin tildes ni mayúsculas", () => {
   );
 });
 
+/**
+ * Las cinco frases telegráficas reales de Beno tienen la fecha al final, así
+ * que la cola bien puede quedar después. Sin el rescate, el último tramo
+ * sería `"Gentius 13/08"`, no resolvería y —por la condición de todo o
+ * nada— no se activaría nada: el reparto se perdería **y** la fecha se
+ * quedaría adentro de la descripción.
+ */
+test("la fecha colgada del último proyecto se rescata", () => {
+  const r = partirSubconjunto(
+    "-15000 hosting compartido entre Proder y Gentius 13/08",
+    PROYECTOS,
+  );
+  assert.equal(r.texto, "-15000 hosting 13/08");
+  assert.deepEqual(r.ids, ["p3", "p2"]);
+});
+
+test("la fecha rescatada anda con las tres formas de escribirla", () => {
+  for (const fecha of ["6/8", "06/08", "06/08/26", "06/08/2026"]) {
+    const r = partirSubconjunto(
+      `-20usd Claude Code compartido entre Proder y Gentius ${fecha}`,
+      PROYECTOS,
+    );
+    assert.equal(r.texto, `-20usd Claude Code ${fecha}`, fecha);
+    assert.deepEqual(r.ids, ["p3", "p2"], fecha);
+  }
+});
+
+test("sin fecha rescatable, un nombre que no resuelve sigue sin activar nada", () => {
+  const frase = "-15000 hosting compartido entre Proder y Gentius ayer";
+  const r = partirSubconjunto(frase, PROYECTOS);
+  assert.equal(r.texto, frase);
+  assert.deepEqual(r.ids, []);
+});
+
 test("una frase telegráfica entera, que es el caso real", () => {
   const r = partirSubconjunto(
     "-15000 hosting compartido entre Proder y Gentius",
