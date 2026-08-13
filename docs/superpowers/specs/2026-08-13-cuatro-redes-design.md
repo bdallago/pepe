@@ -1,5 +1,38 @@
 # Las cuatro redes que faltan — diseño
 
+> ✅ **EJECUTADO Y VERIFICADO el 2026-08-13**, las cuatro etapas. El plan es
+> `../plans/2026-08-13-cuatro-redes.md`.
+>
+> **Lo que la ejecución encontró y este spec no preveía:**
+>
+> 1. **El arnés midió su propia calibración antes que la de los prompts.**
+>    13/13 familias en verde con 42 llamadas reales, y aun así cinco
+>    hallazgos: **cuatro de los jueces y uno de una fixture, ninguno de un
+>    prompt.** `pareceRotulo()` confundía el arranque con el predicado
+>    —marcaba dos títulos que son afirmaciones discutibles—, el chequeo de
+>    números marcaba un porcentaje calculado que es justo lo que el prompt
+>    pide, y el PNG de 1×1 de la fixture se comió tres HTTP 400.
+> 2. **De ahí salió la decisión de diseño que este spec no tenía**: la
+>    corrida guarda **la salida cruda** y el juicio se calcula al reportar,
+>    así que refinar un juez no cuesta ni una llamada. Las seis familias del
+>    razonador se volvieron a juzgar gratis.
+> 3. **El chequeo de números tuvo que dejar de ser global.** Donde el prompt
+>    pide proponer —horas de un presupuesto, una consigna— un número nuevo
+>    es la respuesta correcta. Un arnés con rojos permanentes entrena a
+>    ignorar el rojo.
+> 4. **La etapa D tenía un caso que los tests unitarios no veían**: con la
+>    fecha después de la cola (`"…y Gentius 13/08"`) no se activaba nada y
+>    la fecha quedaba adentro de la descripción. Apareció recién contra el
+>    server real.
+> 5. **El linter necesitó aplanar los espacios antes de matchear.** Toda la
+>    doc está cortada a mano a 72 columnas, así que cualquier frase puede
+>    partirse en cualquiera de sus espacios; sin eso daba falsos
+>    "sin-match".
+>
+> Lo que el spec sí anticipó bien: que la etapa D **no necesitaba tocar el
+> prompt del recepcionista**, y por eso no hubo que medir el piso ni antes
+> ni después.
+
 Cuatro cosas que quedaron ofrecidas el 2026-08-12 y que Beno pidió hacer
 juntas el 2026-08-13. No son cuatro features: son **cuatro redes**. Ninguna
 agrega una pantalla; las cuatro hacen visible algo que hoy falla en
