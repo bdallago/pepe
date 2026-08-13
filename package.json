@@ -15,6 +15,7 @@
     "import:colmena": "node --experimental-strip-types scripts/importar-colmena.ts",
     "typecheck": "tsc --noEmit",
     "verificar:doc": "tsx --conditions=react-server scripts/verificar-doc.mts",
+    "revisar:uso": "tsx scripts/revisar-uso.mts",
     "test": "tsx --test \"tests/**/*.test.mts\"",
     "mcp": "tsx mcp/servidor.mts"
   },

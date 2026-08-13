@@ -11,6 +11,7 @@ import {
 } from "@/lib/agentes/tipos";
 import { hayModeloConfigurado, mensajeDeErrorLLM } from "@/lib/llm";
 import { createClient, getUser } from "@/lib/supabase/server";
+import { registrarUso, type DecisionRegistrada } from "@/lib/uso";
 
 /**
  * La puerta de entrada de los agentes.
@@ -59,6 +60,7 @@ const cuerpoSchema = z
   });
 
 export async function POST(request: NextRequest) {
+  const arranque = Date.now();
   const user = await getUser();
   if (!user) {
     return NextResponse.json({ error: "Sesión no encontrada." }, { status: 401 });
@@ -71,6 +73,39 @@ export async function POST(request: NextRequest) {
 
   const { frase, destino, argumento, adjuntos, confirmado } = parseado.data;
   const supabase = await createClient();
+
+  /**
+   * Registra y contesta, en un solo lugar.
+   *
+   * Existe para que **las cuatro salidas de este handler queden
+   * loggeadas** —los adjuntos, el modelo caído, la respuesta buena y el
+   * error— sin repetir la llamada cuatro veces. Una salida sin log es una
+   * interacción que después no se puede revisar, y son justo las salidas
+   * raras las que más interesa mirar.
+   *
+   * `registrarUso` nunca lanza, así que esto no puede romper la respuesta.
+   */
+  const responder = async (
+    respuesta: RespuestaAgente,
+    extra: { decisiones?: DecisionRegistrada[]; error?: string } = {},
+  ) => {
+    await registrarUso(supabase, user.id, {
+      superficie: "caja",
+      pedido: frase,
+      entrada: {
+        frase,
+        ...(destino ? { destino } : {}),
+        ...(argumento ? { argumento } : {}),
+        ...(confirmado ? { confirmado } : {}),
+        ...(adjuntos?.length ? { adjuntos: adjuntos.length } : {}),
+      },
+      salida: respuesta,
+      duracionMs: Date.now() - arranque,
+      ...extra,
+    });
+
+    return NextResponse.json(respuesta);
+  };
 
   // Con adjunto **no se llama al recepcionista**: que haya un archivo es
   // un hecho, no una interpretación, y el pase lo elige el MIME. El
@@ -88,21 +123,24 @@ export async function POST(request: NextRequest) {
         frase,
         adjuntos,
       );
-      return NextResponse.json(respuesta satisfies RespuestaAgente);
+      return await responder(respuesta satisfies RespuestaAgente);
     } catch (error: unknown) {
       console.error("[agentes] falló al recibir adjuntos:", error);
-      return NextResponse.json({
-        clase: "aviso",
-        titulo: "No pude registrar los archivos",
-        cuerpo: "Se subieron, pero no quedaron anotados. Probá de nuevo.",
-      } satisfies RespuestaAgente);
+      return await responder(
+        {
+          clase: "aviso",
+          titulo: "No pude registrar los archivos",
+          cuerpo: "Se subieron, pero no quedaron anotados. Probá de nuevo.",
+        } satisfies RespuestaAgente,
+        { error: error instanceof Error ? error.message : String(error) },
+      );
     }
   }
 
   // Sin modelo la app sigue entera en modo manual (regla 7). Acá eso
   // significa decirlo y no romper.
   if (!destino && !hayModeloConfigurado()) {
-    return NextResponse.json({
+    return await responder({
       clase: "aviso",
       titulo: "El modelo no está disponible",
       cuerpo: "Podés seguir usando la app normalmente desde el menú.",
@@ -122,13 +160,26 @@ export async function POST(request: NextRequest) {
     // Una frase puede pedir varias cosas. Se ejecutan en orden y las
     // fallas no se contagian; el porqué está en `cadena.ts`.
     const respuesta = await ejecutarCadena(supabase, user.id, frase, decisiones);
-    return NextResponse.json(respuesta);
+
+    return await responder(respuesta, {
+      // Sin esto el log diría **qué** contestó la app pero no **por qué**:
+      // una derivación equivocada se ve igual que una correcta con el
+      // argumento mal leído.
+      decisiones: decisiones.map((d) => ({
+        destino: d.destino,
+        argumento: d.argumento,
+        confianza: d.confianza,
+      })),
+    });
   } catch (error: unknown) {
     console.error("[agentes] falló:", error);
-    return NextResponse.json({
-      clase: "aviso",
-      titulo: "No pude procesar eso",
-      cuerpo: mensajeDeErrorLLM(error),
-    } satisfies RespuestaAgente);
+    return await responder(
+      {
+        clase: "aviso",
+        titulo: "No pude procesar eso",
+        cuerpo: mensajeDeErrorLLM(error),
+      } satisfies RespuestaAgente,
+      { error: error instanceof Error ? error.message : String(error) },
+    );
   }
 }

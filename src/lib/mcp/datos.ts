@@ -4,6 +4,7 @@ import { crearEntradaDeBitacora, type EntradaNueva } from "@/lib/bitacora";
 import { sugerirClasificacion, type Sugerencia } from "@/lib/clasificacion";
 import type { Database } from "@/lib/supabase/database.types";
 import { createAdminClient } from "@/lib/supabase/server";
+import { registrarUso, type PedidoDeUso } from "@/lib/uso";
 
 /**
  * El único acceso a la base que tienen las tools del conector MCP remoto.
@@ -214,6 +215,21 @@ export function datosDelUsuario(user_id: string) {
 
       if (error) throw new Error(`Falló la búsqueda: ${error.message}`);
       return (data ?? []).map((fila) => fila.id);
+    },
+
+    /**
+     * Anota en el log de uso qué tool se llamó y qué contestó.
+     *
+     * Es un método con nombre y no un `.cliente` expuesto, por lo que dice
+     * el bloque de arriba: **el cliente crudo no sale de este archivo**.
+     * Que esto tenga que aparecer acá para poder escribir una fila es el
+     * diseño funcionando, no un rodeo.
+     *
+     * `registrarUso` no lanza, así que un log caído no puede tumbar una
+     * tool que funcionaba.
+     */
+    registrarUso(pedido: Omit<PedidoDeUso, "superficie">) {
+      return registrarUso(admin, user_id, { ...pedido, superficie: "conector" });
     },
   };
 }

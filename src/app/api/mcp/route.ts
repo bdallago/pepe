@@ -8,6 +8,7 @@ import { registrarMovimientos } from "@/lib/mcp/tools/movimientos";
 import { registrarNotas } from "@/lib/mcp/tools/notas";
 import { registrarPresupuestos } from "@/lib/mcp/tools/presupuestos";
 import { registrarProyectos } from "@/lib/mcp/tools/proyectos";
+import { conLog } from "@/lib/mcp/registro-de-uso";
 import { verificarAccessToken } from "@/lib/oauth/almacen";
 import { RUTA_MCP } from "@/lib/oauth/protocolo";
 
@@ -106,13 +107,27 @@ async function verificarBearer(
 
 const handler = createMcpHandler(
   (server) => {
-    registrarProyectos(server);
-    registrarMovimientos(server);
-    registrarBalance(server);
-    registrarLecciones(server);
-    registrarBitacora(server);
-    registrarNotas(server);
-    registrarPresupuestos(server);
+    /*
+      ⚠ **El `conLog()` va acá y en ningún otro lado.** Envolviendo el
+      server una sola vez, cada tool deja su fila en `agent_log` **por
+      existir**: una tool nueva queda registrada sin que nadie se acuerde,
+      que es lo contrario de once llamadas repetidas donde una se puede
+      olvidar en silencio.
+
+      Y es la superficie que más importa loguear: qué tool elige Claude
+      ante una frase no lo decide ningún código nuestro —lo decide el
+      modelo del otro lado, leyendo las descripciones—, así que la única
+      forma de verlo es anotando qué llamó y con qué argumentos.
+    */
+    const conRegistro = conLog(server);
+
+    registrarProyectos(conRegistro);
+    registrarMovimientos(conRegistro);
+    registrarBalance(conRegistro);
+    registrarLecciones(conRegistro);
+    registrarBitacora(conRegistro);
+    registrarNotas(conRegistro);
+    registrarPresupuestos(conRegistro);
   },
   {
     // Sin esto el servidor se presenta como "mcp-typescript server on

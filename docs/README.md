@@ -46,6 +46,7 @@ reemplazan trabajo que antes se hacía a mano y se olvidaba:
 ```bash
 npm test                        # los casos puros: ninguno toca Groq ni la base
 npm run verificar:doc           # la doc contra el código, ~1 s y cero tokens
+npm run revisar:uso             # qué le pediste a la app y qué contestó
 
 npm run medir:recepcionista     # el piso del recepcionista, ~11 min
 npm run medir:recepcionista -- --todo   # el corpus entero (29 frases), ~50 min
@@ -78,6 +79,19 @@ llamadas por minuto**. La llamada en sí son 653 ms.
 seis del razonador juntas son ~20 minutos y media cuota diaria. Lo que
 corre gratis y en cada commit son sus **jueces**, que es donde vive la
 mitad que más sirve.
+
+`revisar:uso` es lo que cierra el círculo del otro lado: **lo que medís vos
+usando la app**. Cada frase que le tirás a la caja y cada tool que llama
+Claude por el conector dejan una fila con la entrada, la salida, cuánto
+tardó y —lo que más importa— **qué destino eligió el recepcionista y con
+qué confianza**. La misma fila lleva el veredicto, así que revisar no es
+escribir un documento aparte que en dos semanas nadie sabe si está al día:
+
+```bash
+npm run revisar:uso                                   # lo que falta mirar
+npm run revisar:uso -- --ver <id>                     # una entera
+npm run revisar:uso -- --id <id> --veredicto defecto --nota "…"
+```
 
 **Tampoco hay índice estructural generado.** Con `rg` sobre `src/` alcanza:
 el vocabulario del repo es dominio en castellano, donde el match exacto

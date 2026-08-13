@@ -46,6 +46,7 @@ npm run typecheck  # tsc --noEmit
 npm test           # los tests puros: ~1,4 s, ninguno toca Groq ni la base
 
 npm run verificar:doc         # deriva documental: doc vs. código (§7.c)
+npm run revisar:uso           # qué se le pidió a la app y qué contestó (§7.b.2)
 npm run medir -- --lista      # las familias del arnés de prompts (§7.b)
 npm run medir <familia>       # mide una contra Groq, retomable
 npm run medir:recepcionista   # el piso del recepcionista, aparte (§9)
@@ -740,6 +741,58 @@ confianza y argumento, que es más específico que cualquier cosa que se
 pueda escribir en el registro genérico. `npm run medir:recepcionista`
 sigue siendo el suyo.
 
+### 7.b.2 El log de uso, que es también la cola de revisión
+
+Beno lo pidió el 2026-08-13: *"log de lo que pido, log de lo que la app
+devuelve y análisis y resolución en base a eso"*. Antes de eso **no
+quedaba grabado en ningún lado**: lo único que había eran unos `console.*`
+que van a los logs de Vercel, efímeros y que ningún agente puede consultar
+días después, que es justo cuando sirven.
+
+Vive en `agent_log` y se lee con `npm run revisar:uso`.
+
+**Es una tabla y no un archivo** porque la app corre sin disco. **Y es
+además una cola de triage** —`revisado_en`, `veredicto`, `nota`— porque el
+análisis tiene que vivir al lado del hecho: un documento aparte se
+desincroniza y a las dos semanas nadie sabe cuáles de las 300
+interacciones ya se miraron. Es el mismo patrón que `inbox`.
+
+⚠ **Se loguean las DOS superficies, y la que más importa es el conector.**
+Qué tool elige Claude ante una frase no lo decide ningún código nuestro:
+lo decide el modelo del otro lado leyendo las descripciones. La única
+forma de verlo es anotando qué llamó, con qué argumentos y qué se le
+contestó. Loguear solo la caja perdería justo lo que falta medir.
+
+Tres cosas que no se negocian:
+
+1. ⚠ **`registrarUso()` nunca lanza.** Es la regla 7 en su caso más obvio:
+   si el log falla, la respuesta de Beno sale igual. Hay dos tests con un
+   cliente falso que lo garantizan, porque es un caso que no se puede
+   provocar a mano contra una base que anda.
+2. ⚠ **Pero sí se espera.** Un `void` sin `await` ahorraría 50 ms y en
+   Vercel la función puede terminar antes de que la promesa corra: el log
+   quedaría con agujeros **irregulares**, que es peor que no tenerlo —lleva
+   a concluir "esto no pasó" cuando lo que no pasó fue el registro—.
+3. **El conector se instrumenta envolviendo el `server` una sola vez**
+   (`lib/mcp/registro-de-uso.ts`, aplicado en `app/api/mcp/route.ts`), no
+   tool por tool. Así **una tool nueva queda registrada por existir**.
+
+⚠ **`agent_log` es la única tabla del esquema que NO entra en `TABLAS` del
+respaldo**, y es una desviación consciente de la regla de la sección de
+convenciones. Es diagnóstico y no dominio: si se pierde entera no se
+pierde ni un peso ni una lección. Lo que sí hace es crecer sin techo, y
+`respaldo.json` se reescribe **entero todos los días** y se commitea, así
+que meterla adentro inflaría cada commit del repo de respaldos con datos
+que nadie va a restaurar.
+
+Y una consecuencia de diseño que conviene saber: **`lib/uso.ts` no lleva
+`server-only`**, igual que `lib/bitacora.ts`, porque recibe el cliente por
+parámetro. Si lo llevara, `npm test` no podría importarlo y `acotar()` —lo
+que evita que una captura en base64 haga ilegible el log— quedaría sin
+tests. Del lado del conector se escribe con
+`datosDelPedido(ctx).registrarUso()` y no con el cliente a mano, porque
+`lib/mcp/datos.ts` no deja salir el cliente crudo de su archivo.
+
 ### 7.c El linter de deriva documental y el hook
 
 **El problema, con siete casos ya ocurridos.** Este archivo negó el techo
@@ -1427,7 +1480,10 @@ las lee del documento y las relee cuando cambia el tema.
   ningún error visible, que es la peor forma posible de fallar en un
   backup. Si agregás una tabla al esquema, agregala a `TABLAS`; si
   agregás un bucket, acordate de que `TABLAS` no lo cubre —ver "Los
-  comprobantes van al lado del JSON"—.
+  comprobantes van al lado del JSON"—. **La única excepción es
+  `agent_log`**, y el porqué está en §7.b.2: es diagnóstico y no dominio,
+  y crece sin techo adentro de un JSON que se reescribe y se commitea
+  todos los días.
 - Server Actions devuelven `ActionResult<T>` (`{ ok, data } | { ok, error }`),
   nunca lanzan para errores esperables.
 - `createAdminClient()` saltea RLS. Solo lo usan el cron y la

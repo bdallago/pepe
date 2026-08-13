@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_log: {
+        Row: {
+          creado_en: string
+          decisiones: Json | null
+          duracion_ms: number | null
+          entrada: Json
+          error: string | null
+          id: string
+          nota: string | null
+          pedido: string
+          revisado_en: string | null
+          salida: Json | null
+          superficie: Database["public"]["Enums"]["superficie_uso"]
+          user_id: string
+          veredicto: Database["public"]["Enums"]["veredicto_uso"] | null
+        }
+        Insert: {
+          creado_en?: string
+          decisiones?: Json | null
+          duracion_ms?: number | null
+          entrada?: Json
+          error?: string | null
+          id?: string
+          nota?: string | null
+          pedido: string
+          revisado_en?: string | null
+          salida?: Json | null
+          superficie: Database["public"]["Enums"]["superficie_uso"]
+          user_id: string
+          veredicto?: Database["public"]["Enums"]["veredicto_uso"] | null
+        }
+        Update: {
+          creado_en?: string
+          decisiones?: Json | null
+          duracion_ms?: number | null
+          entrada?: Json
+          error?: string | null
+          id?: string
+          nota?: string | null
+          pedido?: string
+          revisado_en?: string | null
+          salida?: Json | null
+          superficie?: Database["public"]["Enums"]["superficie_uso"]
+          user_id?: string
+          veredicto?: Database["public"]["Enums"]["veredicto_uso"] | null
+        }
+        Relationships: []
+      }
       artifacts: {
         Row: {
           archivado_en: string | null
@@ -1437,6 +1485,7 @@ export type Database = {
         | "no_prospero"
         | "otro"
       origen_leccion: "manual" | "importada" | "generada" | "retro" | "adjunto"
+      superficie_uso: "caja" | "conector"
       tipo_adjunto: "pdf" | "imagen"
       tipo_bandeja:
         | "categorizacion"
@@ -1452,6 +1501,7 @@ export type Database = {
         | "nota_dictada"
       tipo_cliente: "particular" | "pyme" | "empresa"
       tipo_movimiento: "ingreso" | "egreso"
+      veredicto_uso: "ok" | "defecto" | "mejora" | "ruido"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1612,6 +1662,7 @@ export const Constants = {
         "otro",
       ],
       origen_leccion: ["manual", "importada", "generada", "retro", "adjunto"],
+      superficie_uso: ["caja", "conector"],
       tipo_adjunto: ["pdf", "imagen"],
       tipo_bandeja: [
         "categorizacion",
@@ -1628,6 +1679,7 @@ export const Constants = {
       ],
       tipo_cliente: ["particular", "pyme", "empresa"],
       tipo_movimiento: ["ingreso", "egreso"],
+      veredicto_uso: ["ok", "defecto", "mejora", "ruido"],
     },
   },
 } as const
@@ -1636,11 +1688,11 @@ export const Constants = {
 // Alias de conveniencia usados en toda la app.
 // Este bloque se escribe a mano: si regenerás el archivo, volvé a pegarlo.
 //
-// Todo lo de arriba sale del generador. Al 2026-08-12 no queda nada
-// escrito a mano ahí: `20260812000001_compartido_entre.sql` está
-// aplicada, así que `movement_projects` —que hasta hoy estaba pegada a
-// mano— ahora la produce el generador, en su lugar alfabético y con la
-// misma definición carácter por carácter.
+// Todo lo de arriba sale del generador. Al 2026-08-13 no queda nada
+// escrito a mano ahí: las dos últimas migraciones
+// (`20260812000001_compartido_entre.sql` y `20260813000000_agent_log.sql`)
+// están aplicadas, así que `movement_projects` y `agent_log` las produce
+// el generador, en su lugar alfabético.
 // ─────────────────────────────────────────────────────────────
 
 export type TipoMovimiento = Database["public"]["Enums"]["tipo_movimiento"];
@@ -1679,3 +1731,10 @@ export type TipoAdjunto = Database["public"]["Enums"]["tipo_adjunto"];
 export type EstadoAdjunto = Database["public"]["Enums"]["estado_adjunto"];
 export type Retro = Database["public"]["Tables"]["retros"]["Row"];
 export type Settings = Database["public"]["Tables"]["settings"]["Row"];
+
+// El log de uso. Los dos enums salen de acá y no de una unión escrita a
+// mano en `lib/uso.ts`: son los mismos valores que la base acepta, y una
+// copia se queda vieja el día que se agregue una superficie.
+export type RegistroDeUso = Database["public"]["Tables"]["agent_log"]["Row"];
+export type SuperficieUso = Database["public"]["Enums"]["superficie_uso"];
+export type VeredictoUso = Database["public"]["Enums"]["veredicto_uso"];
