@@ -15,6 +15,7 @@ import {
   resolverRango,
 } from "@/lib/agentes/rango";
 import { resolverProyecto, resolverTrack } from "@/lib/agentes/resolver";
+import { partirSubconjunto } from "@/lib/agentes/subconjunto";
 import { computeToday, trackProgress } from "@/lib/aprendizaje";
 import { calcularBalances, calcularBalancesProyecto } from "@/lib/balances";
 import {
@@ -476,7 +477,43 @@ export async function despachar(
         };
       }
 
-      const leido = await leerMovimiento(texto, hoy);
+      /*
+        Los proyectos se leen ACÁ ARRIBA —antes de la extracción— porque el
+        subconjunto dictado los necesita. Más abajo se usan también para
+        resolver el proyecto imputado; es la misma lista y una sola
+        consulta.
+
+        Sin filtro por estado, y es deliberado: que un proyecto esté cerrado
+        no impide imputarle un gasto ni que cargue su parte de un
+        compartido. Al revés — un gasto de un proyecto cerrado va a ese
+        proyecto, que para eso se cerró en esa fecha y no en otra.
+      */
+      const { data: proyectos } = await supabase
+        .from("projects")
+        .select("*")
+        .order("nombre");
+
+      const todosLosProyectos = proyectos ?? [];
+
+      /*
+        ⚠ **El subconjunto se parte ANTES de `leerMovimiento()`, y el orden
+        es todo el punto.**
+
+        Medido el 2026-08-13 con la cola adentro:
+        `"-15000 hosting compartido entre Proder y Gentius"` dejaba
+        `descripcion: "hosting compartido entre Proder y Gentius"`. Esa
+        columna alimenta `descripcion_normalizada`, y con ella toda la
+        sugerencia de categoría por histórico (regla 6.c), así que dictar el
+        reparto ensuciaba el histórico de ese gasto para siempre.
+
+        Si la frase no declara ningún reparto —el caso normal— esto devuelve
+        el texto **idéntico** y una lista vacía, y de acá para abajo no
+        cambia absolutamente nada. Ver `agentes/subconjunto.ts`.
+      */
+      const declarado = partirSubconjunto(texto, todosLosProyectos);
+      const explicitos = declarado.ids;
+
+      const leido = await leerMovimiento(declarado.texto, hoy);
 
       // Los datos necesarios son tres: monto, descripción y fecha. Se
       // preguntan de a uno y en este orden —de lo más caro de equivocar a
@@ -535,24 +572,22 @@ export async function despachar(
         Keerian en el proyecto Gentius"— devuelve `"ambiguo"`, que es
         exactamente cuando hay que preguntar en vez de elegir.
 
-        Sin filtro por estado, y es deliberado: que un proyecto esté
-        cerrado no impide imputarle un gasto. Al revés — un gasto de un
-        proyecto cerrado va a ese proyecto, que para eso se cerró en esa
-        fecha y no en otra.
+        La lista de proyectos se leyó más arriba, antes de la extracción,
+        porque el subconjunto dictado la necesita. El porqué del "sin
+        filtro por estado" está allá.
+
+        ⚠ **Y acá se busca en `declarado.texto`, no en `texto`.** Si se
+        buscara en el texto entero, `"…compartido entre Proder y Gentius"`
+        haría que `resolverProyecto` encontrara dos nombres y contestara
+        `"ambiguo"`, así que un reparto declarado terminaría en la pregunta
+        "¿a cuál va?" — justo la pregunta que Beno ya contestó al escribirlo.
       */
-      const { data: proyectos } = await supabase
-        .from("projects")
-        .select("*")
-        .order("nombre");
-
-      const todosLosProyectos = proyectos ?? [];
-
       const nombrado =
         slugElegido === COMPARTIDO_EN_PREGUNTA
           ? null
           : slugElegido
             ? resolverProyecto(slugElegido, todosLosProyectos)
-            : resolverProyecto(texto, todosLosProyectos);
+            : resolverProyecto(declarado.texto, todosLosProyectos);
 
       const proyecto = nombrado !== "ambiguo" ? nombrado : null;
 
@@ -565,8 +600,18 @@ export async function despachar(
 
         "Compartido" va **primero y con nombre**, porque es una elección
         legítima y frecuente (las suscripciones), no un default.
+
+        ⚠ **Con subconjunto declarado no se pregunta**: ya está contestado,
+        y con más precisión que la pregunta —"compartido entre estos dos" es
+        más específico que "compartido"—. Preguntar igual sería pedirle que
+        elija entre opciones peores que la que acaba de escribir.
       */
-      if (!proyecto && !slugElegido && todosLosProyectos.length > 0) {
+      if (
+        !proyecto &&
+        !slugElegido &&
+        explicitos.length === 0 &&
+        todosLosProyectos.length > 0
+      ) {
         return {
           clase: "pregunta",
           titulo:
@@ -610,8 +655,27 @@ export async function despachar(
           ? slugElegido
             ? "lo elegiste vos"
             : "lo nombraste en la frase"
-          : "compartido, lo elegiste vos",
+          : explicitos.length > 0
+            ? "lo dijiste en la frase"
+            : "compartido, lo elegiste vos",
       };
+
+      /*
+        Los nombres de los proyectos elegidos, en el orden en que los
+        nombró. **La respuesta los dice, no dice "listo"**: cambiar el
+        reparto de un compartido mueve el balance de todos los proyectos que
+        entran y de todos los que dejan de entrar, y es la misma obligación
+        que ya tiene el destino `proyecto` cuando mueve una ventana.
+      */
+      const nombresExplicitos = explicitos.map(
+        (id) => todosLosProyectos.find((p) => p.id === id)?.nombre ?? id,
+      );
+
+      const lineaProyecto = proyecto
+        ? `Proyecto: ${proyecto.nombre} — ${procedencia.proyecto}`
+        : explicitos.length > 0
+          ? `Proyecto: compartido entre ${nombresExplicitos.join(" y ")} — ${procedencia.proyecto}`
+          : `Proyecto: Compartido — ${procedencia.proyecto}`;
 
       const cuerpo = [
         `Descripción: ${descripcion} — ${procedencia.descripcion}`,
@@ -621,7 +685,10 @@ export async function despachar(
           ? `Categoría: ${categoria.categoriaNombre} — ${procedencia.categoria}`
           : "Categoría: sin elegir — elegila vos",
         `Fecha: ${formatDate(fecha)} — ${procedencia.fecha}`,
-        `Proyecto: ${proyecto ? proyecto.nombre : "Compartido"} — ${procedencia.proyecto}`,
+        lineaProyecto,
+        explicitos.length > 0
+          ? `\nSe reparte solo entre esos ${explicitos.length}, no entre los que estén abiertos en la fecha.`
+          : null,
         leido.degradado
           ? "\nEsto lo saqué con un regex porque no pude hablar con el modelo: revisalo bien."
           : null,
@@ -641,7 +708,10 @@ export async function despachar(
           fecha,
           tipo,
           categoryId: categoria?.categoryId ?? null,
-          projectId: proyecto?.id ?? null,
+          // Con subconjunto declarado el movimiento es compartido: el
+          // trigger de la base rechaza tener las dos cosas a la vez.
+          projectId: explicitos.length > 0 ? null : (proyecto?.id ?? null),
+          ...(explicitos.length > 0 ? { proyectosExplicitos: explicitos } : {}),
           procedencia,
         },
       };

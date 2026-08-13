@@ -28,7 +28,11 @@ const ROTULOS = [
   "Optimizar la infraestructura",
 ];
 
-// Las que la doc pone como ejemplo de vara cumplida.
+// Las que la doc pone como ejemplo de vara cumplida, más las DOS que la
+// primera corrida real del arnés (2026-08-13) marcó en rojo por error: las
+// dos arrancan con un infinitivo de consejo y las dos afirman algo
+// discutible. Son la razón por la que `pareceRotulo` mira el predicado y no
+// solo el arranque.
 const AFIRMACIONES = [
   "El 70 % de la facturación proviene de dos clientes",
   "El 80% de la facturación en dos clientes te deja sin margen para decir que no",
@@ -36,6 +40,10 @@ const AFIRMACIONES = [
   "Cobrar por cada versión mayor evita que el cliente exija cambios sin fin",
   "Invertir 3 meses en el importador costó más que el importador",
   "Diversificar te habría costado el cliente de Proder",
+  // Medida: la devolvió el razonador en la retro.
+  "Priorizar infraestructura sobre desarrollo externo no garantiza rentabilidad",
+  // Medida: la devolvió el razonador en 6.3.
+  "Documentar el impacto de cada cambio en horas evita negociaciones largas",
 ];
 
 test("los rótulos medidos se detectan", () => {
@@ -71,6 +79,27 @@ test("un número que no estaba en la entrada es una invención", () => {
   assert.deepEqual(
     numerosSinRespaldo("Cerró con 469.472 de ingresos y 1250 de comisión.", entrada),
     ["1250"],
+  );
+});
+
+/**
+ * Medido el 2026-08-13: la primera corrida real marcó en rojo un `"60,7 %"`
+ * de las observaciones, que es `981.400 / 1.615.900` — o sea exactamente el
+ * cruce que el prompt pide. Un número calculado no es una invención.
+ */
+test("un porcentaje calculado no es una invención", () => {
+  const entrada = "Egresos: 1.615.900. Categoría subcontratacion: 981.400.";
+
+  assert.deepEqual(
+    numerosSinRespaldo(
+      "Más de la mitad de los egresos se fue en subcontratación: 60,7 %.",
+      entrada,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    numerosSinRespaldo("El 12,5 por ciento se fue en herramientas.", entrada),
+    [],
   );
 });
 

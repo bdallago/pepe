@@ -201,7 +201,14 @@ export function MovementForm({
       tipo: movimiento?.tipo ?? precarga?.tipo ?? "egreso",
       estado: movimiento?.estado ?? "efectuado",
       project_id: proyectoInicial ?? "compartido",
-      proyectos_explicitos: [...(movimiento?.proyectos_explicitos ?? [])],
+      // `movimiento` primero y `precarga` después, no al revés: editar algo
+      // ya guardado nunca puede tomar el subconjunto de una precarga, y las
+      // dos props son excluyentes de todos modos.
+      proyectos_explicitos: [
+        ...(movimiento?.proyectos_explicitos ??
+          precarga?.proyectosExplicitos ??
+          []),
+      ],
       category_id: movimiento?.category_id ?? precarga?.categoryId ?? "",
       monto_ars: movimiento ? String(movimiento.monto_ars) : "",
       monto_usd: movimiento ? String(movimiento.monto_usd) : "",

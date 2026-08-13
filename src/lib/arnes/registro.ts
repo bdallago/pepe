@@ -105,23 +105,35 @@ function textos(valor: unknown): string {
 }
 
 /**
- * Los tres chequeos que valen para casi toda familia: nada inventado, sin
- * tono de asistente y —cuando corresponde— sin rótulos.
+ * Los chequeos que se repiten, con el de números **opt-in**.
+ *
+ * ⚠ **`numerosSinRespaldo` no se aplica a toda la salida, y eso se midió.**
+ * La primera corrida real (2026-08-13) lo tenía puesto en todas las
+ * familias y produjo tres rojos que eran del juez y no del prompt: un
+ * `"60,7 %"` calculado en las observaciones —que es lo que el prompt
+ * **pide**—, un `"30"` en la consigna de una sugerencia y otro en una
+ * lección de 6.3. Donde el prompt pide **proponer** —las horas de un
+ * presupuesto, qué hacer en dos horas, una lección sobre un tema— un número
+ * nuevo es la respuesta correcta.
+ *
+ * Así que cada familia dice **qué texto suyo** tiene que apoyarse en la
+ * entrada, con `anclado`. Lo que no pasa por ahí, no se chequea.
  */
 function comunes(
   salida: unknown,
   usuario: string,
-  opciones: { rotulos?: string[] } = {},
+  opciones: { rotulos?: string[]; anclado?: string } = {},
 ): string[] {
   const problemas: string[] = [];
-  const todo = textos(salida);
 
-  const inventados = numerosSinRespaldo(todo, usuario);
-  if (inventados.length > 0) {
-    problemas.push(`números que no le dimos: ${inventados.join(", ")}`);
+  if (opciones.anclado !== undefined) {
+    const inventados = numerosSinRespaldo(opciones.anclado, usuario);
+    if (inventados.length > 0) {
+      problemas.push(`números que no le dimos: ${inventados.join(", ")}`);
+    }
   }
 
-  const tono = tonoDeAsistente(todo);
+  const tono = tonoDeAsistente(textos(salida));
   if (tono.length > 0) problemas.push(`tono de asistente: ${tono.join(", ")}`);
 
   for (const titulo of opciones.rotulos ?? []) {
@@ -193,10 +205,16 @@ export const FAMILIAS: readonly Familia[] = [
         nombre: "proyecto que cerró en pérdida por subcontratar",
         usuario: CONTEXTO_RETRO,
         juzgar: (salida, usuario) => {
+          // Acá el chequeo de números va sobre TODO, y es la única familia
+          // donde eso es correcto sin matices: las cuatro secciones y las
+          // lecciones son afirmaciones sobre lo que pasó, y el prompt lo
+          // dice en su regla 1 (*"todo lo que afirmes tiene que apoyarse en
+          // los datos que te di"*).
+          const todo = textos(salida);
           const problemas = comunes(salida, usuario, {
             rotulos: titulosDeLecciones(salida),
+            anclado: todo,
           });
-          const todo = textos(salida);
 
           /*
             La lista de errores concretos del prompt, la parte que se puede
@@ -242,6 +260,14 @@ export const FAMILIAS: readonly Familia[] = [
         nombre: "lecciones sobre cómo cobrar los cambios de alcance",
         usuario: CONTEXTO_GENERACION,
         juzgar: (salida, usuario) => {
+          /*
+            ⚠ **Sin `anclado`, y medido.** 6.3 propone lecciones **sobre un
+            tema**, no afirmaciones sobre unos datos: la entrada son dos
+            líneas y ningún número. Con el chequeo puesto, un `"cobrá el 30 %
+            adelantado"` —una propuesta perfectamente buena— salía marcado
+            como invención. Lo que sí se cobra acá es la vara del título, que
+            es de lo que esta familia se trata.
+          */
           const titulos = titulosDeLecciones(salida);
           const problemas = comunes(salida, usuario, { rotulos: titulos });
 
@@ -278,8 +304,16 @@ export const FAMILIAS: readonly Familia[] = [
             (salida as { sugerencias?: { titulo: string; ancla: string }[] })
               .sugerencias ?? [];
 
+          /*
+            ⚠ **El `anclado` es SOLO el campo `ancla`**, no la sugerencia
+            entera. La `consigna` propone qué hacer en las próximas dos horas
+            —"armá una planilla de 30 filas"— y ahí un número nuevo es la
+            respuesta correcta. Medido el 2026-08-13: con el chequeo sobre
+            todo, un `"30"` de una consigna salía como invención.
+          */
           const problemas = comunes(salida, usuario, {
             rotulos: sugerencias.map((s) => s.titulo),
+            anclado: sugerencias.map((s) => s.ancla).join("\n"),
           });
 
           if (sugerencias.length === 0) {
@@ -288,19 +322,32 @@ export const FAMILIAS: readonly Familia[] = [
 
           /*
             La regla número uno del prompt, mecanizada: el `ancla` cita un
-            dato de la entrada. No se exige la cita literal —el prompt no
-            la pide— pero sí que **algún** fragmento largo del ancla esté en
-            el contexto: un ancla que no toca la entrada es exactamente la
-            sugerencia genérica que la regla prohíbe.
+            dato de la entrada.
+
+            ⚠ **Se chequea por NÚMEROS y no por texto literal**, y también
+            salió de medir. El prompt no pide una cita textual —pide citar el
+            dato— y el modelo escribe `"Egreso categoría infraestructura:
+            452.000 ARS"` donde el contexto dice `"- infraestructura:
+            452.000"`. Exigir la subcadena marcó en rojo tres anclas
+            perfectamente ancladas. Lo que sí se puede exigir es que el
+            número que cita exista, y de eso ya se encarga `anclado`.
+
+            Lo único que queda acá es que el ancla **no venga vacía de
+            datos**: un ancla sin ningún número y sin ninguna palabra del
+            contexto es la sugerencia genérica que la regla prohíbe.
           */
           for (const s of sugerencias) {
-            const anclado = s.ancla
-              .split(/[,.;:]/)
+            const tieneNumero = /\d/.test(s.ancla);
+            const tocaElContexto = s.ancla
+              .split(/[,.;:"]/)
               .map((t) => t.trim())
               .filter((t) => t.length >= 8)
               .some((t) => estaContenido(t, usuario));
-            if (!anclado) {
-              problemas.push(`ancla que no está en el contexto: "${s.ancla}"`);
+
+            if (!tieneNumero && !tocaElContexto) {
+              problemas.push(
+                `ancla sin ningún dato del contexto: "${s.ancla}"`,
+              );
             }
           }
 
@@ -327,26 +374,26 @@ export const FAMILIAS: readonly Familia[] = [
             (salida as { observaciones?: { texto: string; dato: string }[] })
               .observaciones ?? [];
 
-          const problemas = comunes(salida, usuario);
+          /*
+            ⚠ **`anclado` es el `dato`, no el `texto`.** El prompt pide
+            justamente CRUZAR números —"qué parte del total se llevó una
+            categoría"— así que el `texto` está lleno de números calculados y
+            eso es lo correcto. Medido el 2026-08-13: con el chequeo sobre
+            todo, un `"60,7 %"` (que es 981.400 / 1.615.900) salía como
+            invención. El `dato`, en cambio, **cita**: ahí el número tiene que
+            estar.
+          */
+          const problemas = comunes(salida, usuario, {
+            anclado: observaciones.map((o) => o.dato).join("\n"),
+          });
 
           if (observaciones.length === 0) {
             problemas.push("ninguna observación: el contexto tiene cruces obvios");
           }
 
           for (const o of observaciones) {
-            // El `dato` cita un número de arriba. Es el juez más literal de
-            // los trece y por eso el más útil: se puede verificar que el
-            // número exista.
-            const numeros = o.dato.match(/\d[\d.,]*/g) ?? [];
-            if (numeros.length === 0) {
+            if (!/\d/.test(o.dato)) {
               problemas.push(`dato sin ningún número: "${o.dato}"`);
-              continue;
-            }
-            const sinRespaldo = numerosSinRespaldo(o.dato, usuario);
-            if (sinRespaldo.length > 0) {
-              problemas.push(
-                `el dato cita números que no están en el contexto: ${sinRespaldo.join(", ")}`,
-              );
             }
           }
 
@@ -377,6 +424,15 @@ export const FAMILIAS: readonly Familia[] = [
           };
           const entregables = r.entregables ?? [];
 
+          /*
+            ⚠ **Sin `anclado`, y es la familia donde más obvio es por qué:
+            las horas las inventa el modelo, y eso es su trabajo.** El
+            precio, en cambio, no lo calcula él nunca —sale de multiplicar
+            por la tarifa de Ajustes— así que acá no hay ningún número que
+            tenga que estar en la entrada. Lo que sí se cobra es la cita
+            literal del `ancla`, que es lo mismo que ya decide
+            `ancla_verificada` en producción.
+          */
           const problemas = comunes(salida, usuario, {
             rotulos: entregables.map((e) => e.titulo),
           });
@@ -446,7 +502,12 @@ export const FAMILIAS: readonly Familia[] = [
             problemas.push("dijo que hay lección pero dejó campos vacíos");
           }
 
-          problemas.push(...comunes(salida, usuario));
+          // Acá sí va el chequeo de números sobre todo: el extractor
+          // **transcribe** lo que Beno escribió, así que un número que no
+          // esté en la entrada es algo que le agregó.
+          problemas.push(
+            ...comunes(salida, usuario, { anclado: textos(salida) }),
+          );
           return problemas;
         },
       },
@@ -515,7 +576,9 @@ export const FAMILIAS: readonly Familia[] = [
         usuario: CONTEXTO_ZOMBIES,
         juzgar: (salida, usuario) => {
           const aviso = (salida as { aviso?: string }).aviso ?? "";
-          const problemas = comunes(salida, usuario);
+          // El aviso tiene que decir el dato concreto que se le pasó y nada
+          // más: el prompt le prohíbe suponer para qué se usa el servicio.
+          const problemas = comunes(salida, usuario, { anclado: aviso });
 
           if (!/60/.test(aviso) && !/71/.test(aviso)) {
             problemas.push(
@@ -617,7 +680,11 @@ export const FAMILIAS: readonly Familia[] = [
         usuario: CONTEXTO_ADJUNTO_TROZO,
         juzgar: (salida, usuario) => {
           const puntos = (salida as { puntos?: string[] }).puntos ?? [];
-          const problemas = comunes(salida, usuario);
+          // Un resumen de un fragmento no puede traer números que el
+          // fragmento no tenga: es extracción mecánica, no producción.
+          const problemas = comunes(salida, usuario, {
+            anclado: puntos.join("\n"),
+          });
 
           if (puntos.length === 0) {
             problemas.push("ningún punto: el fragmento afirma varias cosas concretas");
@@ -648,7 +715,12 @@ export const FAMILIAS: readonly Familia[] = [
         usuario: CONTEXTO_ADJUNTO_SINTESIS,
         juzgar: (salida, usuario) => {
           const titulos = titulosDeLecciones(salida);
-          const problemas = comunes(salida, usuario, { rotulos: titulos });
+          // Las lecciones salen de las afirmaciones que se le pasaron, así
+          // que un número nuevo es un número que el documento no dice.
+          const problemas = comunes(salida, usuario, {
+            rotulos: titulos,
+            anclado: textos(salida),
+          });
 
           if (titulos.length === 0) {
             problemas.push("ninguna lección: el contrato tiene cláusulas discutibles");
@@ -687,7 +759,7 @@ export const FAMILIAS: readonly Familia[] = [
 
           if (r.legible) {
             problemas.push(
-              "dijo que es legible una imagen de 1×1: inventó lo que no vio",
+              "dijo que es legible una imagen de ruido: inventó lo que no vio",
             );
           }
           if (r.transcripcion && r.transcripcion.length > 0) {

@@ -1,3 +1,5 @@
+import { deflateSync } from "node:zlib";
+
 /**
  * Las entradas con las que se mide cada prompt.
  *
@@ -262,18 +264,89 @@ Afirmaciones sacadas del documento:
 - La mora mayor a 15 días habilita a suspender el servicio.`;
 
 /**
- * Una imagen de ruido, para el caso que ya está medido a mano: con ruido
- * puro el modelo tiene que contestar `legible: false` y **no inventar una
- * conversación**.
+ * Una imagen de ruido, para el caso que ya está medido a mano el
+ * 2026-08-10: con ruido puro el modelo tiene que contestar
+ * `legible: false` y **no inventar una conversación**.
  *
- * Es un PNG de 8×8 generado acá y no un archivo del repo: así la fixture
- * no depende de un binario que alguien pueda mover, y pesa nada.
+ * Se genera acá en vez de guardar un archivo en el repo: así la fixture no
+ * depende de un binario que alguien pueda mover o mirar, es determinística
+ * (semilla fija) y no pesa nada.
+ *
+ * ⚠ **64×64 y no 1×1, y eso lo dijo Groq corriendo.** La primera versión
+ * era el PNG mínimo de un píxel y las tres llamadas volvieron con
+ * `HTTP 400: "Image must have at least 2 pixels in each dimension"`. Fue el
+ * primer hallazgo del arnés que no era del prompt ni del juez, sino de la
+ * fixture — y llegó igual como rojo, que es para lo que sirve.
  */
 export function ruidoPng(): string {
-  // PNG mínimo válido: 1×1 gris. El modelo no puede leer nada acá adentro,
-  // que es exactamente lo que se quiere probar.
-  const base64 =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk" +
-    "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-  return `data:image/png;base64,${base64}`;
+  const lado = 64;
+  const filas: Buffer[] = [];
+
+  // Congruencial lineal con semilla fija: el mismo ruido siempre. Un ruido
+  // distinto en cada corrida haría que "osciló entre corridas" mezclara la
+  // inestabilidad del modelo con la de la entrada.
+  let semilla = 20260813;
+  const siguiente = () => {
+    semilla = (semilla * 1103515245 + 12345) & 0x7fffffff;
+    return (semilla >>> 16) & 0xff;
+  };
+
+  for (let y = 0; y < lado; y++) {
+    // El 0 de adelante es el filtro de la línea (None), que el formato pide.
+    const fila = Buffer.alloc(lado * 3 + 1);
+    for (let i = 1; i < fila.length; i++) fila[i] = siguiente();
+    filas.push(fila);
+  }
+
+  return `data:image/png;base64,${armarPng(lado, lado, Buffer.concat(filas))}`;
+}
+
+/**
+ * Un PNG a mano: firma, IHDR, IDAT y IEND.
+ *
+ * Son veinte líneas y evitan una dependencia y un binario en el repo. El
+ * único detalle que no es obvio es que cada chunk lleva su CRC32, y que el
+ * IDAT va comprimido con zlib —que Node trae de fábrica—.
+ */
+function armarPng(ancho: number, alto: number, crudo: Buffer): string {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(ancho, 0);
+  ihdr.writeUInt32BE(alto, 4);
+  ihdr[8] = 8; // bits por canal
+  ihdr[9] = 2; // color: RGB
+  // 10, 11 y 12 quedan en 0: compresión, filtro e interlazado estándar.
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(crudo)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]).toString("base64");
+}
+
+function chunk(tipo: string, datos: Buffer): Buffer {
+  const largo = Buffer.alloc(4);
+  largo.writeUInt32BE(datos.length, 0);
+
+  const cuerpo = Buffer.concat([Buffer.from(tipo, "ascii"), datos]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(cuerpo), 0);
+
+  return Buffer.concat([largo, cuerpo, crc]);
+}
+
+const TABLA_CRC = (() => {
+  const tabla = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    tabla[n] = c >>> 0;
+  }
+  return tabla;
+})();
+
+function crc32(datos: Buffer): number {
+  let c = 0xffffffff;
+  for (const byte of datos) c = TABLA_CRC[(c ^ byte) & 0xff]! ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
 }

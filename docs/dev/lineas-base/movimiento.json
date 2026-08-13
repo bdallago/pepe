@@ -1,0 +1,31 @@
+{
+  "familia": "movimiento",
+  "archivo": "src/lib/agentes/movimientos.ts",
+  "modelo": "llama-3.1-8b-instant",
+  "promptChars": 1791,
+  "fecha": "2026-08-13T12:29:21.335Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "\"pagué 20 dólares de Claude Code ayer\"",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    },
+    {
+      "caso": "\"cobré 601700 por la Venta Proder a cliente nuevo\"",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    },
+    {
+      "caso": "\"me cobraron 15 lucas el hosting el martes\"",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

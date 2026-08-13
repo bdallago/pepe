@@ -1,0 +1,17 @@
+{
+  "familia": "generacion",
+  "archivo": "src/lib/generacion.ts",
+  "modelo": "openai/gpt-oss-120b",
+  "promptChars": 2502,
+  "fecha": "2026-08-13T12:32:19.617Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "lecciones sobre cómo cobrar los cambios de alcance",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

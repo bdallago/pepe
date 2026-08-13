@@ -1,0 +1,17 @@
+{
+  "familia": "adjunto_sintesis",
+  "archivo": "src/lib/adjuntos.ts",
+  "modelo": "openai/gpt-oss-120b",
+  "promptChars": 2448,
+  "fecha": "2026-08-13T12:32:26.208Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "lecciones desde las cláusulas de un contrato",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

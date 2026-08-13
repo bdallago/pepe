@@ -443,6 +443,16 @@ export interface PrecargaMovimiento {
   /** `null` es compartido, igual que en `movements`. */
   projectId: string | null;
   /**
+   * Los proyectos que Beno nombró explícitamente para repartir este
+   * compartido (`"… compartido entre Proder y Gentius"`).
+   *
+   * Ausente o vacío es el default de siempre: se reparte entre los que
+   * estaban vivos en la fecha del gasto. Solo puede venir con
+   * `projectId: null` —un movimiento imputado a un proyecto no tiene
+   * subconjunto, y la base lo garantiza con un trigger—.
+   */
+  proyectosExplicitos?: string[];
+  /**
    * De dónde salió cada campo, ya redactado.
    *
    * No es adorno: es un libro de cuentas y si el modelo lee "15 mil" donde

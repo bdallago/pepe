@@ -217,6 +217,15 @@ interface Movimiento {
   estado: "efectuado" | "planificado";
   project_id?: string;
   compartido?: boolean;
+  /**
+   * El subconjunto explícito, si Beno lo dictó. Viene siempre con
+   * `compartido: true`.
+   *
+   * **La tarjeta lo muestra con los nombres**, no con los ids: aceptar un
+   * reparto que no se ve no es aceptar, y ese botón es la mitad del
+   * sentido de la regla 6.
+   */
+  compartido_entre?: string[];
   category_id?: string;
   categoria_nombre?: string;
   /** Cómo salió la categoría propuesta, en castellano. */
@@ -243,6 +252,11 @@ function leerMovimiento(payload: Json): Movimiento | null {
     estado: p.estado === "planificado" ? "planificado" : "efectuado",
     project_id: typeof p.project_id === "string" ? p.project_id : undefined,
     compartido: p.compartido === true,
+    compartido_entre:
+      Array.isArray(p.compartido_entre) &&
+      p.compartido_entre.every((id): id is string => typeof id === "string")
+        ? p.compartido_entre
+        : undefined,
     category_id: typeof p.category_id === "string" ? p.category_id : undefined,
     categoria_nombre:
       typeof p.categoria_nombre === "string" ? p.categoria_nombre : undefined,
@@ -1230,6 +1244,25 @@ export function BandejaView({
                   <strong>{movimiento.sugerencia}</strong>.
                 </p>
               )}
+
+              {/*
+                El subconjunto dictado, con NOMBRES. Aceptar un reparto que
+                no se ve no es aceptar, y este botón es la mitad del sentido
+                de la regla 6.
+
+                Se muestra solo si el selector sigue en "compartido": si
+                Beno lo cambia a un proyecto, el subconjunto no se guarda
+                —la action solo lo inserta con `projectId === null`— así que
+                seguir mostrándolo mentiría sobre lo que va a pasar.
+              */}
+              {movimiento.compartido_entre &&
+                proyectoActual === COMPARTIDO && (
+                  <p className="text-muted-foreground text-xs">
+                    Se reparte <strong>solo entre</strong>{" "}
+                    {movimiento.compartido_entre.map(nombreProyecto).join(" y ")},
+                    y no entre los que estén abiertos en su fecha.
+                  </p>
+                )}
 
               <p className="text-muted-foreground border-t border-dashed pt-3 text-xs">
                 Aceptar <strong>lo carga de verdad</strong> en Finanzas, y

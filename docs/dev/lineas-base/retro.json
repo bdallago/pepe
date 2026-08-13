@@ -1,0 +1,17 @@
+{
+  "familia": "retro",
+  "archivo": "src/lib/retro.ts",
+  "modelo": "openai/gpt-oss-120b",
+  "promptChars": 3467,
+  "fecha": "2026-08-13T12:32:17.969Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "proyecto que cerró en pérdida por subcontratar",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

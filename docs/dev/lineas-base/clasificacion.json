@@ -1,0 +1,17 @@
+{
+  "familia": "clasificacion",
+  "archivo": "src/lib/clasificacion.ts",
+  "modelo": "llama-3.1-8b-instant",
+  "promptChars": 686,
+  "fecha": "2026-08-13T12:29:24.128Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "Vercel Pro - Agosto, con Junio en el histórico",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

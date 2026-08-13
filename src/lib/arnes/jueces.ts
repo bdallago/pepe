@@ -43,34 +43,73 @@ const ARRANQUES_DE_ROTULO: readonly RegExp[] = [
 ];
 
 /**
+ * Verbos conjugados que convierten un rótulo en una afirmación.
+ *
+ * ⚠ **Es una lista cerrada y salió de dos falsos positivos MEDIDOS**, no de
+ * imaginar casos. El 2026-08-13, la primera corrida real del arnés marcó en
+ * rojo estos dos títulos:
+ *
+ * - `"Priorizar infraestructura sobre desarrollo externo no garantiza
+ *    rentabilidad"` (retro)
+ * - `"Documentar el impacto de cada cambio en horas evita negociaciones
+ *    largas"` (generación)
+ *
+ * Los dos arrancan con un infinitivo de consejo **y los dos afirman algo
+ * discutible**, que es exactamente lo que el prompt pide. Lo que los
+ * distingue de un rótulo no es el arranque: es que traen un **predicado**.
+ *
+ * La lista es corta a propósito. Un verbo que falte deja pasar un rótulo
+ * —el comportamiento de hoy, sin regresión— mientras que un sustantivo que
+ * entre por error marcaría en rojo un título bueno. Cuando aparezca otro
+ * falso positivo, se agrega su verbo y se anota acá.
+ */
+const VERBOS_DE_PREDICADO =
+  /\b(es|son|era|eran|fue|fueron|sale|salió|cuesta|costó|vale|valió|garantiza|evita|permite|impide|obliga|deja|hace|tiene|viene|funciona|sirve|alcanza|termina|cambia|baja|sube|paga|cobra|gana|pierde|ahorra|duplica|rompe|requiere|exige|depende|conviene|significa|implica|termina|ensucia|arregla|frena)\b/i;
+
+/** Negaciones y comparaciones: también convierten un rótulo en afirmación. */
+const MARCAS_DE_AFIRMACION = /\b(no|nunca|tampoco|sin|más que|menos que|mejor que|peor que)\b/i;
+
+/**
  * ¿El título es un rótulo en vez de una afirmación discutible?
  *
- * Dos condiciones, y las dos tienen que darse: **arranca como consejo** y
- * **no trae ningún dato concreto**. La segunda es la que evita el falso
- * positivo obvio: "Invertir 3 meses en el importador costó más que
- * escribirlo" arranca con un infinitivo y es perfectamente discutible.
+ * La vara está escrita **tres veces** en AGENTS.md y nunca se verificó ni
+ * una. Dos condiciones, y las dos tienen que darse: **arranca como consejo**
+ * y **lo que sigue no tiene sustancia** —ni un dato, ni un nombre propio, ni
+ * una negación, ni un verbo conjugado—.
  *
- * ⚠ La asimetría está a favor, igual que en `esAmbigua()`: un falso
- * positivo hace que el arnés marque en rojo un título que estaba bien —se
- * mira y se decide— y un falso negativo deja pasar un rótulo, que es el
- * comportamiento de hoy. No hay regresión posible.
+ * ⚠ La sustancia se busca en el texto **después** del arranque, y eso no es
+ * un detalle: `"Es importante evaluar el gasto en herramientas"` es un
+ * rótulo medido, y su `"Es"` es parte del arranque. Buscando en el título
+ * entero, ese `"es"` lo salvaría y el rótulo pasaría.
+ *
+ * ⚠ La asimetría está a favor, igual que en `esAmbigua()`: un falso positivo
+ * marca en rojo un título que estaba bien —se mira y se decide— y un falso
+ * negativo deja pasar un rótulo, que es el comportamiento de hoy. No hay
+ * regresión posible.
  */
 export function pareceRotulo(titulo: string): boolean {
   const t = titulo.trim();
-  if (!ARRANQUES_DE_ROTULO.some((r) => r.test(t))) return false;
 
-  return !tieneDatoConcreto(t);
+  const arranque = ARRANQUES_DE_ROTULO.map((r) => t.match(r)).find(
+    (m) => m !== null,
+  );
+  if (!arranque) return false;
+
+  return !tieneSustancia(t.slice(arranque[0].length));
 }
 
 /**
- * Un número, o un nombre propio que no sea la primera palabra.
+ * Un número, un nombre propio, una negación o un verbo conjugado.
  *
- * El "que no sea la primera" importa: todo título arranca con mayúscula,
- * así que contarla haría que cualquier rótulo pase.
+ * El nombre propio se busca con mayúscula precedida de espacio: el título
+ * entero arranca con mayúscula, y acá ya se recortó el arranque, así que lo
+ * que quede en mayúscula es un nombre.
  */
-function tieneDatoConcreto(texto: string): boolean {
+function tieneSustancia(texto: string): boolean {
   if (/\d/.test(texto)) return true;
-  return /\s[A-ZÁÉÍÓÚÑ][\wáéíóúñ]{2,}/.test(texto);
+  if (/\s[A-ZÁÉÍÓÚÑ][\wáéíóúñ]{2,}/.test(texto)) return true;
+  if (MARCAS_DE_AFIRMACION.test(texto)) return true;
+  return VERBOS_DE_PREDICADO.test(texto);
 }
 
 /**
@@ -99,12 +138,27 @@ function tieneDatoConcreto(texto: string): boolean {
  * objetivo… no podés saber si algo llegó tarde o temprano"*— así que
  * cualquier número pegado a una unidad de tiempo se chequea igual.
  *
+ * ⚠ **Los porcentajes tampoco cuentan, y también se midió.** El 2026-08-13
+ * la primera corrida real marcó en rojo un `"60,7 %"` de las observaciones:
+ * es `981.400 / 1.615.900` y **el prompt pide exactamente eso** (*"qué parte
+ * del total se llevó una categoría"*). Un número calculado a partir de lo
+ * que se le dio no es una invención; es el trabajo.
+ *
  * ⚠ **Y lo que este juez NO puede ver**: un recorte. Una descripción que
  * volvió a la mitad no trae ningún número nuevo. Eso lo detecta el banco
  * comparando contra lo que espera, no esto.
+ *
+ * ⚠ **Por eso no se aplica a toda salida**, y de eso se encarga cada
+ * familia del registro: donde el prompt pide **proponer** —las horas de un
+ * presupuesto, la consigna de una sugerencia, una lección sobre un tema— un
+ * número nuevo es la respuesta correcta. Aplicarlo ahí da rojos
+ * permanentes, y un arnés con rojos permanentes entrena a ignorar el rojo.
  */
 const UNIDAD_DE_TIEMPO =
   /^\s*(d[ií]as?|semanas?|meses|mes|a[ñn]os?|horas?|jornadas?)\b/i;
+
+/** `%` o "por ciento" pegado al número. */
+const PORCENTAJE = /^\s*(%|por ciento)/i;
 
 export function numerosSinRespaldo(salida: string, entrada: string): string[] {
   const enEntrada = new Set(
@@ -121,8 +175,9 @@ export function numerosSinRespaldo(salida: string, entrada: string): string[] {
     if (/^(19|20)\d\d$/.test(n)) continue;
 
     const loQueSigue = salida.slice(encontrado.index + crudo.length);
-    const esDuracion = UNIDAD_DE_TIEMPO.test(loQueSigue);
+    if (PORCENTAJE.test(loQueSigue)) continue;
 
+    const esDuracion = UNIDAD_DE_TIEMPO.test(loQueSigue);
     if (n.length <= 2 && !esDuracion) continue;
 
     sospechosos.push(crudo);

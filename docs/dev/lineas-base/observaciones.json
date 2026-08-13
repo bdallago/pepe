@@ -1,0 +1,17 @@
+{
+  "familia": "observaciones",
+  "archivo": "src/lib/agentes/observaciones.ts",
+  "modelo": "openai/gpt-oss-120b",
+  "promptChars": 4006,
+  "fecha": "2026-08-13T12:32:22.903Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "balance general de seis meses con un mes fuera de serie",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

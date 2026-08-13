@@ -1,0 +1,17 @@
+{
+  "familia": "zombies",
+  "archivo": "src/lib/zombies.ts",
+  "modelo": "llama-3.1-8b-instant",
+  "promptChars": 710,
+  "fecha": "2026-08-13T12:29:27.174Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "una licencia mensual sin actividad desde hace 71 días",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

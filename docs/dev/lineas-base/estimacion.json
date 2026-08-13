@@ -1,0 +1,17 @@
+{
+  "familia": "estimacion",
+  "archivo": "src/lib/presupuestos/estimacion.ts",
+  "modelo": "openai/gpt-oss-120b",
+  "promptChars": 6097,
+  "fecha": "2026-08-13T12:32:24.559Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "pedido incompleto de una distribuidora",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

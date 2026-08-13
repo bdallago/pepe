@@ -43,6 +43,10 @@ const { FAMILIAS, familiaPorId } = await import("../src/lib/arnes/registro.ts");
 const { completarJSON, ErrorLLM } = await import("../src/lib/llm.ts");
 
 type Familia = (typeof FAMILIAS)[number];
+// El mismo patrón que usa `medir-recepcionista.mts`: el import dinámico no
+// deja escribir el tipo, así que se lo trae con `import(...)` en posición de
+// tipo.
+type CasoDeArnes = import("../src/lib/arnes/registro.ts").CasoDeArnes;
 
 const CORRIDAS = 3;
 const DIR_ESTADO = resolve(RAIZ, ".medidas");
@@ -53,10 +57,17 @@ const guardarBase = argumentos.includes("--base");
 const soloLista = argumentos.includes("--lista");
 const id = argumentos.find((a) => !a.startsWith("--"));
 
-/** Lo que se guarda de cada corrida. */
+/**
+ * Lo que se guarda de cada corrida: **la salida cruda, no el veredicto.**
+ *
+ * ⚠ Y eso es lo que hace que refinar un juez no cueste una sola llamada.
+ * El juicio se calcula al reportar, así que volver a correr `npm run medir`
+ * después de tocar `jueces.ts` **no dispara nada**: las tres corridas ya
+ * están guardadas y se vuelven a juzgar gratis. Salió del primer hallazgo
+ * real del arnés (2026-08-13), donde lo que había que arreglar era el juez
+ * y no el prompt.
+ */
 interface Corrida {
-  problemas?: string[];
-  /** La salida cruda, para poder mirarla cuando algo falla. */
   salida?: unknown;
   error?: string;
 }
@@ -149,7 +160,7 @@ for (const [i, caso] of familia.casos.entries()) {
       });
 
       const problemas = caso.juzgar(datos, caso.usuario);
-      hechas.push({ problemas, salida: datos });
+      hechas.push({ salida: datos });
 
       process.stdout.write(
         problemas.length === 0
@@ -185,14 +196,17 @@ interface Veredicto {
   errores: string[];
 }
 
-function juzgarCaso(nombre: string, corridas: Corrida[]): Veredicto {
+function juzgarCaso(caso: CasoDeArnes, corridas: Corrida[]): Veredicto {
+  const nombre = caso.nombre;
   const errores = corridas
     .map((c) => c.error)
     .filter((e): e is string => e !== undefined);
 
+  // El juicio se calcula ACÁ y no al guardar: ver el comentario de
+  // `Corrida`. Refinar un juez no cuesta una llamada.
   const conjuntos = corridas
-    .filter((c) => c.problemas !== undefined)
-    .map((c) => new Set(c.problemas));
+    .filter((c) => c.error === undefined)
+    .map((c) => new Set(caso.juzgar(c.salida, caso.usuario)));
 
   const todos = new Set(conjuntos.flatMap((s) => [...s]));
   const siempre = [...todos].filter((p) => conjuntos.every((s) => s.has(p)));
@@ -207,9 +221,7 @@ function juzgarCaso(nombre: string, corridas: Corrida[]): Veredicto {
   };
 }
 
-const veredictos = familia.casos.map((c) =>
-  juzgarCaso(c.nombre, estado[c.nombre] ?? []),
-);
+const veredictos = familia.casos.map((c) => juzgarCaso(c, estado[c.nombre] ?? []));
 const fallados = veredictos.filter((v) => !v.ok);
 
 console.log("\n" + "═".repeat(78));

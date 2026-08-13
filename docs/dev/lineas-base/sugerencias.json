@@ -1,0 +1,17 @@
+{
+  "familia": "sugerencias",
+  "archivo": "src/lib/sugerencias.ts",
+  "modelo": "openai/gpt-oss-120b",
+  "promptChars": 1932,
+  "fecha": "2026-08-13T12:32:21.268Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "qué estudiar con dos tracks, uno trabado",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

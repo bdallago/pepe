@@ -1,0 +1,17 @@
+{
+  "familia": "recepcionista",
+  "archivo": "src/lib/agentes/recepcionista.ts",
+  "modelo": "llama-3.1-8b-instant",
+  "promptChars": 6887,
+  "fecha": "2026-08-13T12:31:34.833Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "humo: una consulta simple sigue yendo a consultas",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

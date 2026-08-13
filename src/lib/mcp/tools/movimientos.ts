@@ -249,6 +249,19 @@ export function registrarMovimientos(server: McpServer) {
           .describe(
             `Slug del proyecto, o "${COMPARTIDO}" si el gasto es de todos (tipo una suscripción). Si no sabés, no lo mandes: se elige en la bandeja.`,
           ),
+        compartido_entre: z
+          .array(z.string())
+          .min(2, "Con un solo proyecto usá `proyecto`, no esto.")
+          .max(20)
+          .optional()
+          .describe(
+            "Slugs de los proyectos entre los que se reparte este gasto, " +
+              'cuando Beno los nombra ("compartido entre Proder y ' +
+              'Gentius"). **Mínimo dos y excluyente con `proyecto`.** Si no ' +
+              "los nombró, no lo mandes: un compartido se reparte solo " +
+              "entre los proyectos que estaban abiertos en su fecha, que es " +
+              "el default y casi siempre lo que corresponde.",
+          ),
         fecha: fechaISO.optional().describe("Por defecto, hoy."),
         estado: z
           .enum(["efectuado", "planificado"])
@@ -258,14 +271,84 @@ export function registrarMovimientos(server: McpServer) {
       annotations: PROPONE,
     },
     async (
-      { descripcion, monto, moneda, tipo, categoria, proyecto, fecha, estado },
+      {
+        descripcion,
+        monto,
+        moneda,
+        tipo,
+        categoria,
+        proyecto,
+        compartido_entre,
+        fecha,
+        estado,
+      },
       ctx,
     ) => {
       const datos = datosDelPedido(ctx);
 
+      /*
+        Excluyentes, y se rechaza sin proponer nada: la base tiene un
+        trigger que borra el subconjunto si el movimiento tiene proyecto
+        imputado, así que aceptar las dos cosas sería dejar una propuesta
+        que al aceptarse hace algo distinto de lo que dice. Es el mismo
+        criterio que el proyecto inexistente de abajo — un movimiento mal
+        imputado es más difícil de detectar que uno que no se cargó.
+      */
+      if (proyecto && compartido_entre) {
+        return respuesta(
+          "No puedo con las dos cosas a la vez: o el gasto es de un " +
+            "proyecto (`proyecto`) o se reparte entre varios " +
+            "(`compartido_entre`). Elegí una y volvé a llamarme.\n\nNo " +
+            "propuse nada todavía.",
+        );
+      }
+
+      /*
+        El subconjunto explícito, resuelto ACÁ y no en la bandeja: si un
+        slug no existe, es mejor decir cuáles hay que dejar una propuesta a
+        medias. Y **el orden se conserva**, que es el que Beno nombró.
+      */
+      let explicitos: string[] | undefined;
+      const nombresExplicitos: string[] = [];
+
+      if (compartido_entre) {
+        const ids: string[] = [];
+        for (const slug of compartido_entre) {
+          const resuelto = await resolverProyecto(datos, slug);
+          if (resuelto.tipo !== "proyecto") {
+            return respuesta(
+              `${avisoProyectoDesconocido(slug, resuelto.tipo === "no-encontrado" ? resuelto.disponibles : [])}\n\nNo propuse nada todavía. Volvé a llamarme con los slugs correctos.`,
+            );
+          }
+          if (!ids.includes(resuelto.proyecto.id)) {
+            ids.push(resuelto.proyecto.id);
+            nombresExplicitos.push(resuelto.proyecto.nombre);
+          }
+        }
+
+        // Dos slugs que resuelven al mismo proyecto dejan uno solo, y con
+        // uno solo "compartido entre X" es "es de X": eso se escribe con
+        // `proyecto`, no con esto.
+        if (ids.length < 2) {
+          return respuesta(
+            "Me pasaste un solo proyecto distinto. Un gasto de un solo " +
+              "proyecto va con `proyecto`, no con `compartido_entre`.\n\nNo " +
+              "propuse nada todavía.",
+          );
+        }
+
+        explicitos = ids;
+      }
+
       let projectId: string | null | undefined;
       let etiquetaProyecto = "lo elegís en la bandeja";
-      if (proyecto) {
+
+      if (explicitos) {
+        // Un compartido con subconjunto es `project_id = null` más las
+        // filas de `movement_projects`, que se crean al aceptar.
+        projectId = null;
+        etiquetaProyecto = `compartido entre ${nombresExplicitos.join(" y ")}`;
+      } else if (proyecto) {
         const resuelto = await resolverProyecto(datos, proyecto);
         if (resuelto.tipo === "no-encontrado") {
           // No se propone nada: un movimiento imputado al proyecto
@@ -350,6 +433,10 @@ export function registrarMovimientos(server: McpServer) {
               ? { compartido: true }
               : { project_id: projectId }
             : {}),
+          // Va junto con `compartido: true`, nunca solo: sin esa marca, la
+          // bandeja no sabría que el movimiento es compartido y pediría
+          // elegir proyecto.
+          ...(explicitos ? { compartido_entre: explicitos } : {}),
           ...(elegida
             ? { category_id: elegida.id, categoria_nombre: elegida.nombre }
             : {}),
@@ -377,11 +464,16 @@ export function registrarMovimientos(server: McpServer) {
           `- ${signo}${formatMoney(monto, moneda)} el ${formatDate(fechaFinal)}${estado === "planificado" ? " (planificado)" : ""}`,
           `- Categoría: ${elegida ? elegida.nombre : "sin definir"}${comoSalio ? ` — ${comoSalio}` : ""}`,
           `- Proyecto: ${etiquetaProyecto}`,
+          explicitos
+            ? `- Se reparte solo entre esos ${explicitos.length}, no entre los que estén abiertos en la fecha`
+            : null,
           "",
           falta.length > 0
             ? `Le falta ${falta.join(" y ")}: la bandeja se lo pide antes de dejarlo aceptar.`
             : "Está completo: le alcanza con apretar Aceptar.",
-        ].join("\n"),
+        ]
+          .filter((linea) => linea !== null)
+          .join("\n"),
       );
     },
   );

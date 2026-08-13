@@ -1,0 +1,17 @@
+{
+  "familia": "adjunto_trozo",
+  "archivo": "src/lib/adjuntos.ts",
+  "modelo": "llama-3.1-8b-instant",
+  "promptChars": 716,
+  "fecha": "2026-08-13T12:29:30.239Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "tres cláusulas de un contrato marco",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "familia": "adjunto_captura",
+  "archivo": "src/lib/adjuntos.ts",
+  "modelo": "qwen/qwen3.6-27b",
+  "promptChars": 1356,
+  "fecha": "2026-08-13T12:34:09.296Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "ruido puro: tiene que decir que no se entiende",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}

@@ -390,6 +390,14 @@ const payloadMovimientoSchema = z.object({
   estado: z.enum(["efectuado", "planificado"]),
   project_id: uuid.optional(),
   compartido: z.boolean().optional(),
+  /**
+   * El subconjunto explícito, cuando Beno lo dictó ("compartido entre
+   * Proder y Gentius"). Viene **siempre junto con `compartido: true`** y
+   * con mínimo dos ids, igual que en el formulario y en el schema de
+   * movimientos: con uno solo, "compartido entre X" es "es de X" y eso ya
+   * se escribe con `project_id`.
+   */
+  compartido_entre: z.array(uuid).min(2).optional(),
   category_id: uuid.optional(),
   categoria_nombre: z.string().optional(),
   sugerencia: z.string().optional(),
@@ -522,6 +530,35 @@ export async function aceptarMovimientoDictado(
     .single();
 
   if (errorMovimiento) return fail(mensajeDeError(errorMovimiento));
+
+  /*
+    El subconjunto explícito, si la propuesta lo traía.
+
+    Va **después** del `insert` del movimiento y con el mismo criterio que
+    `guardarSubconjunto()` en `actions/movements.ts`: si esto falla, el
+    movimiento ya existe y queda repartido por ventana de fecha, que es el
+    default correcto. El error se devuelve igual para que no pase
+    inadvertido, porque el reparto que Beno dictó no es el que quedó.
+
+    ⚠ Solo con `projectId === null`. Con proyecto imputado la base lo
+    rechaza con un trigger, y llegar hasta acá con las dos cosas ya sería
+    un error de más arriba: `registrar_movimiento` no acepta `proyecto` y
+    `compartido_entre` a la vez.
+  */
+  const explicitos = payload.data.compartido_entre;
+  if (explicitos && projectId === null) {
+    const { error: errorSubconjunto } = await supabase
+      .from("movement_projects")
+      .insert(
+        explicitos.map((project_id) => ({
+          movement_id: movimiento.id,
+          project_id,
+          user_id: userId,
+        })),
+      );
+
+    if (errorSubconjunto) return fail(mensajeDeError(errorSubconjunto));
+  }
 
   const { error: errorCierre } = await supabase
     .from("inbox")

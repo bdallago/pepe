@@ -1,0 +1,24 @@
+{
+  "familia": "extraccion",
+  "archivo": "src/lib/extraccion.ts",
+  "modelo": "llama-3.1-8b-instant",
+  "promptChars": 2249,
+  "fecha": "2026-08-13T12:30:32.509Z",
+  "corridas": 3,
+  "veredictos": [
+    {
+      "caso": "una entrada con una idea adentro: tiene que proponerla",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    },
+    {
+      "caso": "una entrada puramente operativa: tiene que decir que no hay",
+      "ok": true,
+      "inestable": [],
+      "siempre": [],
+      "errores": []
+    }
+  ]
+}
