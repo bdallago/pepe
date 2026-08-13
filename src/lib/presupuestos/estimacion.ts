@@ -2,7 +2,11 @@ import "server-only";
 
 import { z } from "zod";
 
-import { MODELO_RAZONADOR, completarJSON } from "@/lib/llm";
+import {
+  MODELO_RAZONADOR,
+  completarJSON,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import { sumarHoras, type TipoCliente } from "@/lib/presupuestos";
 import type { SupabaseClient } from "@/lib/supabase/server";
 
@@ -176,6 +180,51 @@ Respondé SOLO un objeto JSON con esta forma exacta:
   "preguntas": [string] (hasta 6; lo que hay que preguntarle al cliente)
 }`;
 
+/**
+ * El prompt de la estimación, declarado.
+ *
+ * Su juez es el único que **ya tenía media red en producción**: el chequeo
+ * mecánico del ancla que corre más abajo y que decide
+ * `ancla_verificada`. El arnés cobra lo que ese chequeo no cobra —que
+ * ninguna hora quede en cero, que el resumen use las palabras del pedido y
+ * que no aparezcan números que el pedido no traía—, porque lo que sale de
+ * acá termina en un PDF con el nombre de Beno.
+ *
+ * ⚠ Y sigue valiendo lo de siempre: **el precio no lo calcula el modelo.**
+ * Esto devuelve horas; el monto lo hace la app con la tarifa de Ajustes.
+ */
+export const PROMPT_ESTIMACION: PromptDeclarado<
+  z.infer<typeof respuestaSchema>
+> = {
+  modelo: MODELO_RAZONADOR,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "presupuesto-estimacion",
+  // Más baja que la retro (0.4): acá inventar cuesta plata.
+  temperatura: 0.3,
+  // El enemigo es la generalidad, igual que en 6.3: "Desarrollo backend,
+  // 40 horas" es un rótulo con un número al lado, no una estimación, y con
+  // los modelos sin razonamiento el techo era el modelo y no el prompt.
+  esfuerzo: "medium",
+  // Los tokens de razonamiento salen de acá adentro (medidos en 2668 con
+  // `medium` en 6.3) y la salida son hasta doce entregables con detalle y
+  // cita, más supuestos y preguntas. La retro usa el mismo número.
+  //
+  // ⚠ Con esto la llamada NO entra en la ventana de un minuto: sistema
+  // (~1500) + pedido (≤ 2000) + maxTokens (4500) ≈ 8000 contra el techo de
+  // 7300 que `lib/llm.ts` le da al razonador, así que dispara la salida de
+  // emergencia `noEntraNunca` y espera la ventana. Está aceptado: recortar
+  // `maxTokens` para que entre mete la salida al borde del truncado, y
+  // truncar no degrada la respuesta —la pierde entera—. Esto corre unas
+  // pocas veces por año. Si algún día llegara un 429 de verdad, lo que se
+  // baja es `PRESUPUESTO_PEDIDO_CHARS`, no esto: la entrada recortada se
+  // avisa en pantalla, la salida truncada se pierde en silencio.
+  maxTokens: 4500,
+  // Razonamiento con salida larga. El timeout por defecto se le queda
+  // corto, igual que en la retro.
+  timeoutMs: 180_000,
+};
+
 export interface OpcionesEstimacion {
   /** El pedido del cliente, tal como llegó. Es lo que citan las anclas. */
   pedidoTexto: string;
@@ -266,39 +315,7 @@ export async function estimarEsfuerzo(
 
   const usuario = armarUsuario(pedido, recortado);
 
-  const { datos, uso } = await completarJSON({
-    modelo: MODELO_RAZONADOR,
-    sistema: SISTEMA,
-    usuario,
-    esquema: respuestaSchema,
-    etiqueta: "presupuesto-estimacion",
-    // Más baja que la retro (0.4): acá inventar cuesta plata.
-    temperatura: 0.3,
-    // El enemigo es la generalidad, igual que en 6.3: "Desarrollo
-    // backend, 40 horas" es un rótulo con un número al lado, no una
-    // estimación, y con los modelos sin razonamiento el techo era el
-    // modelo y no el prompt.
-    esfuerzo: "medium",
-    // Los tokens de razonamiento salen de acá adentro (medidos en 2668
-    // con `medium` en 6.3) y la salida son hasta doce entregables con
-    // detalle y cita, más supuestos y preguntas. La retro usa el mismo
-    // número.
-    //
-    // ⚠ Con esto la llamada NO entra en la ventana de un minuto: sistema
-    // (~1500) + pedido (≤ 2000) + maxTokens (4500) ≈ 8000 contra el
-    // techo de 7300 que `lib/llm.ts` le da al razonador, así que dispara
-    // la salida de emergencia `noEntraNunca` y espera la ventana. Está
-    // aceptado: recortar `maxTokens` para que entre mete la salida al
-    // borde del truncado, y truncar no degrada la respuesta —la pierde
-    // entera—. Esto corre unas pocas veces por año. Si algún día llegara
-    // un 429 de verdad, lo que se baja es `PRESUPUESTO_PEDIDO_CHARS`, no
-    // esto: la entrada recortada se avisa en pantalla, la salida
-    // truncada se pierde en silencio.
-    maxTokens: 4500,
-    // Razonamiento con salida larga. El timeout por defecto se le queda
-    // corto, igual que en la retro.
-    timeoutMs: 180_000,
-  });
+  const { datos, uso } = await completarJSON({ ...PROMPT_ESTIMACION, usuario });
 
   // ── El chequeo mecánico del ancla ──────────────────────────────
   //

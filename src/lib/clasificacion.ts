@@ -2,7 +2,12 @@ import "server-only";
 
 import { z } from "zod";
 
-import { ErrorLLM, MODELO_CHICO, completarJSON } from "@/lib/llm";
+import {
+  ErrorLLM,
+  MODELO_CHICO,
+  completarJSON,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { Category, TipoMovimiento } from "@/lib/supabase/database.types";
 
@@ -148,6 +153,29 @@ Respondé SOLO un objeto JSON:
 {"tipo": "ingreso" | "egreso", "categoria": "<nombre exacto de la lista>"}`;
 
 /**
+ * El prompt del clasificador, declarado.
+ *
+ * Lo que su juez cobra es la regla de arriba: la categoría que devuelve
+ * tiene que estar **copiada tal cual** de la lista que se le dio. Si
+ * inventa una, acá abajo no hay sugerencia —así que el daño ya está
+ * contenido— pero el arnés lo hace visible en vez de dejarlo pasar como
+ * "el histórico no encontró nada".
+ */
+export const PROMPT_CLASIFICACION: PromptDeclarado<
+  z.infer<typeof respuestaSchema>
+> = {
+  modelo: MODELO_CHICO,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "clasificacion-movimiento",
+  maxTokens: 80,
+  // Un solo reintento: hay alguien mirando el formulario. Si no sale
+  // rápido, se carga a mano y listo.
+  reintentos: 1,
+  timeoutMs: 15_000,
+};
+
+/**
  * Paso 2: el modelo, solo si el histórico no encontró nada.
  *
  * **Nunca lanza.** Si Groq está caído, sin cuota o contesta cualquier
@@ -199,18 +227,7 @@ export async function sugerirConModelo(
     .join("\n\n");
 
   try {
-    const { datos } = await completarJSON({
-      modelo: MODELO_CHICO,
-      sistema: SISTEMA,
-      usuario,
-      esquema: respuestaSchema,
-      etiqueta: "clasificacion-movimiento",
-      maxTokens: 80,
-      // Un solo reintento: hay alguien mirando el formulario. Si no sale
-      // rápido, se carga a mano y listo.
-      reintentos: 1,
-      timeoutMs: 15_000,
-    });
+    const { datos } = await completarJSON({ ...PROMPT_CLASIFICACION, usuario });
 
     // El modelo devuelve un nombre; acá se busca el id. Si inventó una
     // categoría que no existe, no hay sugerencia: no se crea nada nuevo.

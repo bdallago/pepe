@@ -2,7 +2,12 @@ import "server-only";
 
 import { z } from "zod";
 
-import { ErrorLLM, MODELO_CHICO, completarJSON } from "@/lib/llm";
+import {
+  ErrorLLM,
+  MODELO_CHICO,
+  completarJSON,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { CategoriaLeccion } from "@/lib/supabase/database.types";
 
@@ -106,6 +111,27 @@ Respondé SOLO un objeto JSON con esta forma exacta:
   "motivo": string breve explicando por qué no hay lección (null si sí la hay)
 }`;
 
+/**
+ * El prompt del extractor de bitácora, declarado.
+ *
+ * ⚠ **Su juez va al revés que todos los demás, y está escrito por qué.**
+ * Acá el modelo **reescribe lo que Beno vivió**, no produce afirmaciones
+ * propias, así que la vara de 6.3 —"el título tiene que ser una afirmación
+ * discutible"— **no se le aplica**: aplicarla empujaría en la dirección
+ * exacta que prohíbe el bloque de arriba (*"si lo que entendió fue algo
+ * básico o de manual, rescatalo igual"*). Lo que el arnés cobra acá es lo
+ * contrario: que respete su formulación.
+ */
+export const PROMPT_EXTRACCION: PromptDeclarado<
+  z.infer<typeof respuestaSchema>
+> = {
+  modelo: MODELO_CHICO,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "extraccion-lecciones",
+  maxTokens: 700,
+};
+
 /** Lo que queda guardado en `inbox.payload` para una propuesta. */
 export interface PayloadLeccionExtraida {
   titulo: string;
@@ -188,12 +214,8 @@ export async function extraerLeccionesPendientes(
 
     try {
       const { datos, uso } = await completarJSON({
-        modelo: MODELO_CHICO,
-        sistema: SISTEMA,
+        ...PROMPT_EXTRACCION,
         usuario: `Fecha de la entrada: ${entrada.fecha}\n\nEntrada:\n${entrada.contenido}`,
-        esquema: respuestaSchema,
-        etiqueta: "extraccion-lecciones",
-        maxTokens: 700,
       });
 
       const completa =

@@ -3,7 +3,11 @@ import "server-only";
 import { z } from "zod";
 
 import { addDays, todayISO } from "@/lib/dates";
-import { MODELO_RAZONADOR, completarJSON } from "@/lib/llm";
+import {
+  MODELO_RAZONADOR,
+  completarJSON,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import type { SupabaseClient } from "@/lib/supabase/server";
 
 /**
@@ -88,6 +92,30 @@ Respondé SOLO un objeto JSON con esta forma exacta:
 Si los datos no alcanzan para anclar ninguna, devolvé {"sugerencias": []}.`;
 
 /**
+ * El prompt de 6.4, declarado.
+ *
+ * ⚠ **Es la única salida de un modelo que se le muestra a Beno sin pasar
+ * por la bandeja**, y puede ser porque no escribe nada. Eso hace que su
+ * juez importe más, no menos: acá no hay un botón de rechazar en el medio.
+ * Lo que cobra es la regla número uno de arriba —que el `ancla` cite un
+ * dato que esté en la entrada— y que el título no sea un rótulo.
+ */
+export const PROMPT_SUGERENCIAS: PromptDeclarado<
+  z.infer<typeof respuestaSchema>
+> = {
+  modelo: MODELO_RAZONADOR,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "sugerencias-estudio",
+  temperatura: 0.4,
+  // Acá el enemigo es el consejo genérico, igual que en 6.3, y el
+  // razonamiento es lo que hace que el modelo cruce dos datos en vez de
+  // leer una fila y opinar sobre ella.
+  esfuerzo: "medium",
+  maxTokens: 3500,
+};
+
+/**
  * Pide sugerencias de estudio. No escribe nada.
  *
  * Lanza `ErrorLLM` si el modelo falla: la pantalla lo muestra discreto y
@@ -105,17 +133,8 @@ export async function sugerirQueEstudiar(
   }
 
   const { datos } = await completarJSON({
-    modelo: MODELO_RAZONADOR,
-    sistema: SISTEMA,
+    ...PROMPT_SUGERENCIAS,
     usuario: contexto,
-    esquema: respuestaSchema,
-    etiqueta: "sugerencias-estudio",
-    temperatura: 0.4,
-    // Acá el enemigo es el consejo genérico, igual que en 6.3, y el
-    // razonamiento es lo que hace que el modelo cruce dos datos en vez
-    // de leer una fila y opinar sobre ella.
-    esfuerzo: "medium",
-    maxTokens: 3500,
   });
 
   return datos.sugerencias;

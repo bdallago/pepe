@@ -2,7 +2,11 @@ import "server-only";
 
 import { z } from "zod";
 
-import { MODELO_RAZONADOR, completarJSON } from "@/lib/llm";
+import {
+  MODELO_RAZONADOR,
+  completarJSON,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import { todayISO } from "@/lib/dates";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { CategoriaLeccion } from "@/lib/supabase/database.types";
@@ -109,6 +113,33 @@ Respondé SOLO un objeto JSON con esta forma exacta:
 
 Si no tenés nada nuevo que aportar, devolvé {"lecciones": []}.`;
 
+/**
+ * El prompt de 6.3, declarado.
+ *
+ * Es la familia donde la vara del título nació: con
+ * `llama-3.3-70b-versatile` devolvía rótulos —"Establecer límites de
+ * soporte", "Priorizar la documentación", "Revisar contratos"— y
+ * **agregarle ejemplos en contraste al prompt no movió la aguja: el techo
+ * era el modelo**. Su juez es `pareceRotulo()`, con esos tres casos reales
+ * adentro.
+ */
+export const PROMPT_GENERACION: PromptDeclarado<
+  z.infer<typeof respuestaSchema>
+> = {
+  modelo: MODELO_RAZONADOR,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "generacion-lecciones",
+  // Un poco más alta que el resto: acá se quiere que proponga, no que
+  // repita la formulación más probable.
+  temperatura: 0.5,
+  esfuerzo: "medium",
+  // Holgado porque los tokens de razonamiento se descuentan de acá:
+  // medido, la parte que piensa se lleva unos 2000 y con 1800 en total la
+  // lista volvía truncada a una sola lección.
+  maxTokens: 3500,
+};
+
 /** Lo que queda en `inbox.payload` para una lección generada. */
 export interface PayloadLeccionSugerida {
   titulo: string;
@@ -191,21 +222,7 @@ export async function generarLecciones(
       : "Todavía no tiene ninguna lección de este proyecto.",
   ].join("\n");
 
-  const { datos, uso } = await completarJSON({
-    modelo: MODELO_RAZONADOR,
-    sistema: SISTEMA,
-    usuario,
-    esquema: respuestaSchema,
-    etiqueta: "generacion-lecciones",
-    // Un poco más alta que el resto: acá se quiere que proponga, no que
-    // repita la formulación más probable.
-    temperatura: 0.5,
-    esfuerzo: "medium",
-    // Holgado porque los tokens de razonamiento se descuentan de acá:
-    // medido, la parte que piensa se lleva unos 2000 y con 1800 en total
-    // la lista volvía truncada a una sola lección.
-    maxTokens: 3500,
-  });
+  const { datos, uso } = await completarJSON({ ...PROMPT_GENERACION, usuario });
 
   const reporte: ReporteGeneracion = {
     propuestas: 0,

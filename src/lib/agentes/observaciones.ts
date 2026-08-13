@@ -2,7 +2,11 @@ import "server-only";
 
 import { z } from "zod";
 
-import { MODELO_RAZONADOR, completarJSON } from "@/lib/llm";
+import {
+  MODELO_RAZONADOR,
+  completarJSON,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import type { Balances } from "@/lib/balances";
 import type { Moneda } from "@/lib/supabase/database.types";
 
@@ -121,6 +125,45 @@ Respondé SOLO un objeto JSON con esta forma exacta:
 
 Si los números no alcanzan para observar nada, devolvé {"observaciones": []}.`;
 
+/**
+ * El prompt de las observaciones, declarado.
+ *
+ * Su juez es el más literal de los trece, y por eso el más útil: el campo
+ * `dato` **cita un número de la entrada**, así que se puede verificar
+ * mecánicamente que exista. Los ejemplos del prompt traen números
+ * inventados a propósito para mostrar la forma —y el prompt lo aclara—,
+ * así que el juez compara contra el contexto que se manda, no contra el
+ * sistema.
+ */
+export const PROMPT_OBSERVACIONES: PromptDeclarado<
+  z.infer<typeof respuestaSchema>
+> = {
+  modelo: MODELO_RAZONADOR,
+  sistema: SISTEMA,
+  esquema: respuestaSchema,
+  etiqueta: "observaciones-balance",
+  // Interpretar, no adornar. Más alto empieza a redactar lindo, que acá es
+  // exactamente por dónde entra lo inventado.
+  temperatura: 0.3,
+  // El mismo razonador que 6.3, 6.4 y 6.5: contra la generalidad el techo
+  // era el modelo, y "los egresos subieron y conviene revisarlos" es justo
+  // la clase de relleno que llama devuelve.
+  esfuerzo: "medium",
+  /*
+    3500, igual que la generación de lecciones (6.3), y no 4500 como la
+    retro. La salida acá es corta —tres observaciones de dos oraciones, unos
+    300 tokens— pero **los tokens de razonamiento se descuentan de acá** y
+    con `medium` la parte que piensa se lleva unos 2000 sola. El margen es
+    contra eso, no contra la respuesta.
+
+    Quedarse corto no da una respuesta peor: la trunca, no valida contra el
+    esquema y se pierde la llamada entera. Y la entrada es chica (números
+    agregados, nunca filas crudas), así que sobra lugar bajo el techo de
+    7300 tokens por minuto del razonador.
+  */
+  maxTokens: 3500,
+};
+
 export interface PedidoObservaciones {
   /** "Balance general" o el nombre del proyecto. */
   alcance: string;
@@ -147,31 +190,8 @@ export async function observarBalances({
   hoy,
 }: PedidoObservaciones): Promise<Observacion[]> {
   const { datos } = await completarJSON({
-    modelo: MODELO_RAZONADOR,
-    sistema: SISTEMA,
+    ...PROMPT_OBSERVACIONES,
     usuario: armarContexto({ alcance, rango, moneda, balances, hoy }),
-    esquema: respuestaSchema,
-    etiqueta: "observaciones-balance",
-    // Interpretar, no adornar. Más alto empieza a redactar lindo, que acá
-    // es exactamente por dónde entra lo inventado.
-    temperatura: 0.3,
-    // El mismo razonador que 6.3, 6.4 y 6.5: contra la generalidad el
-    // techo era el modelo, y "los egresos subieron y conviene revisarlos"
-    // es justo la clase de relleno que llama devuelve.
-    esfuerzo: "medium",
-    /*
-      3500, igual que la generación de lecciones (6.3), y no 4500 como la
-      retro. La salida acá es corta —tres observaciones de dos oraciones,
-      unos 300 tokens— pero **los tokens de razonamiento se descuentan de
-      acá** y con `medium` la parte que piensa se lleva unos 2000 sola. El
-      margen es contra eso, no contra la respuesta.
-
-      Quedarse corto no da una respuesta peor: la trunca, no valida contra
-      el esquema y se pierde la llamada entera. Y la entrada es chica
-      (números agregados, nunca filas crudas), así que sobra lugar bajo el
-      techo de 7300 tokens por minuto del razonador.
-    */
-    maxTokens: 3500,
   });
 
   // El recorte va acá y no en el esquema: ver `TOLERADAS`. Se quedan las

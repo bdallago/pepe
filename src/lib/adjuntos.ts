@@ -10,6 +10,7 @@ import {
   MODELO_RAZONADOR,
   MODELO_VISION,
   completarJSON,
+  type PromptDeclarado,
 } from "@/lib/llm";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { Attachment, CategoriaLeccion } from "@/lib/supabase/database.types";
@@ -302,6 +303,69 @@ Respondé SOLO un objeto JSON con esta forma exacta:
 }`;
 
 /* ────────────────────────────────────────────────────────────
+ * Los tres prompts declarados
+ *
+ * Van juntos y acá abajo porque los tres son del mismo camino y conviene
+ * leer de un saque qué modelo y qué presupuesto usa cada paso: el trozo va
+ * al chico, la síntesis al razonador y la captura al único de la cuenta
+ * que lee imágenes.
+ * ──────────────────────────────────────────────────────────── */
+
+/** Un fragmento de PDF. Lo que su juez cobra: ningún número que el trozo no traiga. */
+export const PROMPT_ADJUNTO_TROZO: PromptDeclarado<
+  z.infer<typeof trozoSchema>
+> = {
+  modelo: MODELO_CHICO,
+  sistema: SISTEMA_TROZO,
+  esquema: trozoSchema,
+  etiqueta: "adjunto-pdf-trozo",
+  maxTokens: 700,
+};
+
+/**
+ * La síntesis del PDF.
+ *
+ * ⚠ **Su vara es la de 6.3, no la del extractor de bitácora**, y está
+ * escrito en AGENTS.md §6.g: un PDF de un tercero no es lo que Beno vivió,
+ * es material ajeno del que el modelo **produce** afirmaciones, así que el
+ * falso positivo cuesta lo mismo que en 6.3. Si se afloja una, hay que
+ * aflojar la otra.
+ */
+export const PROMPT_ADJUNTO_SINTESIS: PromptDeclarado<
+  z.infer<typeof sintesisSchema>
+> = {
+  modelo: MODELO_RAZONADOR,
+  esfuerzo: "medium",
+  sistema: SISTEMA_SINTESIS,
+  esquema: sintesisSchema,
+  etiqueta: "adjunto-pdf-sintesis",
+  // El razonamiento se descuenta de `max_tokens`, y quedarse corto no
+  // degrada la respuesta: la trunca, no valida y se pierde la llamada
+  // entera. Es el mismo número que usa 6.3.
+  maxTokens: 3_500,
+};
+
+/**
+ * Una captura.
+ *
+ * ⚠ **El único de los trece que corre en `MODELO_VISION`**: los otros tres
+ * modelos de la cuenta contestan HTTP 400 apenas les llega el array
+ * multimodal. Y el único cuyo juez celebra un `legible: false`: con ruido
+ * puro, la respuesta correcta es no entender nada y **no inventar una
+ * conversación**. Está medido el 2026-08-10 y es la propiedad que hace
+ * viable todo este camino.
+ */
+export const PROMPT_ADJUNTO_CAPTURA: PromptDeclarado<
+  z.infer<typeof capturaSchema>
+> = {
+  modelo: MODELO_VISION,
+  sistema: SISTEMA_CAPTURA,
+  esquema: capturaSchema,
+  etiqueta: "adjunto-captura",
+  maxTokens: 1_200,
+};
+
+/* ────────────────────────────────────────────────────────────
  * El pase
  * ──────────────────────────────────────────────────────────── */
 
@@ -539,12 +603,8 @@ async function procesarPdf(
     }
 
     const { datos } = await completarJSON({
-      modelo: MODELO_CHICO,
-      sistema: SISTEMA_TROZO,
+      ...PROMPT_ADJUNTO_TROZO,
       usuario: `Documento: ${adjunto.nombre_original}\nFragmento ${i + 1} de ${trozos.length}:\n\n${trozos[i]}`,
-      esquema: trozoSchema,
-      etiqueta: "adjunto-pdf-trozo",
-      maxTokens: 700,
     });
 
     resumenes.push(...datos.puntos);
@@ -573,9 +633,7 @@ async function procesarPdf(
   // Paso 4: una sola llamada al razonador. El porqué está en
   // `SISTEMA_SINTESIS`.
   const { datos, uso } = await completarJSON({
-    modelo: MODELO_RAZONADOR,
-    esfuerzo: "medium",
-    sistema: SISTEMA_SINTESIS,
+    ...PROMPT_ADJUNTO_SINTESIS,
     usuario: [
       `Documento: ${adjunto.nombre_original}`,
       adjunto.paginas ? `Páginas: ${adjunto.paginas}` : null,
@@ -586,12 +644,6 @@ async function procesarPdf(
     ]
       .filter((l) => l !== null)
       .join("\n"),
-    esquema: sintesisSchema,
-    etiqueta: "adjunto-pdf-sintesis",
-    // El razonamiento se descuenta de `max_tokens`, y quedarse corto no
-    // degrada la respuesta: la trunca, no valida y se pierde la llamada
-    // entera. Es el mismo número que usa 6.3.
-    maxTokens: 3_500,
   });
 
   let propuestas = 0;
@@ -644,19 +696,16 @@ async function procesarImagen(
   const dataUri = `data:${adjunto.mime};base64,${Buffer.from(bytes).toString("base64")}`;
 
   const { datos, uso } = await completarJSON({
-    modelo: MODELO_VISION,
-    sistema: SISTEMA_CAPTURA,
+    ...PROMPT_ADJUNTO_CAPTURA,
     usuario: adjunto.frase
       ? `Lo que escribió al pasarte la imagen: ${adjunto.frase}`
       : "No escribió nada al pasarte la imagen.",
     // Por acá y no pegada dentro de `usuario`: un data URI medido por
     // largo de string daría cientos de miles de tokens y el limitador
     // esperaría la ventana entera antes de cada captura (ver
-    // `TOKENS_POR_IMAGEN` en `llm.ts`).
+    // `TOKENS_POR_IMAGEN` en `llm.ts`). Por eso tampoco está en el
+    // descriptor: es dato de entrada, igual que `usuario`.
     imagenes: [dataUri],
-    esquema: capturaSchema,
-    etiqueta: "adjunto-captura",
-    maxTokens: 1_200,
   });
 
   // `legible: false` **no es un error**: es la respuesta correcta a una

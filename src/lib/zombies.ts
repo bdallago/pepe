@@ -2,7 +2,13 @@ import "server-only";
 
 import { z } from "zod";
 
-import { ErrorLLM, MODELO_CHICO, completarJSON, hayModeloConfigurado } from "@/lib/llm";
+import {
+  ErrorLLM,
+  MODELO_CHICO,
+  completarJSON,
+  hayModeloConfigurado,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import type { SupabaseClient } from "@/lib/supabase/server";
 import type { Moneda } from "@/lib/supabase/database.types";
 
@@ -90,6 +96,24 @@ Español rioplatense, sin emojis y sin muletillas de asistente.
 Respondé SOLO un objeto JSON: {"aviso": string}`;
 
 /**
+ * El prompt del aviso de zombie, declarado.
+ *
+ * Es el de menos consecuencia de los trece —si falla, `avisoDeCodigo()`
+ * escribe el aviso y el pase sigue— pero su juez cobra dos cosas que sí
+ * importan: que el monto y el "hace cuánto" salgan de la entrada, y que no
+ * prometa haber dado nada de baja. Aceptar un zombie **no da de baja
+ * nada** cuando no hay recurrencia declarada, y la pantalla lo dice; un
+ * aviso que insinúe lo contrario contradice a la app.
+ */
+export const PROMPT_ZOMBIES: PromptDeclarado<z.infer<typeof avisoSchema>> = {
+  modelo: MODELO_CHICO,
+  sistema: SISTEMA,
+  esquema: avisoSchema,
+  etiqueta: "aviso-zombie",
+  maxTokens: 250,
+};
+
+/**
  * Corre el escaneo para un usuario y deja los candidatos en la bandeja.
  *
  * No lanza por culpa del modelo: si no puede redactar, usa el aviso de
@@ -147,12 +171,8 @@ export async function escanearZombies(
     if (hayModeloConfigurado()) {
       try {
         const { datos, uso } = await completarJSON({
-          modelo: MODELO_CHICO,
-          sistema: SISTEMA,
+          ...PROMPT_ZOMBIES,
           usuario: contextoDe(c),
-          esquema: avisoSchema,
-          etiqueta: "aviso-zombie",
-          maxTokens: 250,
         });
         aviso = datos.aviso;
         modelo = uso.modelo;

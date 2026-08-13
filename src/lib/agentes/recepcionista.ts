@@ -1,6 +1,12 @@
 import "server-only";
 
-import { completarJSON, MODELO_CHICO } from "@/lib/llm";
+import type { z } from "zod";
+
+import {
+  completarJSON,
+  MODELO_CHICO,
+  type PromptDeclarado,
+} from "@/lib/llm";
 import { acotarConfianza, esAmbigua } from "@/lib/agentes/ambiguedad";
 import { atajar } from "@/lib/agentes/atajo";
 import { MAX_ACCIONES, planSchema, type Decision } from "@/lib/agentes/tipos";
@@ -449,6 +455,34 @@ Respondé SOLO un objeto JSON con la clave "acciones": una lista de objetos
 con las claves destino, argumento, confianza, analizar.`;
 
 /**
+ * El prompt del recepcionista, declarado.
+ *
+ * ⚠ **Es el único de los trece que ya tenía red antes del arnés**, y la
+ * tiene distinta: su banco (`banco.ts`) juzga destino, confianza y
+ * argumento con `veredicto.ts`, y su corredor es
+ * `scripts/medir-recepcionista.mts`. El arnés genérico **delega** en esos
+ * dos en vez de duplicarlos.
+ *
+ * Y sigue valiendo todo lo de arriba: este prompt es de vidrio, cuatro
+ * incidentes medidos, y el bloque de confianza va **último**.
+ */
+export const PROMPT_RECEPCIONISTA: PromptDeclarado<
+  z.infer<typeof planSchema>
+> = {
+  modelo: MODELO_CHICO,
+  sistema: SISTEMA,
+  esquema: planSchema,
+  etiqueta: "recepcionista",
+  // Consistencia, no creatividad: la misma frase tiene que ir siempre al
+  // mismo lado.
+  temperatura: 0,
+  // Alcanzaba 120 para una decisión sola; tres entran justo en 300.
+  // Quedarse corto no degrada la respuesta: la trunca, no valida contra el
+  // esquema y se pierde la llamada entera.
+  maxTokens: 300,
+};
+
+/**
  * Devuelve las acciones de una frase, **en orden**.
  *
  * Casi siempre es un array de uno. Se recorta a `MAX_ACCIONES` acá y no
@@ -463,18 +497,8 @@ export async function decidirDestinos(frase: string): Promise<Decision[]> {
   }
 
   const { datos } = await completarJSON({
-    modelo: MODELO_CHICO,
-    sistema: SISTEMA,
+    ...PROMPT_RECEPCIONISTA,
     usuario: frase,
-    esquema: planSchema,
-    // Consistencia, no creatividad: la misma frase tiene que ir siempre
-    // al mismo lado.
-    temperatura: 0,
-    // Alcanzaba 120 para una decisión sola; tres entran justo en 300.
-    // Quedarse corto no degrada la respuesta: la trunca, no valida contra
-    // el esquema y se pierde la llamada entera.
-    maxTokens: 300,
-    etiqueta: "recepcionista",
   });
 
   const acciones = datos.acciones.slice(0, MAX_ACCIONES);
