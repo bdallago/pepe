@@ -309,10 +309,12 @@ incidentes medidos** donde agregarle texto rompió casos que ni nombraba.
 Antes de tocarlo, medir; después, volver a medir — y desde el 2026-08-12
 **medir es `npm run medir:recepcionista`**, no un ritual a mano (ver su
 fila abajo). Si la regla se puede resolver con un test sobre un string,
-va en `despacho.ts`, en `ambiguedad.ts` o en `atajo.ts`. **Medir cuesta
-~11 minutos el piso y ~50 el corpus completo**: el prompt son ~2613
-tokens contra un techo de 5500/minuto, o sea 2 frases por minuto — y
-**cada línea que le agregues sube ese costo**. Los dos agregados que
+va en `despacho.ts`, en `ambiguedad.ts` o en `atajo.ts`. **El piso son 11
+frases de un banco de 29** (`src/lib/agentes/banco.ts`, y los dos números
+los chequea `npm test`). **Medir cuesta ~11 minutos el piso y ~50 el
+corpus completo**: el prompt son ~2613 tokens contra un techo de
+5500/minuto, o sea 2 frases por minuto — y **cada línea que le agregues
+sube ese costo**. Los dos agregados que
 pasaron limpios al primer intento
 (`presupuesto` y `proyecto`) usaron la misma receta: pocas líneas,
 **léxicas y no en prosa**, y todas **arriba** del bloque de confianza, que

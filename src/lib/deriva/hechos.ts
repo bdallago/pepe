@@ -1,5 +1,5 @@
-import { globSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 import { BANCO, casosDelPiso } from "@/lib/agentes/banco";
 import { DESTINOS } from "@/lib/agentes/tipos";
@@ -74,22 +74,51 @@ function leer(raiz: string, ruta: string): string {
   return readFileSync(resolve(raiz, ruta), "utf8");
 }
 
-/** Cuántas veces matchea `patron` en todos los archivos de `glob`. */
-function contar(raiz: string, glob: string, patron: RegExp): number {
+/**
+ * Los `.ts` de un directorio.
+ *
+ * A mano y no con `globSync`: existe en Node 24 pero **no está en los
+ * tipos de `@types/node` que tiene el proyecto**, así que `npm run
+ * typecheck` lo rechaza aunque corra. Bajar una API real a una recursión
+ * de seis líneas cuesta menos que subir una dependencia de tipos.
+ */
+function archivosTs(
+  raiz: string,
+  subdir: string,
+  recursivo: boolean,
+): string[] {
+  const encontrados: string[] = [];
+
+  for (const entrada of readdirSync(resolve(raiz, subdir), {
+    withFileTypes: true,
+  })) {
+    const ruta = join(subdir, entrada.name);
+    if (entrada.isDirectory()) {
+      if (recursivo) encontrados.push(...archivosTs(raiz, ruta, true));
+    } else if (entrada.name.endsWith(".ts")) {
+      encontrados.push(ruta);
+    }
+  }
+
+  return encontrados;
+}
+
+/** Cuántas veces matchea `patron` en todos esos archivos. */
+function contar(archivos: string[], raiz: string, patron: RegExp): number {
   let total = 0;
-  for (const ruta of globSync(glob, { cwd: raiz })) {
+  for (const ruta of archivos) {
     total += (leer(raiz, ruta).match(patron) ?? []).length;
   }
   return total;
 }
 
 /** En cuántos ARCHIVOS matchea `patron`, que no es lo mismo que arriba. */
-function contarArchivos(raiz: string, glob: string, patron: RegExp): number {
-  let total = 0;
-  for (const ruta of globSync(glob, { cwd: raiz })) {
-    if (patron.test(leer(raiz, ruta))) total++;
-  }
-  return total;
+function contarArchivos(
+  archivos: string[],
+  raiz: string,
+  patron: RegExp,
+): number {
+  return archivos.filter((ruta) => patron.test(leer(raiz, ruta))).length;
 }
 
 /**
@@ -119,31 +148,32 @@ function constante(fuente: string, nombre: string): number {
 
 export function medirHechos(raiz: string): Hechos {
   const tipos = leer(raiz, "src/lib/supabase/database.types.ts");
-  const tools = "src/lib/mcp/tools/*.ts";
-  const todoLib = "src/lib/**/*.ts";
+  const tools = archivosTs(raiz, "src/lib/mcp/tools", false);
+  const raizDeLib = archivosTs(raiz, "src/lib", false);
+  const todoLib = archivosTs(raiz, "src/lib", true);
 
   return {
     destinos: DESTINOS.length,
     frasesBanco: BANCO.length,
     frasesPiso: casosDelPiso().length,
 
-    toolsConector: contar(raiz, tools, /server\.registerTool\(/g),
-    toolsQueLeen: contar(raiz, tools, /annotations: SOLO_LECTURA/g),
-    toolsQueProponen: contar(raiz, tools, /annotations: PROPONE/g),
-    toolsQueEscribenDirecto: contar(raiz, tools, /annotations: ESCRIBE/g),
+    toolsConector: contar(tools, raiz, /server\.registerTool\(/g),
+    toolsQueLeen: contar(tools, raiz, /annotations: SOLO_LECTURA/g),
+    toolsQueProponen: contar(tools, raiz, /annotations: PROPONE/g),
+    toolsQueEscribenDirecto: contar(tools, raiz, /annotations: ESCRIBE/g),
 
     modulosServerOnly: contarArchivos(
+      raizDeLib,
       raiz,
-      "src/lib/*.ts",
       /^import "server-only"/m,
     ),
 
     promptsDeSistema: contar(
-      raiz,
       todoLib,
+      raiz,
       /^const (?:SISTEMA|PROMPT)\w*\s*=/gm,
     ),
-    callSitesLLM: contar(raiz, todoLib, /await completarJSON[<(]/g),
+    callSitesLLM: contar(todoLib, raiz, /await completarJSON[<(]/g),
 
     tiposBandeja: valoresDeEnum(tipos, "tipo_bandeja"),
     estadosBandeja: valoresDeEnum(tipos, "estado_bandeja"),

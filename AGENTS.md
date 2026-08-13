@@ -431,6 +431,12 @@ llamada estima más que el techo del minuto, esperar no lo arregla —el
 minuto siguiente tiene el mismo techo—, así que con la ventana vacía
 sale igual.
 
+Al 2026-08-13 hay **13 prompts** en la app, uno por cada llamada a
+`completarJSON`, repartidos en 11 archivos (`adjuntos.ts` tiene tres).
+Ese número también lo chequea `npm test`: si aparece un prompt nuevo sin
+su familia en el arnés, el test de completitud de `src/lib/arnes/` no
+pasa. Ver "El arnés de los prompts".
+
 ### 6.e Las tres funciones de 6.3 a 6.5 no comparten camino
 
 - **6.3 generar lecciones** y **6.5 retro** dejan propuestas en `inbox`
@@ -737,10 +743,16 @@ un movimiento porque no existe el camino.
 
 **Ojo con lo que se puede importar.** El MCP no corre dentro de Next, así
 que **no puede importar ninguno de los módulos marcados con
-`server-only`** — son 11, entre ellos `queries.ts` — ni nada que use
+`server-only`** — son 15, entre ellos `queries.ts` — ni nada que use
 `next/headers`. Lo que sí importa, y es lo que importa: los módulos
 puros con las reglas de dominio (`aprendizaje`, `balances`, `prorrateo`,
 `fx`, `dates`, `format`, `schemas`, `quiz`).
+
+⚠ **Ese número lo chequea `npm test`** (ver "El linter de deriva
+documental", más abajo). No lo actualices a mano sin correr
+`npm run verificar:doc`: decía 11 y eran 15, o sea que **creció cuatro
+veces sin que nadie lo note**, que es exactamente el modo de fallar que
+el linter viene a tapar.
 
 Para saber cuáles son, buscá el import y no la palabra:
 `grep -lE '^import "server-only"' src/lib/*.ts`. Buscar el texto suelto
@@ -1081,6 +1093,12 @@ Con la etapa de adjuntos apareció un **segundo bucket privado**
 `/api/cron/comprobantes` devuelve las URLs firmadas bajo una clave
 `adjuntos` **nueva y al lado de `archivos`**, para no cambiarle el
 significado a una clave que el workflow ya usa.
+
+**`VERSION_RESPALDO` vale hoy **4**.** Lo subió el subconjunto explícito
+de proyectos, que metió `movement_projects` en `TABLAS`. Las menciones de
+arriba —"pasó a 2", "pasó a 3"— cuentan cómo llegó hasta acá y **no se
+corrigen**: dicen lo que pasó ese día. La que tiene que estar al día es
+esta, y la chequea `npm test`.
 
 ⚠ **Esta sección decía que faltaba el `for` del otro lado y que esos
 bytes no se estaban guardando en ningún lado. Es falso**, y estuvo

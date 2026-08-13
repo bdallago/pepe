@@ -2,8 +2,14 @@
  * Mide el recepcionista contra el banco de frases.
  *
  *   npm run medir:recepcionista            # el piso: 11 frases, ~11 min
- *   npm run medir:recepcionista -- --todo  # completo: ~32 min
+ *   npm run medir:recepcionista -- --todo  # completo: 29 frases, ~50 min
  *   npm run medir:recepcionista -- --base  # además, reescribe la línea base
+ *
+ * ⚠ El `~50` es **medido con cronómetro, no calculado**, y por eso el
+ * linter de deriva no lo chequea: 20 de las 29 frases llegan al modelo —a
+ * las otras 9 las ataja `atajo.ts`— y a 2 llamadas por minuto la cuenta
+ * daría 30. La diferencia es la corrección de la reserva con el `usage`
+ * real. Si alguien recalcula y le da 30, el número bueno es el del reloj.
  *
  * ## Por qué tarda tanto, y por qué no se puede apurar
  *

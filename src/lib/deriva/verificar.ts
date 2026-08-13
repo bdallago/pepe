@@ -20,12 +20,44 @@ export interface Desvio {
   porque: string;
 }
 
+/**
+ * El texto con los espacios colapsados, y de dónde salió cada carácter.
+ *
+ * ⚠ **Sin esto el linter da falsos "sin-match" cada vez que un párrafo se
+ * re-envuelve**, y pasó en la primera corrida: toda la documentación de
+ * este repo está cortada a mano a ~72 columnas, así que
+ * `"El piso son 11 frases"` puede tener un salto de línea en cualquiera de
+ * sus espacios. Pedirle a quien escribe una afirmación que ponga `\s+` en
+ * cada espacio es una trampa que se olvida una vez y desactiva el chequeo.
+ *
+ * El mapa de posiciones es lo que permite seguir informando la línea del
+ * documento original después de haber matcheado contra el texto plano.
+ */
+function aplanar(texto: string): { plano: string; posiciones: number[] } {
+  let plano = "";
+  const posiciones: number[] = [];
+
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i]!;
+    if (/\s/.test(c)) {
+      if (plano.endsWith(" ")) continue;
+      plano += " ";
+    } else {
+      plano += c;
+    }
+    posiciones.push(i);
+  }
+
+  return { plano, posiciones };
+}
+
 export function verificar(
   afirmaciones: readonly Afirmacion[],
   hechos: Hechos,
   docs: Map<string, string>,
 ): Desvio[] {
   const desvios: Desvio[] = [];
+  const aplanados = new Map<string, ReturnType<typeof aplanar>>();
 
   for (const a of afirmaciones) {
     const texto = docs.get(a.doc);
@@ -33,8 +65,11 @@ export function verificar(
       throw new Error(`Falta el contenido de ${a.doc}.`);
     }
 
+    if (!aplanados.has(a.doc)) aplanados.set(a.doc, aplanar(texto));
+    const { plano, posiciones } = aplanados.get(a.doc)!;
+
     const esperado = hechos[a.hecho];
-    const encontrado = texto.match(a.patron);
+    const encontrado = plano.match(a.patron);
 
     if (!encontrado) {
       desvios.push({
@@ -52,9 +87,10 @@ export function verificar(
     const valor = a.comoTexto?.[crudo.toLowerCase()] ?? Number(crudo);
 
     if (valor !== esperado) {
+      const enOriginal = posiciones[encontrado.index!] ?? 0;
       desvios.push({
         doc: a.doc,
-        linea: texto.slice(0, encontrado.index!).split("\n").length,
+        linea: texto.slice(0, enOriginal).split("\n").length,
         clase: "numero-viejo",
         dice: crudo,
         deberiaDecir: esperado,
